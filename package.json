@@ -7,19 +7,21 @@
     "node": "^24.13.1 || ^26.13.0"
   },
   "scripts": {
-    "build": "pnpm typecheck && pnpm -r --if-present run build",
+    "build": "corepack pnpm typecheck && corepack pnpm -r --if-present run build",
     "typecheck": "vue-tsc -b --pretty false",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
     "test:e2e": "playwright test --pass-with-no-tests",
-    "validate:rules": "node scripts/validate-rules.mjs"
+    "validate:rules": "corepack pnpm --filter @aus-food/rules build && node scripts/validate-rules.mjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.64.1",
     "@types/node": "26.6.6",
     "eslint": "10.14.0",
     "eslint-plugin-vue": "10.12.0",
+    "fast-check": "4.10.2",
     "globals": "17.14.0",
     "prettier": "3.9.10",
     "typescript": "6.0.3",

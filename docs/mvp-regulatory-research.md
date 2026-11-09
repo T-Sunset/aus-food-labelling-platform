@@ -1,9 +1,9 @@
 # MVP regulatory research: additives and prescribed food names
 
-**Research date:** 2026-11-06  
-**Status:** Source review and scope proposal; not legal advice, reviewer sign-off, or a change to the approved plan.  
+**Research date:** Initial review 2026-11-06; Phase 2 Turns 1 and 5 source checks on 2026-11-09.
+**Status:** Source review plus product-scope direction recorded 2026-11-09; not legal advice or reviewer sign-off. The bounded-cohort approach is selected. Turns 1–5 added candidate source mapping, evidence-backed review-only screening, additive-source capture, declaration-name groundwork and a draft permission catalog. No regulatory rule is activated.
 **Jurisdiction:** Australia, Food Standards Code context (the Code is joint Australia/New Zealand where stated in the instruments).  
-**Purpose:** Resolve the law-based parts of R1, identify the remaining decisions, and propose how additive-limit and prescribed-name functionality could enter the MVP without silently changing locked decision D1.
+**Purpose:** Resolve the law-based parts of R1, identify remaining decisions, and record the source and scope questions for additive-limit and prescribed-name functionality in the MVP.
 
 > The product assists users to prepare and review food information. It does not certify a product or label as legally compliant. A rule result is limited to the identified rule, source version, inputs and assumptions. Users remain responsible for the product, evidence, label and release decision.
 
@@ -16,9 +16,9 @@ The Code itself answers many of the open R1 questions. In particular:
 - The Code sets the NIP's required core rows, formats, energy/carbohydrate methods, significant-figure cap and optional “LESS THAN” formats. It does not, in those provisions, choose the product's supplier/database/laboratory evidence policy or a rounding sequence for every internal calculation.
 - Additive permission is not a lookup by additive number alone. It depends on the food class in Schedule 15, purpose, conditions, level, preparation state, any applicable mixture/calculation rule and the actual evidence. Schedule 15 includes permissions at GMP as well as numerical limits. Unknown food classification or unverified concentration must not become PASS.
 - A prescribed **food name** is not the same thing as a generic **ingredient name**. A prescribed name applies where the Code prescribes one; otherwise the food still needs a name or description that conveys its true nature and any required extra words. A Code definition alone does not make its defined term the food's prescribed name.
-- The product owner has agreed to include additive limits and prescribed names in the MVP. That changes the intent of locked plan decision D1. This report proposes a revision and sequencing options, but does **not** edit D1, the implementation plan, requirements or reviewer answers. Product decisions are still needed on the breadth of supported food classes and prescribed-name classes.
+- The product owner has directed that additive limits and prescribed-name support focus on the same two initial product cohorts: formulated caffeinated beverages and foods for infants. Exact Code classifications/subcategories, applicable prescribed names and rule coverage still require source mapping and reviewer verification; the product descriptions alone do not define every applicable rule. Claims follow the core and additive/name groundwork and are required before public MVP launch. Unsupported or unmapped cases remain review-only.
 
-The safe scope decision is to make the MVP feature boundary explicit: only source-mapped food classes and name rules may produce deterministic results; unsupported or uncertain cases return `REVIEW REQUIRED`, not a guessed PASS or FAIL. Whether that limited coverage is sufficient for the intended MVP is a product decision, not a conclusion supplied by the Code.
+The agreed MVP target is bounded support for the two selected product areas, not broad Code-wide coverage. Only source-mapped classifications and rules may produce deterministic results; unsupported or uncertain cases return `REVIEW REQUIRED`, not a guessed PASS or FAIL. Reviewer verification is still needed to establish what coverage is defensible within those product areas.
 
 ## 2. Evidence and status labels
 
@@ -31,7 +31,7 @@ This report distinguishes:
 - **Reviewer decision:** a product-specific classification, evidence policy or interpretation boundary requiring expert review.
 - **Review-only boundary:** information is insufficient or a judgement is not safely automated, so the software must return `REVIEW REQUIRED`.
 
-The relevant Federal Register compilations and official FSANZ material below were checked on 2026-11-06. FSANZ's Code compilation is useful for navigation, but FSANZ says the Federal Register contains the authoritative text. A compilation date is not a guarantee that no later amendment or uncommenced transitional provision exists. Recheck the live Register and transition notes before pinning rules and again before release.
+The R1 source pass and official FSANZ material below were checked on 2026-11-06; the Phase 2 Turn 1 sources were checked on 2026-11-09. FSANZ's Code compilation is useful for navigation, but FSANZ says the Federal Register contains the authoritative text. A compilation date is not a guarantee that no later amendment or uncommenced transitional provision exists. Recheck the live Register and transition notes before pinning rules and again before release.
 
 ## 3. R1 findings: what the sources answer
 
@@ -53,6 +53,31 @@ The relevant Federal Register compilations and official FSANZ material below wer
 | **R1-20 Net quantity**                          | This is principally a trade-measurement matter, not a Food Standards Code NIP rule. The National Trade Measurement Regulations 2009 contain measurement-marking rules (Part 4, including regs 4.9-4.16A), special cases and prohibited expressions (reg 4.29). The Code does not establish a universal phrase “net weight” for all products.                                                                                                                                                                                                                                                                                                                          | The recorded statement “display weight as net weight” is ambiguous and not verified as a universal marking instruction. Product type, package, measurement and exceptions matter.                                                                                                                 | Keep net quantity `REVIEW REQUIRED` as the plan currently provides. Do not force the word “net” or generate a quantity-mark PASS until the exact NMI rule and product facts have been reviewed.                                                                                                                                       |
 | **R1-21 Legibility and type size**              | Standard 1.2.1-24 requires English words (subject to Code provisions), legibility and prominence/contrast. Standard 1.2.1-25 specifies warning-statement type size: at least 3 mm, or at least 1.5 mm for a small package. It does not set a universal minimum type size for all label text.                                                                                                                                                                                                                                                                                                                                                                          | Reviewer answer and printed-size golden test are pending. The statutory minimum for warning statements is not a general font-size rule.                                                                                                                                                           | Test general legibility/contrast and warning-specific size separately. A physical-size print test is a product quality gate; only the warning rule can apply the cited numeric minimum.                                                                                                                                               |
 
+#### Schedule 11 energy source check (2026-11-09)
+
+The Federal Register's latest Schedule 11 compilation checked for this work is
+C06, F2024C01138, in force from 2024-10-29. Under S11-2(1), average energy is
+the sum of each component's average quantity in g/100 g multiplied by its
+factor in kJ/g. S11-2(2) lists factors for alcohol (29), carbohydrate excluding
+unavailable carbohydrate (17), unavailable carbohydrate including dietary
+fibre (8), fat (37), and
+protein (17). S11-2(3) lists specific factors for D-allulose (2), erythritol
+(1), glycerol (18), isomalt (11), lactitol (11), maltitol (13), mannitol (9),
+organic acids (13), polydextrose (5), sorbitol (14), D-tagatose (11), and
+xylitol (14).
+
+The calculation requires component quantities at the food's per-100-g basis;
+it does not authorize assuming a missing component or factor is zero. S11-2
+does not spell out precedence where a specific component could also be counted
+within a general carbohydrate quantity, nor how to allocate incompletely
+specified mixtures. Those inputs remain `REVIEW REQUIRED` unless resolved.
+The engine accepts a versioned, source-cited factor set rather than embedding
+these regulatory values in calculation code; the production data set and
+component mapping remain subject to review.
+
+Primary sources: [Schedule 11 latest-version register entry](https://www.legislation.gov.au/F2015L00481/latest)
+and [Schedule 11 C06, S11-2](https://www.legislation.gov.au/F2015L00481/2024-10-29/2024-10-29/text/original/epub/OEBPS/document_1/document_1.html).
+
 ### Material clarifications outside the blocking list
 
 1. **Food name vs ingredient name:** Standard 1.2.2-2(1) requires a prescribed name where one exists; otherwise a name/description must indicate the food's true nature and include any required additional words. Standard 1.2.2-2(2) expressly says that a Code definition alone does not make its defined term the name for this purpose.
@@ -65,7 +90,7 @@ The relevant Federal Register compilations and official FSANZ material below wer
 
 ## 4. Additive-limit MVP proposal
 
-### 4.1 Proposed product boundary (not yet approved)
+### 4.1 Product boundary (shared product cohorts selected; exact regulatory mapping pending)
 
 Include an additive-permission/limit capability before the first MVP release, but do not imply that it covers every additive, food or formulation unless that breadth is explicitly funded, mapped and tested. A safe first release can evaluate a declared set of supported food classes and return `REVIEW REQUIRED` for other classes. An empty or incomplete catalogue must not look like “no restriction.”
 
@@ -75,11 +100,11 @@ Include an additive-permission/limit capability before the first MVP release, bu
 | **B. Broad Code coverage** | Catalogue all relevant food classes and applicable Schedule 15 permissions/conditions, plus cross-cutting limits, mixtures, colourings, GMP, equivalents, preparation and carry-over.                                              | High / ongoing. Large regulatory data-maintenance and verification burden; category misclassification can make a correct table lookup wrong. |
 | **C. Staged cohorts**      | Begin with one customer/product cohort, then add additional classes under separately reviewed rule releases.                                                                                                                       | Medium-high initially, increasing over time. Makes the coverage boundary and customer fit explicit, but requires release/version discipline. |
 
-No option is selected in this report. A product-owner decision is needed on supported classes and what “included in the MVP” means: a complete feature for a bounded set, or broad coverage of the Code.
+The product owner selected bounded coverage focused on formulated caffeinated beverages and foods for infants, shared between additive-limit and prescribed-name support. The precise Code classifications/subcategories and applicable rules still need to be mapped and reviewed; products outside the supported rules remain review-only. Additional cohorts may be added in later rule releases.
 
 ### 4.2 Domain and behaviour requirements to add to the MVP scope
 
-These are proposed requirements for the specification review; they do not amend `docs/requirements.md`.
+These requirements describe the minimum behaviour for the approved MVP direction; each selected rule still requires source mapping, reviewer review where required, and tests before deterministic use.
 
 | Proposal ID    | Priority proposal                 | Requirement / data and rule behaviour                                                                                                                                                                                                                                                            | User-facing outcome, automation boundary and acceptance intent                                                                                                                                                                                                                                 |
 | -------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -99,7 +124,7 @@ This example is illustrative only and does not establish a recommended MVP produ
 
 ## 5. Prescribed-name MVP proposal
 
-### 5.1 Proposed boundary (not yet approved)
+### 5.1 Product boundary (selected classes pending)
 
 Before MVP release, provide a prescribed-name workflow for explicitly selected, source-mapped classes. Do not claim to detect every prescribed name in the Code. Candidate discovery can prompt the user; absence of a match is not proof that no prescribed name applies.
 
@@ -111,21 +136,21 @@ Before MVP release, provide a prescribed-name workflow for explicitly selected, 
 | **MVP-NAME-04** | Must              | Evaluate supported compositional conditions only after classification and required inputs are complete; include rule dependencies and cross-check conflicts with claims, ingredients and additive rules where applicable.                        | Explain checked conditions and values. Test boundary values and missing evidence for each selected class; label output does not imply legal certification.                           |
 | **MVP-NAME-05** | Must              | Preserve name-rule version, source compilation, effective date and historical evaluation snapshot.                                                                                                                                               | Test an amended rule changes a new evaluation but not a stored historical label/result.                                                                                              |
 
-**Initial class selection remains open.** The Code identifies several prescribed-name examples at Standard 1.2.2-2(1), Note 2, but the product owner has not chosen which customer classes to support first. Some classes entail substantial composition and intended-use rules. Selecting a class is a scope/product decision informed by customer needs and reviewer feasibility; it is not something this report chooses.
+The reviewer recommended beginning with complex classes. The product owner selected formulated caffeinated beverages and foods for infants as the shared focus for additive-limit and prescribed-name support. R4 should confirm applicable Code classes/subclasses, prescribed-name triggers, composition inputs, evidence requirements and review boundaries. The selected product areas do not imply that every product within them has a prescribed name or a single applicable additive category.
 
 ## 6. Proposed phase-order revision
 
-The implementation plan currently locks D1 to core labelling only and puts additive evaluation in Phase 2 and prescribed names in Phase 3. The recorded R1-22 response requests additive limits and prescribed names before the first MVP release. The requirements contract also describes broader additive/name capabilities, but the approved plan controls phase order. Resolve this conflict by an explicit plan decision before implementation of the added MVP scope.
+The product-owner direction resolves the prior scope conflict: the public MVP focuses additive and prescribed-name support on formulated caffeinated beverages and foods for infants, followed by claims after foundational work and before public MVP launch. The implementation plan and requirements record this sequencing. Exact Code classifications and rule coverage remain source-mapping and reviewer gates.
 
 | Proposed step                          | Gate / work                                                                                                                                                                                                                                                                                                   | Classification                                                                                                           |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **0. Define scope change**             | Record the owner's decision to include additive limits and prescribed names; propose a D1 replacement or addendum stating supported additive categories, initial prescribed-name classes, handling for unsupported products, and whether claims are MVP or a later launch gate. Do not silently overwrite D1. | Inclusion is agreed; coverage and claims timing remain product decisions before finalising the revised plan.             |
-| **1. Product class shortlist**         | Identify representative customer products and choose the initial food-category cohort and prescribed-name classes. Record explicit exclusions.                                                                                                                                                                | Product decision; customer-fit question, not a legal interpretation.                                                     |
+| **0. Define scope change**             | Record the owner's decision to include additive limits and prescribed-name support for the same two initial product areas before public MVP, with claims following foundational work and required before public MVP launch. | Decision recorded in the implementation plan and requirements on 2026-11-09. |
+| **1. Product class mapping**           | Map formulated caffeinated beverages and foods for infants to their exact Code classifications/subcategories and applicable additive and prescribed-name rules; record unsupported cases. | Product areas selected; legal classification and rule coverage require reviewer/source verification. |
 | **2. Source-to-rule review**           | Before coding deterministic data, reviewer checks a draft source map and representative category/name mappings. Confirm what product facts support classification and which cases stay review-only. Law's explicit thresholds and equations should be cited, not asked of the reviewer again.                 | Reviewer gate for classification and mapping confidence; also verifies current Federal Register version and transitions. |
 | **3. P1 core vertical slice**          | Keep the current core ingredients, nested formulations, allergen, NIP, presence, review UX, label and local-first work. Add the supported additive and prescribed-name evaluation domains as a pre-release workstream with clear dependencies on product classification and rule review.                      | Engineering/UX/test work after gate; no stack or architecture decision made here.                                        |
 | **4. Worked fixtures and rule review** | Reviewer reviews draft outputs/source mapping and a small set of representative test fixtures: additive category/limit, multi-source same additive, mixture, GMP/carry-over, prescribed-name class and composition, and NIP examples.                                                                         | Reviewer verifies application and explanations; technical team owns calculation and boundary tests.                      |
 | **5. Release gate**                    | No deterministic result for an unverified category or incomplete input. Every automated result has a source/provision, version/effective date, inputs, calculation, result, explanation, review boundary and automated test. Unsupported categories visibly remain `REVIEW REQUIRED`.                         | Product, reviewer and test sign-off; never a legal certification.                                                        |
-| **6. Later phases**                    | Broader additive/name coverage, claims, HSR and other domains remain separately scoped. Resolve the recorded ambiguity that claims are said to be needed before the program “can launch” but not necessarily for the “first MVP version.”                                                                     | Product decision before public launch; no assumption made here.                                                          |
+| **6. Later phases**                    | Broader additive/name coverage, claims, HSR and other domains remain separately scoped. Claims are scheduled after foundational core and additive/name work, but must be completed before public MVP launch. HSR and other domains remain outside MVP unless separately approved. | Claims timing is recorded in D1; claim-family scope and any HSR expansion remain later decisions. |
 
 **Qualitative scope:** the additive calculation domain is medium-high to high due to category selection, table conditions, purpose, additive mixtures, equivalent units, preparation state, carry-over/GMP and recursive sources. Prescribed-name capability is medium-high because identifying applicable classes and required composition facts is class-specific. A bounded cohort is materially smaller than broad Code-wide coverage, but still requires primary-source mapping, tests and expert review.
 
@@ -169,12 +194,11 @@ These ask for expert review of application and evidence boundaries, not for the 
 
 > Once we have prepared two or three sample nutrition panels, could you check that the calculations and displayed numbers look right, especially where rounding changes a value or the food is prepared or drained? Please tell us if any example needs more information or should be left for human review. We will include the relevant Code references and explain how we calculated each panel.
 
-### Product-owner decisions (not expert questions)
+### Remaining product and reviewer decisions
 
-- Which customer food classes are in the first supported additive cohort? Is the intended promise a bounded cohort with explicit review-only coverage elsewhere, or broad Code coverage?
-- Which two or three prescribed-name classes should be first? Use customer product frequency and the necessary composition data to choose; do not assume the names in Standard 1.2.2-2 are all equally suitable.
-- Does “claims are required before the program can launch” mean claims are required for the first MVP release, or for a later public launch? Keep the existing R1-22 wording until clarified.
-- Which dataset, if any, should the product offer for nutrient inputs (including current release, permission/licence, evidence label and update policy)? The Code methods do not select a vendor/database.
+- Reviewer: which exact Code classifications/subcategories and prescribed-name triggers apply to formulated caffeinated beverages and foods for infants? These are the selected product areas for both additive and prescribed-name support; source mapping must define supported rules and exclusions.
+- Which claim families should be prioritised for the claims phase (for example nutrition content, comparative or health claims)?
+- Supplier-provided nutrient data is the selected initial source. Any later food-composition database option needs a named release, permission/licence, evidence label and update policy.
 
 ### Optional or review-only for later scope
 
@@ -196,19 +220,125 @@ Primary legal text is linked to the Federal Register. FSANZ guidance is included
 | Code Schedule 9, F2015L00479                             | S9-2 and S9-3 tables, including exemptions and required names                    | Compilation F2021C00195, C02, in force 2021-02-25. [Federal Register current item](https://www.legislation.gov.au/F2015L00479/latest) and [compilation text](https://www.legislation.gov.au/F2015L00479/2021-02-25/2021-02-25/text/original/epub/OEBPS/document_1/document_1.html).                                                                        |
 | FSANZ allergen labelling guidance                        | Required-name list and transition guidance                                       | Official guidance page accessed 2026-11-06: [Allergen labelling for food businesses](https://www.foodstandards.gov.au/business/labelling/allergen-labelling). Guidance is not the legal rule.                                                                                                                                                              |
 | Code Standard 1.2.8, F2015L00395                         | 1.2.8-5 to -7; -11 to -13                                                        | Compilation F2026C00411, C06, in force 2026-04-30 (up to Amendment 249). [Federal Register current item](https://www.legislation.gov.au/F2015L00395/latest) and [compilation text](https://www.legislation.gov.au/F2015L00395/2026-04-30/2026-04-30/text/original/epub/OEBPS/document_1/document_1.html).                                                  |
-| Code Schedule 11, F2015L00481                            | S11-2 to -4                                                                      | Compilation text in force 2024-10-29, as cited in the project source check; verify the live Register before rule release. [Federal Register current item](https://www.legislation.gov.au/F2015L00481/latest) and [compilation text](https://www.legislation.gov.au/F2015L00481/2024-10-29/2024-10-29/text/original/epub/OEBPS/document_1/document_1.html). |
+| Code Schedule 11, F2015L00481                            | S11-2 to -4                                                                      | Latest compilation checked 2026-11-09: F2024C01138 (C06), in force 2024-10-29. [Federal Register current item](https://www.legislation.gov.au/F2015L00481/latest) and [compilation text](https://www.legislation.gov.au/F2015L00481/2024-10-29/2024-10-29/text/original/epub/OEBPS/document_1/document_1.html). |
 | Code Schedule 12, F2015L00482                            | S12-2 and related formats                                                        | Compilation F2017C00342, C02, in force 2017-04-13. [Federal Register current item](https://www.legislation.gov.au/F2015L00482/latest) and [compilation text](https://www.legislation.gov.au/F2015L00482/2017-04-13/2017-04-13/text/original/epub/OEBPS/document_1/document_1.html).                                                                        |
 | Code Standard 1.2.1, F2015L00386                         | 1.2.1-24 and -25                                                                 | Compilation effective 2026-06-09, as referenced in the project source register. [Federal Register current item](https://www.legislation.gov.au/F2015L00386/latest) and [compilation text](https://www.legislation.gov.au/F2015L00386/2026-06-09/2026-06-09/text/original/epub/OEBPS/document_1/document_1.html).                                           |
 | Code Standard 1.2.2, F2015L00389                         | 1.2.2-2(1)-(2), Note 2                                                           | Compilation 1, in force 2024-07-22 (up to Amendment 229). [Federal Register current item](https://www.legislation.gov.au/F2015L00389/latest) and [compilation text](https://www.legislation.gov.au/F2015L00389/2024-07-22/2024-07-22/text/original/epub/OEBPS/document_1/document_1.html).                                                                 |
 | Code Schedule 10, F2015L00480                            | S10-2                                                                            | Compilation F2021C00203, C04, in force 2021-02-25. [Federal Register current item](https://www.legislation.gov.au/F2015L00480/latest) and [compilation text](https://www.legislation.gov.au/F2015L00480/2021-02-25/2021-02-25/text/original/epub/OEBPS/document_1/document_1.html).                                                                        |
 | Code Standard 1.3.1, F2015L00396                         | 1.3.1-3 to -6                                                                    | Compilation F2024C00917, C04, in force 2024-09-13 (up to Amendment 231). [Federal Register current item](https://www.legislation.gov.au/F2015L00396/latest) and [compilation text](https://www.legislation.gov.au/F2015L00396/2024-09-13/2024-09-13/text/original/epub/OEBPS/document_1/document_1.html).                                                  |
 | Code Schedule 15, F2015L00439                            | S15-2 to -5, including category rows                                             | Compilation F2026C00407, C16, in force 2026-04-30. [Federal Register current item](https://www.legislation.gov.au/F2015L00439/latest) and [compilation text](https://www.legislation.gov.au/F2015L00439/2026-04-30/2026-04-30/text/original/epub/OEBPS/document_1/document_1.html).                                                                        |
+| Code Standard 2.6.4, F2015L00467                         | 2.6.4-2, formulated caffeinated beverage definition                              | As-made instrument, effective 2016-03-01; the Register item checked showed the as-made text as its latest text. [Federal Register item](https://www.legislation.gov.au/F2015L00467/latest) and [text](https://www.legislation.gov.au/F2015L00467/asmade/2015-04-01/text/original/epub/OEBPS/document_1/document_1.html). |
+| Code Standard 2.9.2, F2015L00417                         | 2.9.2-2, -7, -8 and transition                                                    | Compilation F2024C00903, C04, in force 2024-09-13; Amendment 231 transition runs through 2029-09-13. [Federal Register current item](https://www.legislation.gov.au/F2015L00417/latest) and [compilation text](https://www.legislation.gov.au/F2015L00417/2024-09-13/2024-09-13/text/original/epub/OEBPS/document_1/document_1.html). |
+| Code Schedule 7, F2015L00477                              | Class names used by Standard 1.2.4-7                                              | As-made text checked; whether a later consolidated version exists is **TO BE VERIFIED**. [Federal Register item](https://www.legislation.gov.au/F2015L00477/latest) and [as-made text](https://www.legislation.gov.au/F2015L00477/asmade/2015-04-01/text/original/epub/OEBPS/document_1/document_1.html). |
+| Code Schedule 8, F2015L00478                              | Additive names and code numbers used by Standard 1.2.4-7                          | Compilation F2025C00967, in force 2025-09-16. [Federal Register current item](https://www.legislation.gov.au/F2015L00478/latest) and [compilation text](https://www.legislation.gov.au/F2015L00478/2025-09-16/2025-09-16/text/original/epub/OEBPS/document_1/document_1.html). |
+| Code Schedule 14, F2015L00436                             | S14-2, technological purposes                                                    | Compilation F2023C00755, C02, in force 2023-07-19. It describes purposes, subclasses and definitions; it does not provide cohort-specific permission rows. [Federal Register item](https://www.legislation.gov.au/F2015L00436/latest) and [compilation text](https://www.legislation.gov.au/F2015L00436/2023-07-19/2023-07-19/text/original/pdf). |
+| Code Schedule 16, F2015L00442                             | S16-2 to -4, additive and colouring types                                         | Compilation F2025C00968, C03, in force 2025-09-16. These type lists connect to Schedule 15 headings; they do not independently grant a food-category permission. [Federal Register item](https://www.legislation.gov.au/F2015L00442/latest) and [compilation text](https://www.legislation.gov.au/F2015L00442/2025-09-16/2025-09-16/text/original/epub/OEBPS/document_1/document_1.html). |
+| Caffeine-related variation, F2026L00700                  | Clauses 3-4; Schedule items 1-9; transition                                        | Effective 2026-06-09; 24-month transition ends 2028-06-09. [Federal Register item and text](https://www.legislation.gov.au/F2026L00700/asmade/text) and [dated text](https://www.legislation.gov.au/F2026L00700/asmade/2026-06-09/text/original/epub/OEBPS/document_1/document_1.html). |
+| Code Standard 1.3.3; Schedule 18, F2015L00452             | Candidate processing-aid provisions for later mapping                             | Processing-aid conditions and current versions were not mapped in Turn 1. Schedule 18 [Federal Register item](https://www.legislation.gov.au/F2015L00452/latest); current compilation and applicable rows **TO BE VERIFIED**. |
 | National Trade Measurement Regulations 2009, F2009L03479 | Part 4, regs 4.9-4.16A and 4.29 (application/exceptions need a dedicated review) | Compilation F2024C00311, C08, in force 2024-03-20. [Federal Register current item](https://www.legislation.gov.au/F2009L03479/latest) and [compilation text](https://www.legislation.gov.au/F2009L03479/2024-03-20/2024-03-20/text/original/epub/OEBPS/document_1/document_1.html).                                                                        |
 
-## 10. Limits of this research and unresolved risks
+## 10. Phase 2 Turn 1: candidate source map
+
+**Checked 2026-11-09. Candidate map only: no rules or classifications have
+been activated.** The Food Standards Code instruments are separate; there is
+no single compilation number for this map. The Federal Register versions and
+effective dates checked for each source are listed in Section 9. This map
+identifies where the Code directs further examination. It is not a complete
+permission catalogue, a product classification, or reviewer sign-off.
+
+### Additive provisions and candidate cohort rows
+
+- **General framework:** Standard 1.3.1—3(1) conditions additive use on a
+  permission, technological purpose and applicable restrictions. Section
+  1.3.1—3(2) separately addresses qualifying carry-over in food other than
+  infant formula products. Sections 1.3.1—4 to —6 address GMP and maximum
+  levels, aggregate colouring limits, intense sweeteners and same-purpose
+  mixtures. Schedule 15 S15—2 to —5 supplies inherited headings, preparation
+  rules, units and the permission table. A Schedule 15 entry is not a
+  permission finding until the product class, purpose, conditions and food
+  state are established.
+- **Formulated caffeinated beverages:** Standard 2.6.4—2 defines this food
+  through product characteristics and purpose, and expressly connects food
+  meeting that definition to Schedule 15 S15—5 item 14.1.3, “Water based
+  flavoured drinks.” The marketing phrase “energy drink” or “caffeinated
+  beverage” alone does not establish that classification. Other potentially
+  relevant Schedule 15 subclasses require product-specific checking.
+- **Foods for infants:** Standard 2.9.2—2 defines “food for infants” and
+  excludes infant formula products, formulated meal replacements, formulated
+  supplementary foods and unprocessed fruit and vegetables. Cereal-based
+  food for infants excludes beverages. The candidate additive row is Schedule
+  15 S15—5 item 13.2, “Foods for infants”; this is not a finding that a
+  particular baby-oriented product belongs in that row.
+- **Cross-cutting schedules:** Schedule 14 S14—2 lists technological
+  purposes, subclasses and definitions relevant to whether a substance is
+  used as a food additive. Schedule 16 S16—2 to —4 lists additive/colouring
+  types corresponding to Schedule 15 table headings. Neither schedule
+  independently supplies a cohort-specific permission. The complete purpose
+  and type lists, and the crosswalk to every entry in Schedule 15 items 13.2
+  and 14.1.3, were not transcribed.
+- Standard 1.3.1—4(3) sets aggregate maximum levels for colourings permitted
+  to a maximum level: 70 mg/L in beverages and 290 mg/kg in other foods.
+  Applicability to a specific product still depends on its classification,
+  state and the Schedule 15 entries that apply.
+- **Declaration is separate from permission:** Standard 1.2.4—7 and Schedules
+  7 and 8 govern additive declaration names/codes. Standard 1.2.4—5(5) to (7)
+  includes compound-ingredient rules and expressly disapplies the relevant
+  less-than-5% component-list option to food for infants. These declaration
+  requirements do not establish that an additive is permitted or at what
+  level.
+
+### Prescribed names and additional wording
+
+- Standard 1.2.2—2(1) requires a prescribed name where the Code prescribes
+  one; otherwise, the food needs a name or description indicating its true
+  nature and any additional words the Code requires. Under 1.2.2—2(2), a
+  Code definition alone does not make the defined term a prescribed name.
+- In the provisions checked for this map, no cohort-specific prescribed
+  finished-food name was identified for formulated caffeinated beverages or
+  foods for infants. Standard 2.9.2—7 contains infant-food age, suitability,
+  “sweetened,” warning and honey-related wording requirements; Standard
+  2.9.2—8 includes percentage declarations for specified ingredients. These
+  are additional labelling/name-related requirements, not proof that “food
+  for infants” is itself a prescribed food name.
+- This is not a complete Code-wide prescribed-name inventory. Other
+  standards may apply to an individual product and remain **TO BE VERIFIED /
+  REVIEW REQUIRED**.
+
+### Transitions, exclusions and unresolved product mapping
+
+- The caffeine-related variation F2026L00700 creates additional caffeine
+  definitions and requirements with a transition through 2028-06-09. The
+  applicable transition track and product-specific interaction with Standard
+  2.6.4 remain **REVIEW REQUIRED**.
+- Standard 2.9.2 records an Amendment 231 transition through 2029-09-13.
+  The applicable version for an infant-food product must be resolved from the
+  transition terms; it is separate from the Schedule 15 additive version.
+- Schedule 16 is not the processing-aid schedule. Processing-aid mapping is
+  outside Turn 1: Standard 1.3.3 and Schedule 18 are candidates for later
+  source review, but their current versions, applicable conditions and rows
+  have not been verified here.
+
+| Candidate | Product-specific questions still open |
+| --- | --- |
+| Formulated caffeinated beverages | Do the actual composition, presentation and purpose meet Standard 2.6.4—2? Does another Schedule 15 subclass also fit? What is the caffeine source/form, and which transition track applies? |
+| Foods for infants | Does intended or represented use meet Standard 2.9.2—2, or does an exclusion apply? What factual subtype and consumption state apply, and is item 13.2 the correct Schedule 15 category? |
+| Both | What are the product identity, additive purpose, full ingredient/additive evidence and applicable food state? Which Schedule 15 conditions, parent headings, equivalents, mixtures, colour aggregation or carry-over rules apply? Does another Code standard prescribe a name or additional wording? |
+
+**Verified:** the sources, versions and provisions listed above were checked
+against the Federal Register text on 2026-11-09; the two Schedule 15 candidate
+rows and the cited general framework were identified.
+
+**Not verified:** complete Schedule 15 permission inventories or Schedule 14
+and 16 crosswalks; current Schedule 7 consolidation status; all processing-aid
+conditions; every prescribed name that could apply to a particular product;
+or product-specific category, evidence and transition decisions. Do not infer
+PASS/FAIL or a prescribed name from this candidate map. Keep these cases
+**REVIEW REQUIRED** until mapped and approved at the applicable gates.
+
+## 11. Limits of this research and unresolved risks
 
 - This is a bounded source review for R1 and the proposed MVP additive/name scope, not a clause-by-clause review of the entire Code or a compliance opinion.
-- The Schedule 15 structure, selected example rows and cross-cutting Standard 1.3.1 provisions were checked; the complete additive table was **not** mapped for every food class, additive, condition, transition or special food. No broad permission catalogue is ready for implementation.
+- Turn 1 identified Schedule 15 items 13.2 and 14.1.3 as candidate rows and checked the cited cross-cutting Standard 1.3.1 provisions. The complete additive table was **not** mapped for every food class, additive, condition, transition or special food. No broad permission catalogue is ready for implementation.
 - Schedule 9's exact exemptions were not converted into a complete evidence matrix. Keep unresolved exemptions review-only.
 - The complete declaration special cases in Standard 1.2.4-7 and Schedules 7/8 were not all independently mapped here.
 - NIP equations, main NIP rows, significant figures and the stated “LESS THAN” rules were checked. Worked NIP examples, evidence acceptance policy and rounding behaviour still need an explicit product rule and reviewer validation.
@@ -216,12 +346,166 @@ Primary legal text is linked to the Federal Register. FSANZ guidance is included
 - Prescribed names and representative examples were checked, but no complete inventory of every prescribed name/composition standard or class trigger was built.
 - The authoritative pages were accessible. Some long Register table views were truncated by the research interface; where that limited line-by-line verification, this report explicitly leaves the complete catalogue or exception mapping open rather than treating it as checked.
 - Exact source version/effective-date metadata must be checked again against the Register when the rules are prepared and before release. If a newer compilation or transition applies, do not reuse this report's version as current.
-- Open product questions that affect scope: additive cohort breadth, initial prescribed-name classes, dataset/evidence policy, claims release gate, and customer product mix. These cannot be settled by legal research alone.
+- Remaining product questions include product-specific classification and subclasses, accepted evidence, transition handling and the review-only boundary. These cannot be settled by the candidate text map alone.
 
-## 11. Recommended next actions
+## 12. Phase 2 Turn 2 and Turn 3 implementation status
 
-1. Prepare a D1 revision reflecting the owner's agreed inclusion of additive limits and prescribed names. Agree additive coverage and initial prescribed-name classes before finalising it; D1 has not yet been edited.
-2. Ask the reviewer to check the selected class mappings and the concise worked examples in Section 8, not to restate legal thresholds.
-3. Keep net quantity, unsupported categories, uncertain name classification and unresolved exemptions in `REVIEW REQUIRED`.
-4. Once scope is approved, update the requirements/plan through their normal review process with stable rule IDs, source versions, required inputs, test cases and explicit non-certification language. This report alone does not make those changes.
-5. Do not start implementation or represent this research as legal approval.
+The application now captures product identity, intended use, intended consumer,
+processing and presentation context, along with dated references to the local
+source documents. For the selected cohorts, it screens evidence-backed facts
+against the candidate criteria described above. A proposed product name is
+never used as classification evidence.
+
+The screen can indicate a candidate for human confirmation or state that a
+candidate is not indicated. Missing evidence, unknown facts or conflicting
+evidence remain inconclusive and `REVIEW REQUIRED`; even a candidate indication
+is not a legal classification. Prescribed-name screening remains review-only
+because no approved cohort-specific candidate rules have been established.
+This groundwork supports requirements INT-004, TEST-004 and TRACE-015 but does
+not implement their full scope, evaluate additive permissions, assign a
+deterministic food category, or establish a prescribed name.
+
+The product profile and its evidence references are stored with the local
+product draft. The referenced source documents themselves are not uploaded.
+
+Turn 3 adds local additive source records to ingredient drafts. Users can
+record an additive identity and source code, purpose wording, concentration
+with its stated unit and basis, source references and dates, and whether the
+source describes it as added, carried over, a processing aid, or unknown.
+Formulation expansion associates each record with its nested ingredient path.
+Incomplete details remain visibly missing; these records do not establish the
+legal classification, permission, declaration, carry-over treatment, or
+processing-aid status. No additive rule data or regulatory values were
+activated or mapped in this turn. R4 and reviewer-verified fixtures remain
+required before deterministic results.
+
+## 13. Phase 2 Turn 4: additive declaration-name groundwork
+
+The bounded primary-source check was completed on 2026-11-09 for declaration
+formatting only. It does not map additive permissions or decide product-specific
+classification.
+
+- Standard 1.2.4, [F2025C00914](https://www.legislation.gov.au/F2015L00392/latest/text)
+  (Compilation 2, effective 2025-09-02),
+  section 1.2.4-7(1)(a) and (2) requires the Schedule 7 class name followed by
+  the Schedule 8 name or code where classifiable, and says to use the most
+  appropriate class when more than one applies. Under 1.2.4-7(1)(b), an
+  additive that cannot be classified into a Schedule 7 class uses the Schedule
+  8 name. Subsections (3) and (4) provide the enzyme and flavouring options;
+  subsection (5) requires specified glutamate/nucleotide flavouring substances
+  to be declared specifically under subsection (1); subsection (6) requires
+  added caffeine to be listed as `caffeine`.
+- Schedule 7 [S7-2, F2015L00477 as made](https://www.legislation.gov.au/F2015L00477/asmade/2015-04-01/text/original/epub/OEBPS/document_1/document_1.html),
+  commenced 2016-03-01,
+  lists 19 prescribed and 6 optional class names. The latest Register listing
+  was checked on 2026-11-09.
+- Schedule 8 [S8-2, F2025C00967](https://www.legislation.gov.au/F2015L00478/2025-09-16/2025-09-16/text/original/epub/OEBPS/document_1/document_1.html)
+  (Compilation 8, effective 2025-09-16), contains
+  344 alphabetical and 344 numerical entries. Both tables are retained
+  separately in the draft catalogue, including source order and all eight
+  displayed dash entries. Four exact name/code differences are retained
+  without choosing a canonical wording:
+
+  | Code | Alphabetical listing | Numerical listing |
+  | --- | --- | --- |
+  | 307c | di-Alpha-tocopherol | dl-Alpha-tocopherol |
+  | 414 | Acacia or gum Arabic | Acacia or gum arabic |
+  | 954 | Saccharin or calcium saccharine or sodium saccharine or potassium saccharine | Saccharin |
+  | – | monk fruit extract or luo han guo extract | Monk fruit extract or luo han guo extract |
+
+  The compilation summary says it includes amendments up to No. 231, but its
+  amendment history records No. 244; both S8-2 listings include Mushroom
+  chitosan. This source inconsistency is recorded in the catalog. Recheck the
+  live Register and amendment history before any release.
+- Neither Schedule 7 nor Schedule 8 assigns an S8-2 additive to an S7-2 class.
+  The catalog therefore has no class-to-substance crosswalk. A verified
+  Schedule 8 identity does not verify a Schedule 7 class, and the
+  “most appropriate” class choice remains review-required.
+
+The implementation adds a versioned, source-linked draft catalog and a
+formatter for declaration wording candidates. Users choose a route and, where
+applicable, a name/code option; the interface shows the source path and reason
+for review. Draft data has 25 Schedule 7 class entries, 688 Schedule 8
+listing-specific entries and four unresolved listing differences. The
+formatter never produces a compliance status, and declaration wording
+candidates remain `REVIEW REQUIRED`. Empty mapping data is intentional, not a
+claim that no mapping is needed. No additive permission or limit is inferred.
+
+Additive allergen evidence is carried through nested ingredient paths with
+distinct path-specific evidence identifiers. It records user-supplied
+assessments and dated references only; it does not determine legal allergen
+declaration applicability, absence, exemptions or processing-aid treatment.
+This completes the planned Turn 4 implementation scope for REG-ADD-003,
+ADD-009 and the source/provenance groundwork, but does not close reviewer
+gates or enable final declarations.
+
+## 14. Recommended next actions
+
+1. Proceed to Turn 6 with pure, trace-producing permission evaluation only for fully mapped inputs; preserve `REVIEW REQUIRED` for candidate, incomplete and unsupported cases.
+2. Before deterministic rule activation, resolve additive row crosswalks, prescribed-name coverage, source versions and transitions, and obtain reviewer verification of product-specific classifications and fixtures.
+3. Keep unsupported categories, unresolved exemptions, uncertain name classification and all unverified evidence in `REVIEW REQUIRED`. This research does not certify a product or label as compliant.
+
+## 15. Phase 2 Turn 5: draft additive-permission catalog
+
+**Checked 2026-11-09.** The catalog is versioned source data, not an
+evaluation engine, approved classification, complete permission inventory or
+reviewer sign-off. All permission entries remain draft and inactive.
+
+### Sources captured
+
+The catalog records the following Federal Register sources and effective
+dates. Their compilation versions were checked on 2026-11-09; they must be
+rechecked against the live Register, including transition provisions, before
+rule activation or release.
+
+| Instrument | Register version and effective date | Catalog use |
+| --- | --- | --- |
+| Standard 1.3.1 | F2024C00917, Compilation 4; effective 2024-09-13 | Calculation bases and equivalents, including the factor table for steviol equivalents. |
+| Schedule 15 | F2026C00407, Compilation 16; effective 2026-04-30 | Candidate food-category headings and source-positioned permission rows. |
+| Standard 2.6.4 | F2015L00467; commenced 2016-03-01; latest Register text checked | Explicit formulated-caffeinated-beverage connection to item 14.1.3. The captured source is not a product-specific classification decision. |
+| Schedule 14 | F2023C00755, Compilation 2; effective 2023-07-19 | Schedule 14—2 purpose and subclass vocabulary, recorded separately from permission rows. |
+| Schedule 16 | F2025C00968, Compilation 3; effective 2025-09-16 | Type-level Schedule 16 candidates appearing under the 14.1.3 heading. |
+
+### Catalog scope and safeguards
+
+- Five candidate category nodes are retained: Schedule 15 items 14.1.3,
+  14.1.3.0.1, 14.1.3.0.2, 14.1.3.3 and 13.2. The Standard 2.6.4 link to
+  14.1.3 is explicit for formulated caffeinated beverages. The subclasses
+  and infant-food item remain product-dependent candidates; product wording
+  alone does not establish a category.
+- The catalog contains 59 Schedule 15 rows, 21 Schedule 14 purposes and
+  seven Standard 1.3.1 calculation bases. It preserves additive identifiers
+  as printed rather than inventing Schedule 8, Schedule 7 or technological-
+  purpose crosswalks. The steviol-equivalent factor table is stored as data.
+- Three Schedule 16 headings at 14.1.3 are retained as broad type grants:
+  S16—2, S16—3 and S16—4. Their complete list membership is not transcribed,
+  and no individual Schedule 15 row is mapped to a Schedule 16 list. The
+  catalog is therefore incomplete for permission evaluation.
+- Schedule 15 has no candidate permission rows directly under headings 13,
+  14 or 14.1. The catalog does not inherit rows from 13.1 or 14.1 into
+  items 13.2 or 14.1.3; its inherited-row lists are empty.
+- Five infant-food modified-starch rows share the printed condition “In
+  total” and a common aggregation-group identifier. They must not be treated
+  as five independent maxima. The infant-food INS 414 Gum arabic row has an
+  apparent printed maximum of 10, but its table presentation is explicitly
+  unverified and the row remains draft.
+- Conditions are stored as source text, not executable predicates. The
+  catalog does not assign food classification, additive identity or purpose;
+  calculate concentrations or mixtures; evaluate carry-over or processing
+  aids; or produce PASS/FAIL/compliance conclusions.
+
+The rule-data validator checks unique candidate category codes and entry IDs,
+source membership and dates, heading paths, row/category and basis references,
+row positions, supported condition and limit shapes, and the activation gate.
+Tests cover stale sources, ambiguous or missing categories, unsupported
+conditions and invalid units. Activation remains blocked while any catalog
+entry is draft; it is not enabled by completing the source transcription.
+
+**Verified:** the source versions and listed data boundaries are recorded in
+the release data and validator as of the check date.
+
+**Not verified:** full Schedule 16 memberships, all product-to-category and
+additive-to-purpose/identity mappings, the infant-food INS 414 table
+presentation, complete permission coverage for either cohort, all applicable
+transitions, or reviewer acceptance. Continue to treat affected cases as
+`REVIEW REQUIRED`; no catalog entry certifies product compliance.

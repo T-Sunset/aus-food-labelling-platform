@@ -38,6 +38,9 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: End-to-end and accessibility tests
+        run: pnpm test:e2e
+
       - name: Validate rule data
         run: pnpm validate:rules
 

@@ -5,6 +5,7 @@
     { "path": "./packages/domain" },
     { "path": "./packages/engine" },
     { "path": "./packages/rules" },
-    { "path": "./packages/label" }
+    { "path": "./packages/label" },
+    { "path": "./packages/storage" }
   ]
 }

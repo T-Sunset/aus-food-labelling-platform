@@ -7,7 +7,7 @@
 ## 1. How to use this document
 
 1. Read `AGENTS.md`, then this plan, then the sections of `docs/requirements.md` referenced by your task.
-2. Work on the current phase only (section 12 shows it). Do not start later-phase items early unless this plan marks them as parallel.
+2. Work on the current phase only (section 12 shows it). Later-phase research and review-only groundwork may proceed only where this plan explicitly permits it; do not activate gated regulatory results early.
 3. Anything not verified against a primary source is tagged `TO BE VERIFIED` or `TO BE RESEARCHED`. Never remove a tag without recording the source and date.
 4. Record each technology or design decision as an ADR in `docs/adr/` (created in P0-2).
 5. Tick the progress tracker when a step meets its exit criteria. Ask the user before any destructive action (deleting the archive, force pushes, rewriting history).
@@ -22,12 +22,13 @@ Target: a presentable, offline-capable MVP vertical slice that can later grow in
 
 | ID  | Decision                                                                                                                                                                                                                                                                                                             | Date       |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| D1  | MVP is core labelling only: ingredients, nested formulations, ingredient list, allergens, Nutrition Information Panel (NIP), presence checks, label preview, PDF. Additives, claims, HSR, prescribed names, GM, irradiation and origin evaluation come in later phases. Matches `docs/requirements.md` section 13.1. | 2026-11-05 |
+| D1  | The public MVP includes core labelling, additive limits and prescribed-name support focused on the same two initial product cohorts: formulated caffeinated beverages and foods for infants. Exact legal classifications and supported rules require reviewer verification; unsupported or unmapped cases remain review-only. Claims follow the core and additive/name groundwork and are required before public MVP launch. HSR, GM, irradiation, origin and other deferred domains remain later scope. | 2026-11-09 |
 | D2  | Same repository. Legacy `frontend/` is moved to `archive/legacy-frontend/` (history preserved) in P0-1 and deleted later with user approval. New code lives in `apps/` and `packages/`.                                                                                                                              | 2026-11-05 |
 | D3  | MVP is local-only: no backend and no login. Authentication and entitlements are added in Phase 4; seams are built in Phase 1 (section 9).                                                                                                                                                                            | 2026-11-05 |
 | D4  | UI uses Tailwind CSS v4 with shadcn-vue (accessible primitives, components owned in-repo). No Bootstrap.                                                                                                                                                                                                             | 2026-11-05 |
 | D5  | A human food-regulatory reviewer is engaged at defined touchpoints (section 10).                                                                                                                                                                                                                                     | 2026-11-05 |
 | D6  | Monetisation details (plans, trial length, pricing) are deferred and are not an MVP concern.                                                                                                                                                                                                                         | 2026-11-05 |
+| D7  | Initial nutrient inputs are supplier-provided values with evidence; defer an external food-composition database until its release, licence, evidence labelling and update policy are decided.                                                                                                                        | 2026-11-09 |
 
 ## 4. Non-negotiable constraints
 
@@ -98,7 +99,7 @@ Alternatives considered for the local database: RxDB (replication and encryption
 | S3 Label and PDF        | Can we produce an exact-size, deterministic PDF with embedded fonts?      | Render SVG at millimetre size; try two PDF routes and browser print; check physical size, minimum text size, font embedding, repeatability, file size                                                                                                                                                     | Exact size, stable output, legible at minimum sizes                             |
 | S4 Rule data            | Can rules be expressed as data with a full trace?                         | Express three rules fully as data (allergen presence, NIP required, a numeric threshold) with TRACE-014 metadata, explanation templates and source validation                                                                                                                                             | Rules evaluate from data, trace output is complete, orphan rules fail the check |
 
-**Exit criteria:** CI is green on an empty slice, ADRs accepted, spike results recorded, R1 held, legacy archived.
+**Exit criteria:** CI is green on an empty slice, ADRs accepted, spike results recorded, R1 held, legacy archived. Print-scale legibility remains a P1-5 gate; unresolved NIP presentation remains review-only until reviewer review.
 
 ### Phase 1 - MVP vertical slice
 
@@ -106,28 +107,120 @@ Flow: create ingredients and specifications -> build composite ingredients -> bu
 
 | Step                  | Work                                                                                                                                                                                                                                          | Depends on                                             |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| P1-1 Engine core      | Units and decimals; recursive expansion with cycle rejection; ingoing-mass percentages and yield; nutrient aggregation; Schedule 11 energy; NIP formatting and rounding; allergen propagation; ingredient declaration; result and trace model | S2, R1                                                 |
+| P1-1 Engine core      | Units and decimals; recursive expansion with cycle rejection; ingoing-mass percentages and yield; nutrient aggregation; Schedule 11 energy; NIP formatting and rounding; allergen propagation; ingredient declaration; result and trace model | S2, R1. Foundational work may start; unresolved R1 interpretations gate affected deterministic outputs. NIP formatting waits for reviewer review of its display policy and fixtures. |
 | P1-2 Rules data v0.1  | Rule schema with TRACE-014 metadata; release manifest; allergen vocabulary; NIP and presence rules; explanation templates; CI check that fails any rule without a source                                                                      | S4, R1                                                 |
 | P1-3 Local data layer | Repositories behind interfaces; immutable approved versions; transactions; migrations; backup export and import with an encrypted option; durable-storage request; detection of cleared storage                                               | S1                                                     |
 | P1-4 UI               | App shell with Tailwind and shadcn-vue; dashboard with empty states; ingredient and specification editor; recipe and composite builder; product screen; compliance panel with expandable trace; backup page; non-certification notices        | Interfaces from P1-1 to P1-3 (shell can start earlier) |
 | P1-5 Label and PDF    | Single-panel SVG label at exact size; required content blocks; guard against text below the minimum size; deterministic PDF                                                                                                                   | S3, P1-1                                               |
-| P1-6 Quality gate     | Reviewer-verified golden fixtures; property tests; end-to-end happy path; accessibility checks; demo seed data (non-sensitive)                                                                                                                | P1-1 to P1-5, R3                                       |
+| P1-6 Quality gate     | Engineering property/e2e tests; accessibility checks; non-sensitive demo data; reviewer-verified golden fixtures as a separate acceptance gate                                                                                                  | P1-1 to P1-5, R3                                       |
 
 P1-1, P1-2 and P1-3 can run in parallel.
 
-**Exit criteria:** the full flow works offline; every result shows source, mode and mapping confidence; unknown data never becomes PASS; reviewer-checked fixtures pass; a backup restores on a clean browser profile.
+Phase 1 has two distinct milestones:
 
-### Phase 2 - Compliance depth
+- **Reviewer-ready engineering baseline:** the local application and
+  automated engineering checks are available for hands-on testing. This
+  permits bounded Phase 2 source, data and review-only groundwork; it does not
+  mean every Phase 1 regulatory output is implemented or validated.
+- **Reviewer acceptance:** R3-01 golden fixtures are checked against agreed
+  expected results, and R1-21 minimum-size/print-scale acceptance is
+  documented. Deterministic NIP display remains gated on R1-13 and its
+  fixtures; it may stay visibly `REVIEW REQUIRED` without blocking the
+  reviewer-ready milestone. Public MVP release remains blocked on the
+  applicable reviewer and later-phase gates.
 
-Scope: additives subsystem (Schedules 7, 8, 14, 15, 16 and Standard 1.3.1 including multi-source sums and carry-over), characterising ingredients, advisory statement table, GM, irradiation, origin evidence workflow.
-Entry: R4 held; clause-level verification of those provisions complete.
-Exit: each rule has Provision-level mapping or is review-only; fixtures reviewer-checked.
+The engineering baseline is not a compliance determination. The current label
+preview/export remains illustrative and must not be presented as a completed
+regulatory label.
 
-### Phase 3 - Claims, ratings and prescribed names
+#### Phase 1 turn-by-turn implementation sequence
 
-Scope: structured claims engine (Standard 1.2.7, Schedule 4), NPSC (Schedule 5), Health Star Rating checked against the official calculator, first two to three prescribed-name classes chosen with the reviewer.
-Entry: R5 held; HSR guide version pinned and artwork licence confirmed.
-Exit: HSR output equals the official calculator for all fixtures; claim gating conditions covered by tests.
+The turns below are bounded delivery chunks for implementation sessions. They do
+not change the dependencies above: P1-1, P1-2 and P1-3 remain parallel work
+streams, and a turn must not make a gated regulatory output deterministic.
+
+| Turn | Scope | Exit check |
+| ---- | ----- | ---------- |
+| 1 | P1-1 foundational arithmetic and mass handling: decimal and unit helpers, cycle detection, recursive formulation expansion, and source paths. | Unit tests cover nested and direct ingredients, unit conversion, missing references, cycles, and invalid quantities. |
+| 2 | P1-1 ingoing-mass percentages on a common gram basis, plus explicit process additions, gains and losses with yield and mass-balance reconciliation. | Boundary and missing-input tests; missing process data returns REVIEW REQUIRED; no unstated yield or loss assumptions. |
+| 3 | P1-1 source-traceable, per-100-g nutrient aggregation and Schedule 11 energy calculations using an explicit food-state basis and versioned, source-cited factor set. | Tests cover unit conversion, missing evidence, component factors, traceability and unrounded results; incomplete composition or unresolved mapping returns REVIEW REQUIRED. |
+| 4 | P1-1 allergen propagation, ingoing-weight declaration ordering, and the shared result/trace contract. | Paths and evidence survive nesting; incomplete or conflicting evidence stays review-required; unresolved declaration exceptions/names are not guessed. |
+| 5 | P1-2 versioned rule records, release metadata, source validation, and explanation templates. | Rule-data validation rejects missing sources and malformed records; rule decisions stay traceable. |
+| 6 | P1-3 local repository interfaces and schema for ingredients, formulations, products, and immutable approved versions. | Repository tests cover create/read/update boundaries and reject mutation of approved versions. |
+| 7 | P1-3 transactions, migrations, storage-cleared detection, and backup export/import including the encrypted option. | Migration and clean-profile restore tests pass; storage remains local. |
+| 8 | P1-4 accessible application shell and core ingredient, specification, formulation, and product workflows. | UI tests cover empty states, validation, keyboard access, and non-colour status cues. |
+| 9 | P1-4 compliance/trace and backup workflows, including clear review-required and non-certification notices. | Trace is inspectable from results; errors and unknown inputs are explicit. |
+| 10 | P1-5 exact-size SVG label layout and required content blocks. | Layout tests verify dimensions and prevent text below the approved minimum size. |
+| 11 | P1-5 deterministic PDF export from the reviewed SVG layout. | Repeat exports are stable and print-scale checks pass. |
+| 12 | P1-6 integrated offline demo, engineering property/e2e tests, and accessibility checks; prepare the workspace for reviewer fixture testing. | Automated engineering checks pass and the offline candidate is testable. R3-01 fixture approval and R1-21 print-scale acceptance remain separate reviewer-acceptance gates; unresolved outputs stay review-only. |
+
+NIP display formatting and rounding are intentionally not a turn with an
+assumed implementation: schedule that work only after the reviewer has settled
+the display policy and fixtures. Additive limits and prescribed names remain
+Phase 2 work for the two agreed product cohorts; claims remain Phase 3 work
+before public launch.
+
+### Phase 2 - MVP compliance expansion
+
+Scope: additive permission and limits (Schedules 7, 8, 14, 15, 16 and Standard 1.3.1, including multi-source sums and carry-over) and prescribed-name support focused on the same two initial product cohorts: formulated caffeinated beverages and foods for infants. The exact Code food classifications/subcategories and applicable prescribed names must be confirmed with the reviewer; these product descriptions alone do not define every applicable rule. Other classes and unsupported cases remain review-only.
+Entry: the reviewer-ready Phase 1 engineering baseline is available. Phase 2 source mapping, data design and review-only workflows may proceed while reviewer access is unavailable. Reviewer touchpoint R4 and applicable reviewer-verified fixtures remain mandatory before deterministic Phase 2 rule activation; this entry does not authorize PASS/FAIL results or public release.
+Exit: each rule has Provision-level mapping or is review-only; fixtures reviewer-checked. This phase is required before public MVP launch.
+
+**Turn 1 status (2026-11-09):** The candidate source map is recorded in
+`docs/mvp-regulatory-research.md`. Product classifications and complete rule
+coverage remain unresolved; no Phase 2 rules are activated.
+
+**Turn 2 status (2026-11-09):** Complete. Product drafts capture intended use,
+consumer, processing and presentation context plus dated evidence references
+for identity and selected cohort facts. Candidate screening indicates only
+possible cohort matches and always requires human confirmation; missing,
+conflicting or unsupported facts remain `REVIEW REQUIRED`. Prescribed-name
+screening identifies no approved cohort rule and never infers a name from the
+proposed product name. No deterministic rule is activated; see
+`docs/mvp-regulatory-research.md` and requirements INT-004, TEST-004 and
+TRACE-015.
+
+**Turn 3 status (2026-11-09):** Complete. Ingredient drafts can store additive
+identity, source code, source-described purposes, concentration with explicit
+unit and basis, dated evidence references, and a user-recorded added,
+carried-over, processing-aid or unknown status. Formulation expansion retains
+the nested ingredient path for each recorded source. Missing purpose,
+concentration or evidence remains missing; this workflow does not evaluate
+permission, declaration, carry-over or processing-aid conditions. See
+requirements ADD-001, ADD-004 and ADD-007.
+
+#### Phase 2 turn-by-turn implementation sequence
+
+These are planned delivery turns. Under the reviewer-ready milestone split,
+Phase 2 groundwork may proceed while reviewer access is unavailable, but
+deterministic rule activation still requires the reviewer gates above. Read
+the current Federal Register text directly for black-and-white Code
+questions. Use reviewer input for product facts, classification judgments,
+evidence sufficiency, interpretation and fixture verification. If a selected
+cohort cannot be mapped confidently, keep it review-only rather than
+broadening or guessing the scope.
+
+| Turn | Scope | Exit check |
+| ---- | ----- | ---------- |
+| 1 | Source-map the two selected cohorts: identify candidate Code classes, applicable additive and prescribed-name provisions, cross-cutting conditions and exclusions. Record current FRL compilation, effective date, exact provision/table row and unsupported cases; separate explicit Code text from product-dependent classification questions. | A cited candidate map exists for formulated caffeinated beverages and foods for infants. Unresolved classification and interpretation questions are listed, not treated as settled; no rules are activated. |
+| 2 | [x] Design and add evidence-backed classification inputs for Schedule 15 food-category assignment and prescribed-name candidate identification. Capture the facts and evidence a user/reviewer needs; do not classify from a product name alone. | Known, unknown and conflicting facts lead to a visible candidate or REVIEW REQUIRED state. Tests reject a classification inferred solely from free text. Complete 2026-11-09; candidate screening remains review-only and is not an approved legal classification. |
+| 3 | [x] Add first-class additive source records and capture workflow: identity/code, purpose, concentration, unit/basis, source evidence/date, ingredient path, and added/carried-over/processing-aid status. | Validation preserves provenance and nested source paths; missing purpose, concentration or evidence stays unknown/REVIEW REQUIRED. Complete 2026-11-09; capture only, no permission or exemption result. |
+| 4 | [x] Map additive declaration names separately from permission: versioned Schedule 7 class-name and Schedule 8 name/code data, declaration choice, ingredient-order placement and allergen inheritance. | Declaration mapping has exact sources and tests for supported options; unsupported naming cases remain review-only and no permission is inferred from a declaration. Complete 2026-11-09: 25 Schedule 7 class names and both 344-row Schedule 8 listings are source-linked; four listing differences are preserved and no class crosswalk is inferred. All candidates remain REVIEW REQUIRED. |
+| 5 | [x] Build versioned, source-validated permission data for only the mapped cohorts from Standard 1.3.1 and applicable Schedules 14–16, including inherited category headings, purposes, limits, GMP entries, conditions and equivalents where verified. | Validation rejects missing or stale source metadata, ambiguous category rows and unsupported conditions. Candidate data remains inactive until its reviewer gate is met. Complete 2026-11-09: added 59 Schedule 15 rows, 3 Schedule 16 type-level candidates, 21 Schedule 14 purposes and 7 calculation bases; classification and permission remain review-only. |
+| 6 | Implement pure permission evaluation for pinned food category, additive identity, technological purpose, food state and the mapped rule conditions. Return a trace with the provision, version, selected row, inputs and explanation. | Tests cover permitted, prohibited, conditional, missing and unmapped cases. Unverified or incomplete mappings cannot produce deterministic results. |
+| 7 | Calculate final-food additive concentrations across direct and nested sources, with explicit unit conversion, mass/volume density evidence, documented yield and applicable as-sold/prepared/reconstituted/drained basis. | Boundary and property tests verify source sums, units and denominator; missing concentration, density, yield or state returns REVIEW REQUIRED rather than zero. |
+| 8 | Evaluate same-technological-purpose mixtures and any separately applicable aggregate-colour limits, including verified “calculated as” equivalents. | Tests cover applicability and non-applicability, each contributor, below/equal/above boundaries and missing equivalents. No mixture or colour rule is generalized beyond its mapped provision. |
+| 9 | Map and implement carry-over, processing-aid and incidental-presence paths as distinct cases, using the exact applicable Code conditions and user-supplied evidence. | Tests show permitted, exceeded, missing-evidence and uncertain cases. A status flag alone cannot establish an exemption; unresolved cases remain review-only. |
+| 10 | Create versioned prescribed-name candidate rules for the mapped cohort classes, including trigger terms, exclusions, required identity/composition/process facts, source and mapping confidence. | Candidate identification always distinguishes “no rule identified” from PASS; unsupported or uncertain classes produce a review task, never an inferred prescribed name. |
+| 11 | Implement composition checks only for prescribed-name rules whose exact provisions and required inputs are mapped and approved for activation. Keep true-nature judgments, mixed/novel foods and unmapped classes review-only. | Each enabled rule has source-linked boundary tests and shows requirements beside product facts. Free-text name or incomplete composition cannot yield PASS. |
+| 12 | Integrate additive and prescribed-name entry, results and trace into the workspace. Present declaration output separately from permission and prescribed-name evaluation; show evidence, review reasons and non-certification language. | End-to-end tests cover a supported draft path and missing/conflicting data paths without asserting legal certification or hiding REVIEW REQUIRED. |
+| 13 | Run the Phase 2 quality and release gate: source/version checks, unit/property tests, selected-cohort fixtures, end-to-end/accessibility checks and review of unsupported cases. Prepare reviewer verification records for classification, mappings and representative outcomes. | No deterministic release is enabled until each applicable reviewer gate and fixture sign-off is recorded. Unsupported categories remain visibly review-only; Phase 2 exit criteria are met before public MVP use. |
+
+### Phase 3 - Claims
+
+Scope: structured claims engine (Standard 1.2.7, Schedule 4), including nutrition, comparative and health-claim gates. Claims complete a public-MVP launch gate after the Phase 1 core and Phase 2 additive/name groundwork. HSR, NPSC, GM, irradiation and origin remain outside the public MVP unless separately approved.
+Entry: R5 held; claim wording, evidence and supported families agreed.
+Exit: supported claim conditions are mapped, review boundaries are explicit, and claim fixtures pass. Public MVP launch remains blocked until this phase is complete.
 
 ### Phase 4 - SaaS foundation
 
@@ -154,7 +247,9 @@ Scope: optional encrypted cloud backup and sync, collaboration, supplier spreads
 | Presence checks                                                             | Name, supplier name and address, lot, date marking, storage and directions                                         | 4.2, 4.13, 4.17  | Provisions mapped in Standards 1.2.2, 1.2.5 and 1.2.6; applicability and exceptions remain pending |
 | Advisory statements                                                         | Only a controlled set approved by the reviewer; otherwise a REVIEW prompt                                          | 4.14             | Provision/Schedule mapped: Standard 1.2.3 and Schedule 9; controlled trigger list and reviewer approval pending |
 | Net quantity                                                                | Always REVIEW REQUIRED; legal metrology is outside the Code                                                        | 4.17             | Mapped to national legal-metrology sources; exceptions and application are review-only |
-| Additive permission, claims, HSR, prescribed names, GM, irradiation, origin | Not evaluated in the MVP                                                                                           | Phases 2 and 3   | n/a                                       |
+| Additive permission and prescribed names | Focus on the same initial cohorts: formulated caffeinated beverages and foods for infants; apply only to confirmed classifications and source-mapped rules. Other cases return REVIEW REQUIRED. | Phase 2 | Reviewer mapping of exact class/subclass and applicable rules required before deterministic results |
+| Claims | Evaluate selected, source-mapped claims after core and additive/name groundwork; required before public MVP launch | Phase 3 | Unsupported wording, evidence or applicability remains REVIEW REQUIRED |
+| HSR, GM, irradiation and origin | Not evaluated in the public MVP | Later phases | n/a |
 
 **Capture now, evaluate later:** the MVP data model already records GM, irradiation, origin, additive entries (identity, purpose, concentration) and claim text, so later phases need no data migration for these. They are stored and shown but not evaluated, and the UI says so.
 
@@ -175,14 +270,14 @@ Cheap now, expensive later:
 
 Questions for each touchpoint are in `docs/reviewer-questions.md`.
 
-| Touchpoint | When               | Purpose                                                                    |
-| ---------- | ------------------ | -------------------------------------------------------------------------- |
-| R1         | Before P1-1 (P0-6) | Resolve interpretation questions that shape the engine                     |
-| R2         | During P1-2        | Check clause mappings, vocabulary and explanation wording                  |
-| R3         | P1-5 and P1-6      | Verify and sign off golden label and NIP fixtures                          |
-| R4         | Before Phase 2     | Additives, characterising ingredients, advisories, GM, irradiation, origin |
-| R5         | Before Phase 3     | Claims, HSR, prescribed-name class selection                               |
-| R6         | Before beta        | Review of the whole rule catalogue; disclaimers and terms                  |
+| Touchpoint | When               | Purpose                                                                                   |
+| ---------- | ------------------ | ----------------------------------------------------------------------------------------- |
+| R1         | Before P1-1 (P0-6) | Resolve interpretation questions that shape the engine                                    |
+| R2         | During P1-2        | Check clause mappings, vocabulary and explanation wording                                 |
+| R3         | P1-5 and P1-6      | Verify and sign off golden label and NIP fixtures                                         |
+| R4         | Before Phase 2     | Additives, selected prescribed-name classes, characterising ingredients and other domains |
+| R5         | Before Phase 3     | Claims; HSR only if separately approved                                                   |
+| R6         | Before beta        | Review of the whole rule catalogue; disclaimers and terms                                 |
 
 ## 11. Legal and regulatory register
 
@@ -235,7 +330,7 @@ This table does not verify Standard 1.2.7/1.2.10, additive permissions, prescrib
 
 ## 12. Progress tracker
 
-**Current phase: Phase 0 (in progress).**
+**Current phase: Phase 1 (in progress).**
 
 Repository preparation (2026-11-05)
 
@@ -248,20 +343,62 @@ Phase 0
 - [x] P0-1 Archive legacy frontend
 - [x] P0-2 Scaffold workspace
 - [x] P0-3 CI
-- [ ] P0-4 Spikes S1 to S4 recorded as ADRs (S1 and S4 design spikes recorded; S2 awaits R1-13 worked examples and policy; S3 print-legibility follow-up pending)
+- [x] P0-4 Spikes S1 to S4 recorded as ADRs (S2 source findings recorded in ADR-003; no presentation policy is inferred; S3 print-legibility follow-up is a P1-5 gate)
 - [x] P0-5 Legal-register verification for the MVP rules (source mapping recorded 2026-11-06; explicit compilation/interpretation follow-ups retained)
-- [x] P0-6 Reviewer session R1 held (recorded 2026-11-06; blocking interpretation and evidence follow-ups remain open before affected P1-1/P1-2 work)
+- [x] P0-6 Reviewer session R1 held (recorded 2026-11-06; open interpretations gate affected deterministic calculations and rule data, not foundational arithmetic/graph work)
 
-Phase 1
+Phase 1 - reviewer-ready engineering baseline reached; reviewer acceptance pending
 
-- [ ] P1-1 Engine core
+- [x] Local offline workspace, illustrative export path and automated engineering checks are available for hands-on testing.
+- [ ] R3-01 reviewer-verified golden fixtures.
+- [ ] R1-21 minimum-size policy and physical print-scale acceptance.
+- [ ] R1-13 NIP display policy and fixtures before deterministic NIP presentation; until then NIP display remains `REVIEW REQUIRED`.
+
+- [ ] P1-1 Engine core (in progress; NIP display remains gated)
 - [ ] P1-2 Rules data v0.1
 - [ ] P1-3 Local data layer
 - [ ] P1-4 UI
 - [ ] P1-5 Label and PDF
 - [ ] P1-6 Quality gate
 
-Phases 2 to 6: not started.
+These P1 checkboxes track completion of the full step requirements, not the
+reviewer-ready milestone. Gated NIP presentation, the illustrative-only label
+content, and pending reviewer acceptance mean the full Phase 1 scope is not
+being claimed as complete.
+
+Turn sequence: [x] 1 (foundational arithmetic, mass handling, recursive
+expansion); [x] 2 (ingoing-mass percentages and explicit process mass
+accounting); [x] 3 (source-traceable nutrient aggregation and Schedule 11
+energy calculation); [x] 4 (allergen propagation, ordered declaration tree
+and result/trace contract); [x] 5 (versioned draft rule data, release
+validation and explanation templates); [x] 6 (local record schemas,
+repositories and immutable approved snapshots); [x] 7 (transactions,
+migrations, recovery points, backup/restore and storage warnings); [x] 8
+(accessible workspace shell and local ingredient, formulation and product
+draft workflows); [x] 9 (review/trace and backup/restore workflows); [x] 10
+(exact-size SVG label layout and content-block checks); [x] 11 (deterministic
+PDF export); [x] 12 (engineering demo and automated checks; reviewer-verified
+golden fixtures remain blocked on R3-01).
+
+Turn 12 has an illustrative-only demo workspace, a local SVG/PDF preview and
+export workflow, property tests, offline and clean-profile restore tests, a
+third-party-script CSP check, and automated WCAG 2.1 A/AA checks. These are
+engineering fixtures, not reviewer-approved regulatory golden fixtures.
+R3-01 remains pending, so reviewer acceptance of P1-6 is not complete.
+R1-21 minimum-size policy and physical print proof also remain open P1-5
+acceptance gates. These outstanding gates do not block bounded Phase 2
+research and review-only groundwork under the approved milestone split.
+
+Phase 2 groundwork - current workstream
+
+- [x] Turn 1: candidate source map recorded in `docs/mvp-regulatory-research.md`.
+- [x] Turn 2: evidence-backed classification inputs that never infer a class from a product name alone.
+- [x] Turn 3: additive source capture with provenance and nested ingredient paths; no permission or exemption result.
+- [x] Turn 4: Schedule 7/8 declaration-name data and review-only declaration candidates; no permission crosswalk.
+- [x] Turn 5: source-validated, review-only additive permission catalog for the selected cohorts; no evaluation or activation.
+- Deterministic additive and prescribed-name results remain blocked on R4 and applicable reviewer-verified fixtures.
+
+Phases 3 to 6: not started.
 
 ## 13. Verification and definition of done
 
@@ -311,3 +448,144 @@ Phase 1 manual demo: complete the flow offline; restore an encrypted backup on a
   blocking follow-ups in `docs/reviewer-questions.md`; R1-22 requests a scope
   change that conflicts with D1 and requires a product-owner decision. Phase 0
   remains in progress; the session itself is not approval of unresolved rules.
+- 2026-11-09: Revised D1 at the product owner's direction: the public MVP has a
+  bounded additive and prescribed-name scope focused on the same two initial
+  product cohorts: formulated caffeinated beverages and foods for infants.
+  Reviewer verification must establish exact Code classifications, applicable
+  rules and evidence. Claims follow core and additive/name groundwork and are
+  required before public launch. Supplier-provided nutrient data is the initial
+  source.
+- 2026-11-09: Closed P0-4 after recording the S2 primary-source findings in
+  ADR-003. The Code's NIP display limit is not an internal rounding sequence;
+  deterministic NIP formatting remains gated on reviewer review. S3's
+  print-legibility follow-up is carried into P1-5. Began P1-1 foundational
+  decimal arithmetic.
+- 2026-11-09: Added a turn-by-turn Phase 1 execution sequence. Completed turn 1
+  with pure recursive formulation expansion, unit-normalized ingredient masses,
+  cycle/missing-reference rejection and retained ingredient source paths.
+- 2026-11-09: Completed Phase 1 turn 2 (CALC-001, CALC-003): added source-path
+  preserving ingoing percentages on a common mass basis and explicit process
+  mass balance for additions, gains, losses and declared final mass. Missing
+  process profiles return REVIEW REQUIRED; inconsistent or impossible mass
+  inputs are rejected rather than inferred.
+- 2026-11-09: Completed Phase 1 turn 3 (CALC-010, CALC-015): added weighted
+  per-100-g nutrient aggregation with source/evidence trace and a Schedule 11
+  component-factor calculator. It requires an explicit food-state basis,
+  complete component coverage and a versioned source-cited factor set; missing
+  evidence, factors or unresolved mapping return REVIEW REQUIRED. Updated the
+  research record to Schedule 11 compilation F2024C01138 (C06). Rounding,
+  carbohydrate-method mapping, and specific/general component allocation
+  remain gated as noted.
+- 2026-11-09: Completed Phase 1 turn 4 (CALC-005, FORM-005, TRACE-008,
+  TRACE-014): added source-path-preserving allergen propagation, explicit
+  incomplete/conflicting/exemption review states, ingoing-mass ordering for a
+  nested ingredient declaration tree, and a typed result/trace contract with
+  non-certification wording. The engine returns structured declaration data,
+  not final legal label text; unresolved names, compound exceptions, allergen
+  exemptions and final-food sulphite evaluation remain review-gated.
+- 2026-11-09: Completed Phase 1 turn 5 (TRACE-014, TRACE-015): added typed
+  versioned rule-release data, source and fixture cross-reference validation,
+  fixed evidence-presence conditions, explanation-template validation and
+  rendering, and activation gates for source and reviewer verification.
+  Added five review-only draft evidence rules; none enables PASS or FAIL, and
+  the candidate allergen vocabulary remains unapproved. Rule-data validation,
+  tests, lint, typecheck and production build pass.
+- 2026-11-09: Completed Phase 1 turn 6 (LOCAL-001, LOCAL-004): added typed
+  Dexie repositories and indexed local schemas for ingredients, formulations,
+  products and immutable approved snapshots. CRUD validation and snapshot
+  immutability tests pass. Multi-record approval transactions, migrations,
+  backup/restore and durability handling remain for turn 7.
+- 2026-11-09: Completed Phase 1 turn 7 (LOCAL-003, LOCAL-006, LOCAL-007,
+  LOCAL-009, LOCAL-010, LOCAL-012; BKP-001, BKP-003, BKP-005, BKP-006):
+  added atomic approval/version-decision writes, a pre-migration recovery
+  point and rollback-tested schema upgrade, integrity-checked versioned
+  workspace backup/restore with passphrase encryption, explicit replacement
+  conflict handling, circular-reference rejection and a non-sensitive
+  cleared-store marker. Durable storage remains browser-dependent and the
+  encrypted backup passphrase cannot be recovered. Full tests, typecheck,
+  lint, rule validation and build pass.
+- 2026-11-09: Completed Phase 1 turn 8 (ING-001 to ING-003, SPEC-001,
+  FORM-001, FORM-004, LOCAL-001): added an accessible local-first Vue
+  workspace for ingredient/specification metadata, nested formulation
+  drafts and linked product drafts. The UI uses Tailwind CSS v4 and an
+  in-repository shadcn-vue-style button component. Supplier specification
+  capture currently stores reference/date metadata on the ingredient draft;
+  distinct specification version records remain a data-model follow-up.
+  Unit, type, lint, build, rule-validation and Playwright checks pass; the
+  app has no horizontal overflow at a 390 px viewport. Turn 9 was
+  subsequently completed as recorded below.
+- 2026-11-09: Completed Phase 1 turn 9 (TRACE-008, TRACE-012, TRACE-014,
+  TRACE-018; LOCAL-006, LOCAL-010, LOCAL-012; BKP-001, BKP-003, BKP-005):
+  added a review/trace view for draft input provenance and any stored
+  evaluation results, plus local encrypted/unencrypted backup export,
+  integrity inspection, explicitly confirmed restore/replacement, recovery
+  point visibility and a durable-storage request. Unknown nutrient/allergen
+  data stays visibly unknown; the review view reports REVIEW REQUIRED while
+  no active regulatory release is installed and does not invent an
+  evaluation. Typecheck, lint, build, unit tests, rule validation and
+  Playwright tests pass.
+- 2026-11-09: Completed Phase 1 turn 10 (PACK-001, PACK-004): added a pure
+  exact-millimetre SVG layout function with orientation and margin validation,
+  typed required content blocks, XML escaping, minimum-size/source evidence
+  checks, and explicit missing-content and overflow issues. Text is never
+  silently reduced. Unverified minimum-size policy remains REVIEW REQUIRED;
+  line-width checks are estimates requiring rendered proof, and no NIP
+  rounding or legal-content decision is inferred. Nine focused layout tests,
+  typecheck, lint and label package build pass.
+- 2026-11-09: Completed Phase 1 turn 11 (PACK-001, PACK-005): added
+  deterministic PDF export from the generated SVG, with an exact-size label
+  page and a separate A4 provenance/review report page. The report includes
+  product version, rule release, export timestamp, layout issues and the
+  non-certification statement. Chromium tests verify stable repeated bytes,
+  page dimensions and preserved text size. Font embedding and physical print
+  legibility remain visibly REVIEW REQUIRED; these gates do not certify a
+  label or mark P1-5 complete.
+- 2026-11-09: Implemented the engineering portion of Phase 1 turn 12
+  (PACK-001, PACK-005, TRACE-012, TRACE-018): added explicitly fictional local
+  demo data and an illustrative-only layout/PDF screen; lazy-loaded both PDF
+  renderer dependencies and preloaded them before the offline export test;
+  added property tests, clean-profile encrypted-restore and CSP browser tests,
+  and WCAG 2.1 A/AA checks across workspace screens. The full automated
+  quality suite passes. Turn 12 and P1-6 remain unchecked because R3-01 to
+  R3-03 golden-fixture answers are pending; the illustrative demo is not a
+  substitute. Minimum-size policy and physical print proof remain open under
+  R1-21.
+- 2026-11-09: Manual inspection identified and fixed an SVG-to-PDF font
+  scaling error: millimetre font sizes were converted to points even though
+  the SVG viewBox already mapped user units to millimetres. Added a browser
+  regression assertion for the authored font size and page scale. This does
+  not resolve line wrapping or replace print-at-actual-size proof.
+- 2026-11-09: Added a 13-turn Phase 2 execution sequence for the selected
+  additive-limit and prescribed-name cohorts. The sequence separates primary
+  source mapping, evidence-backed classification, additive and prescribed-name
+  workflows, and release validation. At that point Phase 1 remained the
+  current phase; reviewer gates remain required before deterministic Phase 2
+  rule activation.
+- 2026-11-09: Completed Phase 2 Turn 1's candidate source map for the two
+  selected cohorts in `docs/mvp-regulatory-research.md`. Product-specific
+  classification, complete additive and prescribed-name coverage, transitions
+  and reviewer verification remain open; no rules were activated.
+- 2026-11-09: Completed Phase 2 Turn 2 with local, evidence-backed product
+  classification profiles and review-only candidate screening for the two
+  selected cohorts. Unknown, unsupported and conflicting evidence stays
+  inconclusive, and prescribed-name screening does not infer a candidate from
+  the proposed name. No deterministic rules were activated.
+- 2026-11-09: Completed Phase 2 Turn 3 with local additive source records on
+  ingredient drafts and source-path tracing through nested formulations.
+  Missing source details remain absent or unknown; permissions, declarations,
+  carry-over and processing-aid conditions are not evaluated.
+- 2026-11-09: Completed Phase 2 Turn 4 with source-linked Schedule 7/8
+  declaration-name data and review-only declaration candidates. No Schedule 7
+  class crosswalk or permission inference was added.
+- 2026-11-09: Completed Phase 2 Turn 5 with source-validated, draft additive
+  permission data for the selected cohorts: 59 Schedule 15 rows, three broad
+  Schedule 16 type candidates, 21 Schedule 14 purposes, and seven calculation
+  bases. The infant-food INS 414 presentation remains unverified; incomplete
+  Schedule 16 membership and category/product mappings remain explicit.
+  Validation and tests prevent activation while any entry remains unreviewed;
+  no permission evaluator or deterministic result was added.
+- 2026-11-09: At the product owner's direction, split Phase 1's reviewer-ready
+  engineering baseline from reviewer acceptance. Began the bounded Phase 2
+  groundwork workstream; R3 fixtures, print-scale acceptance and other
+  applicable reviewer gates remain required before deterministic results or
+  public release.

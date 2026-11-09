@@ -61,6 +61,26 @@ user-controlled backups. Use Web Crypto for an encrypted export option; this
 spike does not decide on full database-at-rest encryption or a key-recovery
 scheme.
 
+## Phase 1 implementation
+
+The P1-3 adapter is implemented in `packages/storage` on Dexie 4.4.7. Schema
+version 2 creates a recovery point inside the version-change transaction
+before transforming legacy approval metadata; a failed upgrade rolls back
+both the schema change and recovery-point write. Approval snapshots and their
+review decisions are written atomically, and approved-version records expose
+no update or delete operation.
+
+Workspace backup format version 1 includes an integrity hash and defaults to
+passphrase encryption when exported with AES-GCM and a PBKDF2-derived key.
+Unencrypted export is an explicit option and includes a readability warning.
+Restore validates the payload and circular references, reports record
+conflicts, and refuses to replace a non-empty workspace without explicit
+confirmation; replacement is atomic. The passphrase is not stored and cannot
+be recovered. The localStorage usage marker contains no formulation content;
+the adapter reports when that marker is unavailable. Durable-storage requests
+remain subject to browser policy, and a denied request is surfaced to the
+caller rather than treated as success.
+
 ## Limitations and follow-up
 
 - The benchmark is a small, single-browser headless experiment, not a
@@ -70,7 +90,9 @@ scheme.
 - Browser eviction, private browsing, storage pressure, user-granted durable
   storage, and concurrent-tab behaviour remain to be tested in real browsers.
 - Pre-migration backups, restore, corruption recovery, encrypted backup
-  passphrase handling, and key recovery remain P1-3 requirements.
+  passphrase recovery, and key recovery remain follow-ups. The v2 migration
+  recovery point is local to the same database and is not a substitute for an
+  external user backup.
 - The comparison was with native IndexedDB, not RxDB or SQLite WASM.
 
 ## Sources

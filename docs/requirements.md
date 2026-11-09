@@ -232,6 +232,13 @@ The platform shall use a category/classification workflow, not an unrestricted n
 
 It shall not call a generic product name a prescribed name without a source mapping. Fish names are a special case: FSANZ states that the Code does not define fish names and points to the Australian Fish Names Standard AS 5300 and the fishnames.com.au database. That external standard is not assumed to be incorporated into the Code; its use must be reviewed.
 
+For the initial formulated-caffeinated-beverage and food-for-infants cohorts,
+classification groundwork records identity, intended use, intended consumer,
+processing, presentation and dated evidence references. Candidate screening is
+review-only: a proposed name alone cannot establish a class or prescribed
+name, and unknown, conflicting or unsupported facts remain `REVIEW REQUIRED`.
+This groundwork does not activate additive or prescribed-name rules.
+
 ### 4.7 Nutrition information and calculation
 
 Standard 1.2.8 section 1.2.8-5 controls when a NIP is required and lists exemptions, including certain single-ingredient foods, herbs/spices/herbal infusions, tea/coffee, water/ice, additives, processing aids and small packages, subject to claim conditions. Section 1.2.8-6 requires servings, serving size, unit quantity, energy, protein, carbohydrate, sugars, fat, saturated fat and sodium, plus claimed nutrients and other required information. Section 1.2.8-7 controls significant figures and small-value wording. Sections 1.2.8-11 to 1.2.8-13 address reconstituted, drained and prepared foods. Schedule 11 calculates energy and carbohydrate; Schedule 12 sets NIP formats; Schedule 13 covers small packages.
@@ -535,6 +542,37 @@ The following are conceptual records and behaviours, not a prescribed database d
 | ADD-008 | Must | The explanation shows calculated value, per-source breakdown, maximum permitted with basis, food category, the Schedule row, mapping confidence and, for `REVIEW REQUIRED`, why. |
 | ADD-009 | Must | Declaration: class name plus name or code number per Schedules 7 and 8, in ingredient-order position, including within compound ingredients. Where several naming options exist the user confirms the choice. |
 | ADD-010 | Must | Food-category assignment, `GMP` status, equivalents and processing-aid classification are human-confirmed. The software never infers permission from a code number alone. |
+
+Turn 3 provides capture groundwork for ADD-001, ADD-004 and ADD-007: ingredient
+drafts store additive identity, source code, source-described purposes,
+concentration with explicit unit and basis, dated source references, and a
+user-recorded source status. Formulation expansion carries those records with
+their nested ingredient paths. This does not evaluate concentration, additive
+permission, declaration, carry-over or processing-aid conditions. Missing
+details remain absent or unknown and must not be interpreted as zero or as a
+favourable result.
+
+Turn 4 provides review-only declaration groundwork for REG-ADD-003 and
+ADD-009. The draft rule release contains the Schedule 7 prescribed/optional
+class-name table and both Schedule 8 S8-2 listings, preserving source wording,
+order, code dashes and four differences between the listings. The Code does
+not assign Schedule 8 additives to Schedule 7 classes; mappings remain empty.
+The workspace captures a user-selected declaration route and name/code choice
+and traces additive allergen evidence through nested ingredient paths. Every
+wording candidate remains `REVIEW REQUIRED`; this does not evaluate permission,
+select the most appropriate class, or produce a final ingredient declaration.
+
+Turn 5 adds a versioned, source-linked draft permission catalog for candidate
+Schedule 15 classes in formulated caffeinated beverages and foods for infants.
+It preserves Schedule 15 row text and conditions, Schedule 14 purpose
+vocabulary, Schedule 16 type-level candidates, and verified Standard 1.3.1
+calculation bases without inferring an additive identity, purpose, class
+inheritance or permission result. Stale source metadata, missing category
+references, ambiguous categories, unsupported conditions and invalid limits
+are rejected. The catalog is not active; the apparent infant-food INS 414
+maximum remains explicitly unverified. This is data and validation groundwork
+for ADD-001 through ADD-003, ADD-008 and ADD-010, not permission evaluation or
+a compliance result.
 
 ### 6.6 Prescribed-name validation
 
@@ -1082,6 +1120,9 @@ Fixtures should include at least:
 - Atomic/compound ingredients and supplier evidence.
 - Recursive allergen and ingredient declaration generation.
 - Core NIP calculation with explicit source values and yield.
+- Additive permission/limit evaluation and prescribed-name support focused on the same initial product cohorts: formulated caffeinated beverages and foods for infants. Exact Code classifications/subcategories and applicable name rules require reviewer verification; unsupported cases remain `REVIEW REQUIRED`.
+- No candidate prescribed-name rule found is not a PASS.
+- Supported claims are required before public MVP launch, after the core and additive/name groundwork. Claims must not be treated as cleared merely because their nutrient threshold is met.
 - Name, supplier, lot, date, storage and directions capture.
 - Core warning/advisory triggers supported by controlled fixtures.
 - Rule result statuses and source-linked explanations.
@@ -1090,21 +1131,18 @@ Fixtures should include at least:
 - Label preview and PDF export of label/pack copy at custom dimensions (PACK-001).
 - Account, trial and entitlement with a read-only/export-only expiry mode (SUB-004).
 - Characterising-ingredient candidate flagging and percentage calculation where the basis is pinned (4.16).
-- No claim, HSR, origin, additive permission or prescribed-name automation unless the feature is separately flagged as supported and reviewed. This boundary is a recommendation: the original product vision lists these as core, so the product owner should confirm it (14.2).
 
 ### 13.2 Version 1
 
-- Additive permission/label rules and processing-aid distinctions.
-- Selected prescribed food standards and food-class workflows.
-- Nutrition content claims, NPSC and controlled health-claim review.
-- HSR v9.1 calculator/profile integration with pinned source.
+- Broader additive permission and prescribed-name coverage beyond formulated caffeinated beverages and foods for infants.
+- HSR calculator/profile integration with a pinned official source, if separately approved.
 - GM, irradiation and country-of-origin workflows.
 - Packaging/legibility preflight and review package.
 - Optional encrypted sync, collaboration and tested recovery.
 
 ### 13.3 Future
 
-- Broader Chapter 2 coverage, special purpose foods and alcohol profiles.
+- Broader Chapter 2 and special-purpose-food coverage beyond the initial infant-food cohort, plus alcohol profiles.
 - Batch variability, laboratory data integration and supplier portal.
 - Country-of-origin legal profile expansion and export jurisdictions.
 - New Zealand implementation profile.
@@ -1249,8 +1287,8 @@ The following register records the primary sources used for this requirements ba
 | SRC-011 | [Schedule 4](https://www.legislation.gov.au/F2015L00474/latest/text) | S4-3 claim conditions, S4-4 high-level claims, S4-5 general-level claims, S4-6 NPSC category threshold | In force; compilation 7, 2026-04-30 |
 | SRC-012 | [Schedule 5](https://www.legislation.gov.au/F2015L00475/latest/text) | NPSC scoring method; exact tables to be pinned in rule data | Federal Register source; verify current compilation before implementation |
 | SRC-013 | [Schedule 6](https://www.legislation.gov.au/F2015L00476/latest/text) | Systematic review requirements for self-substantiated health relationships | Federal Register source; verify current compilation before implementation |
-| SRC-014 | [Schedule 7](https://www.legislation.gov.au/F2015L00477/latest/text) | Food additive class names | Federal Register source; verify current compilation before implementation |
-| SRC-015 | [Schedule 8](https://www.legislation.gov.au/F2015L00478/latest/text) | Food additive names and code numbers | In force; compilation 8, 2025-09-16 |
+| SRC-014 | [Schedule 7 S7-2 (F2015L00477)](https://www.legislation.gov.au/F2015L00477/asmade/2015-04-01/text/original/epub/OEBPS/document_1/document_1.html) | Prescribed and optional food additive class names | As made 2015-04-01; commenced 2016-03-01; latest Register listing checked 2026-11-09 |
+| SRC-015 | [Schedule 8 S8-2 (F2025C00967)](https://www.legislation.gov.au/F2015L00478/2025-09-16/2025-09-16/text/original/epub/OEBPS/document_1/document_1.html) | Alphabetical and numerical food additive names and code numbers | Compilation 8, effective 2025-09-16; amendment history includes No. 244 although the compilation summary says up to No. 231; recheck before release |
 | SRC-016 | [Schedule 9](https://www.legislation.gov.au/F2015L00479/latest/text) | S9-2 advisory statements and S9-3 mandatory declarations/allergen table | In force; compilation 2, 2021-02-25 |
 | SRC-017 | [Schedule 10](https://www.legislation.gov.au/F2015L00480/latest/text) | Generic ingredient names and conditions | In force; compilation 4, 2021-02-25 |
 | SRC-018 | [Schedule 11](https://www.legislation.gov.au/F2015L00481/latest/text) | S11-2 energy factors, S11-3 carbohydrate, S11-4 fibre methods | In force; compilation 6, 2024-10-29 |

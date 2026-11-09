@@ -17,7 +17,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm --filter @aus-food/web dev',
+    command:
+      'corepack pnpm --filter @aus-food/web... run build && corepack pnpm --filter @aus-food/web dev',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
   },

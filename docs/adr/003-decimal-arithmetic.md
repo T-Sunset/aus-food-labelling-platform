@@ -45,21 +45,42 @@ final browser bundle.
 Do not add either library to the runtime dependencies until the engine is
 implemented. At that time, configure decimal precision explicitly, parse
 user-entered decimal values without first converting them to JavaScript
-numbers, and test the selected policy. Do not select or implement NIP rounding
-stages or `LESS THAN` presentation until the remaining R1-13 policy and worked
-examples are resolved. R1-13 records a significant-figure answer; verify and
-apply the exact source wording for each applicable value before implementation.
+numbers, and test the selected policy. Do not implement deterministic NIP
+formatting until a display policy and fixtures have been reviewed. The R1-13
+source wording has been checked and is recorded below.
 
-## Limitations and follow-up
+## Initial spike limitations
 
-- R1-13 has a partial answer, but the calculation-stage policy and worked
-  examples remain unresolved. Regulatory rounding fixtures and the spike's
-  exact NIP acceptance criterion therefore remain unverified.
+- At the time of the initial spike, R1-13's calculation-stage policy and
+  worked examples remained unresolved. Regulatory rounding fixtures and the
+  spike's exact NIP acceptance criterion were therefore unverified.
 - Repeating division, precision policy for intermediate values, and rounding
   boundaries must be addressed when R1-13 is answered and before NIP
   calculation code is built.
 - Worked values in this spike are synthetic examples, not regulatory
   thresholds, tolerances, or authoritative food-data fixtures.
+
+## Follow-up source check (2026-11-09)
+
+The Federal Register text for Standard 1.2.8, compilation F2026C00411 (C06),
+effective 2026-04-30, was checked against clauses 1.2.8-7(3)-(6). It requires
+the specified average values in an NIP to be expressed to no more than three
+significant figures. It permits, but does not require, “LESS THAN 40 kJ” for
+average energy below 40 kJ per serving or unit quantity; “LESS THAN 1 g” for
+average protein, fat, fatty-acid classes, carbohydrate, sugars or dietary
+fibre below 1 g per serving or unit quantity; and “LESS THAN 5 mg” for average
+sodium or potassium below 5 mg per serving or unit quantity. The conditions
+are strictly below the thresholds. Schedule 12, compilation F2017C00342 (C02),
+including S12-2, S12-3 and S12-7, specifies panel formats but does not choose a
+rounding method, intermediate precision or a sequence between per-serving and
+per-100-g/mL values. Therefore those provisions do not settle an internal
+rounding sequence.
+
+The product owner chose to defer deterministic NIP formatting until a display
+policy and fixtures have been reviewed. The engine may retain unrounded
+calculation values, but must not present a guessed display policy as a legal
+rule. The engine's 40-decimal-place, half-up division setting is an internal
+arithmetic precision policy only, not the NIP presentation policy.
 
 ## Sources
 
@@ -67,3 +88,5 @@ apply the exact source wording for each applicable value before implementation.
 - big.js 7.0.1 package metadata: https://www.npmjs.com/package/big.js/v/7.0.1
 - decimal.js documentation: https://mikemcl.github.io/decimal.js/
 - decimal.js 10.6.0 package metadata: https://www.npmjs.com/package/decimal.js/v/10.6.0
+- Standard 1.2.8, compilation F2026C00411: https://www.legislation.gov.au/F2015L00395/2026-04-30/2026-04-30/text/original/epub/OEBPS/document_1/document_1.html
+- Schedule 12, compilation F2017C00342: https://www.legislation.gov.au/F2015L00482/2017-04-13/2017-04-13/text/original/epub/OEBPS/document_1/document_1.html

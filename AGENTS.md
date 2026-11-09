@@ -12,7 +12,7 @@ A privacy-focused Australian food-labelling and formulation product. Users model
 
 ## Current state
 
-Pre-implementation. Phase 0 is in progress. Update this line when the phase changes.
+The reviewer-ready Phase 1 engineering baseline is available. Phase 2 groundwork is the current workstream; product classification, NIP presentation, additive results and prescribed-name results remain `REVIEW REQUIRED` where their reviewer gates are unresolved. Do not treat this milestone as regulatory acceptance or public-release approval.
 
 ## Rules that always apply
 

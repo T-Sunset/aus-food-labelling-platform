@@ -1,0 +1,22 @@
+{
+  "name": "@aus-food/storage",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@aus-food/domain": "workspace:*",
+    "dexie": "4.4.7"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "6.2.7"
+  }
+}

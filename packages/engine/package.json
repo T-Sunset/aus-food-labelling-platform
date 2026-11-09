@@ -13,6 +13,10 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@aus-food/domain": "workspace:*"
+    "@aus-food/domain": "workspace:*",
+    "big.js": "7.0.1"
+  },
+  "devDependencies": {
+    "@types/big.js": "^7.0.0"
   }
 }

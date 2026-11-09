@@ -14,6 +14,8 @@
   },
   "dependencies": {
     "@aus-food/domain": "workspace:*",
-    "@aus-food/engine": "workspace:*"
+    "@aus-food/engine": "workspace:*",
+    "jspdf": "4.2.1",
+    "svg2pdf.js": "2.9.0"
   }
 }
