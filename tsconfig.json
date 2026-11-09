@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./apps/web" },
+    { "path": "./packages/domain" },
+    { "path": "./packages/engine" },
+    { "path": "./packages/rules" },
+    { "path": "./packages/label" }
+  ]
+}
