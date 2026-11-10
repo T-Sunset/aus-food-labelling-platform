@@ -363,6 +363,118 @@ describe('local draft repositories', () => {
       ).rejects.toBeInstanceOf(RecordValidationError);
     }
   });
+
+  it('stores claims exactly as entered and never classifies them automatically (CLAIM-006)', async () => {
+    const store = await openTestStore();
+    const withClaims: ProductRecord = {
+      ...product,
+      claims: [
+        { id: 'c1', text: '  LOW sugars!  ' },
+        {
+          id: 'c2',
+          text: 'Low in fat',
+          classification: 'nutrition_content',
+          classificationConfirmed: true,
+          supportedClaimId: 'low-fat',
+        },
+        { id: 'c3', text: '100% natural', classification: 'not_code_regulated', classificationConfirmed: true },
+      ],
+    };
+    await store.products.create(withClaims);
+    const saved = await store.products.get(product.id);
+    expect(saved).toEqual(withClaims);
+    expect(saved && 'claims' in saved ? saved.claims?.[0]?.classification : 'x').toBeUndefined();
+
+    const invalid: unknown[] = [
+      'low fat',
+      [{ id: 'a', text: '' }],
+      [{ id: 'a', text: '   ' }],
+      [{ id: '', text: 'x' }],
+      [{ id: 'a', text: 'x' }, { id: 'a', text: 'y' }],
+      [{ id: 'a', text: 'x', classification: 'tasty' }],
+      [{ id: 'a', text: 'x', classificationConfirmed: 'yes' }],
+      [{ id: 'a', text: 'x', classificationConfirmed: true }],
+      [{ id: 'a', text: 'x', supportedClaimId: 'low-fat' }],
+      [{ id: 'a', text: 'x', classification: 'health', supportedClaimId: 'low-fat' }],
+      [{ id: 'a', text: 'x', classification: 'nutrition_content', supportedClaimId: '' }],
+    ];
+    for (const claims of invalid) {
+      await expect(store.products.update(product.id, { claims } as never)).rejects.toBeInstanceOf(
+        RecordValidationError,
+      );
+    }
+  });
+
+  it('stores claim figures and product claim facts, and rejects malformed ones', async () => {
+    const store = await openTestStore();
+    const full: ProductRecord = {
+      ...product,
+      claims: [
+        {
+          id: 'c1',
+          text: 'Low sugars',
+          classification: 'nutrition_content',
+          classificationConfirmed: true,
+          supportedClaimId: 'claim.low-sugars',
+          nutrientAmount: { value: '0', unit: 'g' },
+          evidence: { reference: 'lab-1', sourceDate: '2026-11-10' },
+        },
+      ],
+      claimFacts: {
+        foodForm: 'liquid',
+        formOfFoodConfirmed: true,
+        prohibitedContexts: { infantFormulaProduct: false, kava: false, alcoholAbove1_15Percent: false },
+      },
+    };
+    await store.products.create(full);
+    expect(await store.products.get(product.id)).toEqual(full);
+
+    const badClaims: unknown[] = [
+      [{ id: 'a', text: 'x', nutrientAmount: { value: '-1', unit: 'g' } }],
+      [{ id: 'a', text: 'x', nutrientAmount: { value: '', unit: 'g' } }],
+      [{ id: 'a', text: 'x', nutrientAmount: { value: '1', unit: '' } }],
+      [{ id: 'a', text: 'x', evidence: { reference: '', sourceDate: '2026-11-10' } }],
+      [{ id: 'a', text: 'x', evidence: { reference: 'r', sourceDate: 'yesterday' } }],
+    ];
+    for (const claims of badClaims) {
+      await expect(store.products.update(product.id, { claims } as never)).rejects.toBeInstanceOf(
+        RecordValidationError,
+      );
+    }
+    const badFacts: unknown[] = [
+      'liquid',
+      { foodForm: 'gas' },
+      { formOfFoodConfirmed: 'yes' },
+      { prohibitedContexts: 'none' },
+      { prohibitedContexts: { kava: 'no' } },
+    ];
+    for (const claimFacts of badFacts) {
+      await expect(store.products.update(product.id, { claimFacts } as never)).rejects.toBeInstanceOf(
+        RecordValidationError,
+      );
+    }
+  });
+
+  it('stores pack details and rejects malformed ones', async () => {
+    const store = await openTestStore();
+    const packDetails = { servingSize: '250', servingsPerPack: '2', netQuantity: '500', netUnit: 'mL' as const };
+    await store.products.create({ ...product, packDetails });
+    expect((await store.products.get(product.id))?.packDetails).toEqual(packDetails);
+
+    const bad: unknown[] = [
+      'big',
+      { servingSize: '0' },
+      { servingSize: '-1' },
+      { servingsPerPack: 'two' },
+      { netQuantity: 500 },
+      { netUnit: 'kg' },
+    ];
+    for (const value of bad) {
+      await expect(store.products.update(product.id, { packDetails: value } as never)).rejects.toBeInstanceOf(
+        RecordValidationError,
+      );
+    }
+  });
 });
 
 describe('immutable approved versions', () => {

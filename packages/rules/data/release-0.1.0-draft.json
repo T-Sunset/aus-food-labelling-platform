@@ -145,6 +145,26 @@
       "effectiveFrom": "2016-03-01",
       "checkedOn": "2026-11-10",
       "verificationStatus": "primary-source-verified"
+    },
+    {
+      "id": "SRC-CLAIM-001",
+      "instrument": "Australia New Zealand Food Standards Code - Schedule 4 - Nutrition, health and related claims",
+      "sourceUrl": "https://www.legislation.gov.au/F2015L00474/2026-04-30/2026-04-30/text/original/epub/OEBPS/document_1/document_1.html",
+      "jurisdiction": "Australia and New Zealand",
+      "referenceVersion": "F2026C00415, Compilation 7 (2026-04-30); S4-3 table text read 2026-11-10",
+      "effectiveFrom": "2026-04-30",
+      "checkedOn": "2026-11-10",
+      "verificationStatus": "primary-source-verified"
+    },
+    {
+      "id": "SRC-CLAIM-002",
+      "instrument": "Australia New Zealand Food Standards Code - Standard 1.2.7 - Nutrition, health and related claims",
+      "sourceUrl": "https://www.legislation.gov.au/F2015L00394/2025-08-13/2025-08-13/text/original/epub/OEBPS/document_1/document_1.html",
+      "jurisdiction": "Australia and New Zealand",
+      "referenceVersion": "F2025C00833, Compilation 8 (2025-08-13); sections 1.2.7-4, -7 and -12 read 2026-11-10",
+      "effectiveFrom": "2025-08-13",
+      "checkedOn": "2026-11-10",
+      "verificationStatus": "primary-source-verified"
     }
   ],
   "rules": [
@@ -11259,6 +11279,209 @@
       "Terms come from the Code text and are not extended with synonyms. A name containing a term is a candidate only; a name without one does not show that no rule applies.",
       "Standard 1.2.2 (true nature and prescribed names) and other Chapter 2 standards were not searched for these cohorts and remain TO BE VERIFIED.",
       "All entries are draft candidates. This catalog identifies candidate rules and the facts needed; it performs no composition check, true-nature judgement or compliance evaluation."
+    ]
+  },
+  "claimRuleCatalog": {
+    "version": "0.1.0-draft",
+    "checkedOn": "2026-11-10",
+    "status": "draft",
+    "sourceIds": ["SRC-CLAIM-001", "SRC-CLAIM-002"],
+    "rules": [
+      {
+        "id": "claim.low-energy",
+        "claimName": "Low energy",
+        "nutrient": "energy",
+        "descriptor": "Low",
+        "permittedWording": ["low energy"],
+        "comparison": "atMost",
+        "basis": "per100ByFoodForm",
+        "limits": {
+          "liquid": { "value": "80", "unit": "kJ" },
+          "solid": { "value": "170", "unit": "kJ" }
+        },
+        "provision": "Schedule 4 S4-3, Energy, descriptor Low",
+        "governingProvisions": ["Standard 1.2.7-12", "Standard 1.2.7-7"],
+        "sourceIds": ["SRC-CLAIM-001", "SRC-CLAIM-002"],
+        "mappingConfidence": "Provision",
+        "deterministic": true,
+        "foodFormProvision": "Standard 1.2.7-7",
+        "excludedContexts": [
+          "Infant formula products and kava: no nutrition content claim may be made (Standard 1.2.7-4(1)(a), (b)).",
+          "Foods above 1.15% alcohol by volume are restricted (Standard 1.2.7-4(1)(c)); an energy claim is one of the listed exceptions."
+        ],
+        "requiredFacts": [
+          "Average energy content in kJ per 100 mL (liquid food) or per 100 g (solid food)",
+          "Person-confirmed food form and the form of the food to which the condition applies (as sold, prepared, reconstituted or drained)",
+          "Evidence for the energy figure"
+        ],
+        "mandatoryStatements": [],
+        "requiredNipRows": [],
+        "notYetVerified": [
+          "Wording equivalence: Standard 1.2.7-12(3) also covers a synonym of the descriptor; whether wording is a synonym is a reviewer judgement.",
+          "Required NIP rows and any accompanying statements for this claim (Standard 1.2.8 and Schedule 12 not mapped).",
+          "The 'diet' descriptor has extra conditions and is not part of this rule."
+        ],
+        "effectiveFrom": "2026-04-30",
+        "reviewStatus": "draft"
+      },
+      {
+        "id": "claim.low-fat",
+        "claimName": "Low fat",
+        "nutrient": "fat",
+        "descriptor": "Low",
+        "permittedWording": ["low fat"],
+        "comparison": "atMost",
+        "basis": "per100ByFoodForm",
+        "limits": {
+          "liquid": { "value": "1.5", "unit": "g" },
+          "solid": { "value": "3", "unit": "g" }
+        },
+        "provision": "Schedule 4 S4-3, Fat, descriptor Low",
+        "governingProvisions": ["Standard 1.2.7-12", "Standard 1.2.7-7"],
+        "sourceIds": ["SRC-CLAIM-001", "SRC-CLAIM-002"],
+        "mappingConfidence": "Provision",
+        "deterministic": true,
+        "foodFormProvision": "Standard 1.2.7-7",
+        "excludedContexts": [
+          "Infant formula products and kava: no nutrition content claim may be made (Standard 1.2.7-4(1)(a), (b)).",
+          "Foods above 1.15% alcohol by volume: a fat claim is not among the listed exceptions (Standard 1.2.7-4(1)(c))."
+        ],
+        "requiredFacts": [
+          "Average total fat in g per 100 mL (liquid food) or per 100 g (solid food)",
+          "Person-confirmed food form and the form of the food to which the condition applies",
+          "Evidence for the fat figure"
+        ],
+        "mandatoryStatements": [],
+        "requiredNipRows": [],
+        "notYetVerified": [
+          "Wording equivalence: Standard 1.2.7-12(3) also covers a synonym of the descriptor; whether wording is a synonym is a reviewer judgement.",
+          "Required NIP rows and any accompanying statements for this claim (Standard 1.2.8 and Schedule 12 not mapped).",
+          "'Free' and 'reduced' descriptors are not part of this rule."
+        ],
+        "effectiveFrom": "2026-04-30",
+        "reviewStatus": "draft"
+      },
+      {
+        "id": "claim.low-sugars",
+        "claimName": "Low sugars",
+        "nutrient": "sugars",
+        "descriptor": "Low",
+        "permittedWording": ["low sugar", "low sugars"],
+        "comparison": "atMost",
+        "basis": "per100ByFoodForm",
+        "limits": {
+          "liquid": { "value": "2.5", "unit": "g" },
+          "solid": { "value": "5", "unit": "g" }
+        },
+        "provision": "Schedule 4 S4-3, Sugar or sugars, descriptor Low",
+        "governingProvisions": ["Standard 1.2.7-12", "Standard 1.2.7-7"],
+        "sourceIds": ["SRC-CLAIM-001", "SRC-CLAIM-002"],
+        "mappingConfidence": "Provision",
+        "deterministic": true,
+        "foodFormProvision": "Standard 1.2.7-7",
+        "excludedContexts": [
+          "Infant formula products and kava: no nutrition content claim may be made (Standard 1.2.7-4(1)(a), (b)).",
+          "Foods above 1.15% alcohol by volume are restricted (Standard 1.2.7-4(1)(c)); a sugar or sugars claim is one of the listed exceptions."
+        ],
+        "requiredFacts": [
+          "Average total sugars in g per 100 mL (liquid food) or per 100 g (solid food)",
+          "Person-confirmed food form and the form of the food to which the condition applies",
+          "Evidence for the sugars figure"
+        ],
+        "mandatoryStatements": [],
+        "requiredNipRows": [],
+        "notYetVerified": [
+          "Wording equivalence: Standard 1.2.7-12(3) also covers a synonym of the descriptor; whether wording is a synonym is a reviewer judgement.",
+          "Required NIP rows and any accompanying statements for this claim (Standard 1.2.8 and Schedule 12 not mapped).",
+          "'No added sugar', 'free' and 'unsweetened' descriptors have separate conditions and are not part of this rule."
+        ],
+        "effectiveFrom": "2026-04-30",
+        "reviewStatus": "draft"
+      },
+      {
+        "id": "claim.low-sodium",
+        "claimName": "Low sodium",
+        "nutrient": "sodium",
+        "descriptor": "Low",
+        "permittedWording": ["low sodium", "low salt"],
+        "comparison": "atMost",
+        "basis": "per100ByFoodForm",
+        "limits": {
+          "liquid": { "value": "120", "unit": "mg" },
+          "solid": { "value": "120", "unit": "mg" }
+        },
+        "provision": "Schedule 4 S4-3, Salt or sodium, descriptor Low",
+        "governingProvisions": ["Standard 1.2.7-12", "Standard 1.2.7-7"],
+        "sourceIds": ["SRC-CLAIM-001", "SRC-CLAIM-002"],
+        "mappingConfidence": "Provision",
+        "deterministic": true,
+        "foodFormProvision": "Standard 1.2.7-7",
+        "excludedContexts": [
+          "Infant formula products and kava: no nutrition content claim may be made (Standard 1.2.7-4(1)(a), (b)).",
+          "Foods above 1.15% alcohol by volume are restricted (Standard 1.2.7-4(1)(c)); a salt or sodium claim is an exception only for a food that is not a beverage."
+        ],
+        "requiredFacts": [
+          "Average sodium in mg per 100 mL (liquid food) or per 100 g (solid food)",
+          "Person-confirmed food form and the form of the food to which the condition applies",
+          "Evidence for the sodium figure"
+        ],
+        "mandatoryStatements": [],
+        "requiredNipRows": [],
+        "notYetVerified": [
+          "Wording equivalence: Standard 1.2.7-12(3) also covers a synonym of the descriptor; whether 'low salt' is treated as a synonym of 'low sodium' is a reviewer judgement.",
+          "Required NIP rows and any accompanying statements for this claim (Standard 1.2.8 and Schedule 12 not mapped).",
+          "'No added salt', 'unsalted' and 'reduced' descriptors are not part of this rule."
+        ],
+        "effectiveFrom": "2026-04-30",
+        "reviewStatus": "draft"
+      },
+      {
+        "id": "claim.good-source-dietary-fibre",
+        "claimName": "Good source of dietary fibre",
+        "nutrient": "dietaryFibre",
+        "descriptor": "Good source",
+        "permittedWording": ["good source of dietary fibre", "good source of fibre"],
+        "comparison": "atLeast",
+        "basis": "perServing",
+        "limits": {
+          "perServing": { "value": "4", "unit": "g" }
+        },
+        "generalCondition": {
+          "text": "A serving of the food contains at least 2 g of dietary fibre unless the claim is about low or reduced dietary fibre.",
+          "minimumPerServing": { "value": "2", "unit": "g" }
+        },
+        "provision": "Schedule 4 S4-3, Dietary fibre, descriptor Good source",
+        "governingProvisions": ["Standard 1.2.7-12", "Standard 1.2.7-7"],
+        "sourceIds": ["SRC-CLAIM-001", "SRC-CLAIM-002"],
+        "mappingConfidence": "Provision",
+        "deterministic": true,
+        "foodFormProvision": "Standard 1.2.7-7",
+        "excludedContexts": [
+          "Infant formula products and kava: no nutrition content claim may be made (Standard 1.2.7-4(1)(a), (b)).",
+          "Foods above 1.15% alcohol by volume: a dietary fibre claim is not among the listed exceptions (Standard 1.2.7-4(1)(c))."
+        ],
+        "requiredFacts": [
+          "Average dietary fibre in g per serving",
+          "Person-confirmed serving size",
+          "Person-confirmed form of the food to which the condition applies (as sold, prepared, reconstituted or drained)",
+          "Evidence for the dietary fibre figure"
+        ],
+        "mandatoryStatements": [],
+        "requiredNipRows": [],
+        "notYetVerified": [
+          "Wording equivalence: Standard 1.2.7-12(3) also covers a synonym of the descriptor; whether wording is a synonym is a reviewer judgement.",
+          "Required NIP rows and any accompanying statements for this claim (Standard 1.2.8 and Schedule 12 not mapped).",
+          "The definition of 'serving' for the claim and 'excellent source' (7 g) are not part of this rule."
+        ],
+        "effectiveFrom": "2026-04-30",
+        "reviewStatus": "draft"
+      }
+    ],
+    "reviewNotes": [
+      "Thresholds were re-read against Schedule 4 S4-3 (F2026C00415, 2026-04-30) and the form-of-food and restriction provisions against Standard 1.2.7 (F2025C00833) on 2026-11-10.",
+      "Protein, saturated fat, carbohydrate, comparative, health, 'no added', 'free' and unregulated claims are deliberately absent. They remain review-only (see docs/mvp-regulatory-research.md section 23).",
+      "Standard 2.6.4-5 declarations and advisory statements apply to formulated caffeinated beverages independently of any claim. Nutrition claims on food for infants may also meet Standard 2.9.2 conditions, which this catalog does not evaluate.",
+      "All entries are draft. This catalog holds claim conditions only; it performs no claim evaluation or compliance assessment."
     ]
   }
 }

@@ -279,6 +279,56 @@ export interface PrescribedNameCandidateCatalog {
   readonly reviewNotes: readonly string[];
 }
 
+export type ClaimNutrientId = 'energy' | 'fat' | 'sugars' | 'sodium' | 'dietaryFibre';
+
+export interface ClaimQuantity {
+  readonly value: string;
+  readonly unit: 'kJ' | 'g' | 'mg';
+}
+
+// A claim is a structured, versioned rule record (CLAIM-001), never UI text.
+export interface ClaimRule {
+  readonly id: string;
+  readonly claimName: string;
+  readonly nutrient: ClaimNutrientId;
+  readonly descriptor: string;
+  readonly permittedWording: readonly string[];
+  readonly comparison: 'atMost' | 'atLeast';
+  readonly basis: 'per100ByFoodForm' | 'perServing';
+  readonly limits: {
+    readonly liquid?: ClaimQuantity;
+    readonly solid?: ClaimQuantity;
+    readonly perServing?: ClaimQuantity;
+  };
+  readonly generalCondition?: {
+    readonly text: string;
+    readonly minimumPerServing: ClaimQuantity;
+  };
+  readonly provision: string;
+  readonly governingProvisions: readonly string[];
+  readonly sourceIds: readonly string[];
+  readonly mappingConfidence: MappingConfidence;
+  readonly deterministic: boolean;
+  readonly foodFormProvision: string;
+  readonly excludedContexts: readonly string[];
+  readonly requiredFacts: readonly string[];
+  readonly mandatoryStatements: readonly string[];
+  readonly requiredNipRows: readonly string[];
+  readonly notYetVerified: readonly string[];
+  readonly effectiveFrom: string;
+  readonly effectiveTo?: string;
+  readonly reviewStatus: 'draft' | 'reviewed';
+}
+
+export interface ClaimRuleCatalog {
+  readonly version: string;
+  readonly checkedOn: string;
+  readonly status: 'draft' | 'reviewed';
+  readonly sourceIds: readonly string[];
+  readonly rules: readonly ClaimRule[];
+  readonly reviewNotes: readonly string[];
+}
+
 export interface RuleReleaseManifest {
   readonly id: string;
   readonly version: string;
@@ -293,6 +343,7 @@ export interface RuleReleaseManifest {
   readonly additiveDeclarationCatalog: AdditiveDeclarationCatalog;
   readonly additivePermissionCatalog: AdditivePermissionCatalog;
   readonly prescribedNameCandidateCatalog: PrescribedNameCandidateCatalog;
+  readonly claimRuleCatalog: ClaimRuleCatalog;
 }
 
 export interface RuleValidationIssue {
@@ -409,6 +460,165 @@ export function renderExplanationTemplate(
   });
 }
 
+const CLAIM_NUTRIENT_UNITS: Readonly<Record<string, string>> = {
+  energy: 'kJ',
+  fat: 'g',
+  sugars: 'g',
+  sodium: 'mg',
+  dietaryFibre: 'g',
+};
+
+function validateClaimRuleCatalog(
+  catalog: Record<string, unknown>,
+  sourceById: ReadonlyMap<string, Record<string, unknown>>,
+  active: boolean,
+  issues: RuleValidationIssue[],
+): void {
+  const path = 'release.claimRuleCatalog';
+  addRequiredStringIssue(issues, catalog.version, `${path}.version`);
+  addDateIssue(issues, catalog.checkedOn, `${path}.checkedOn`);
+  if (!['draft', 'reviewed'].includes(String(catalog.status))) {
+    issues.push({ path: `${path}.status`, message: 'has an unsupported status' });
+  }
+  const checkSources = (ids: unknown, at: string, checkDate: boolean): void => {
+    if (!isUniqueNonEmptyList(ids)) {
+      issues.push({ path: at, message: 'must contain unique source IDs' });
+      return;
+    }
+    for (const sourceId of ids) {
+      const source = sourceById.get(sourceId);
+      if (source === undefined) {
+        issues.push({ path: at, message: `references missing source "${sourceId}"` });
+      } else if (source.verificationStatus !== 'primary-source-verified') {
+        issues.push({ path: at, message: `source "${sourceId}" needs a primary-source recheck` });
+      } else if (checkDate && source.checkedOn !== catalog.checkedOn) {
+        issues.push({ path: at, message: `source "${sourceId}" was not rechecked on the catalog date` });
+      }
+    }
+  };
+  checkSources(catalog.sourceIds, `${path}.sourceIds`, true);
+  const catalogSourceIds = new Set(Array.isArray(catalog.sourceIds) ? catalog.sourceIds.filter(isNonEmpty) : []);
+  const checkQuantity = (quantity: unknown, at: string, nutrient: unknown): void => {
+    if (
+      !isRecord(quantity)
+      || typeof quantity.value !== 'string'
+      || !/^\d+(\.\d+)?$/.test(quantity.value)
+      || Number(quantity.value) <= 0
+    ) {
+      issues.push({ path: at, message: 'must have a positive decimal string value' });
+      return;
+    }
+    if (quantity.unit !== CLAIM_NUTRIENT_UNITS[String(nutrient)]) {
+      issues.push({ path: `${at}.unit`, message: 'does not match the nutrient' });
+    }
+  };
+
+  const ids = new Set<string>();
+  if (!Array.isArray(catalog.rules) || catalog.rules.length === 0) {
+    issues.push({ path: `${path}.rules`, message: 'must be a non-empty array' });
+  } else {
+    catalog.rules.forEach((rule, index) => {
+      const at = `${path}.rules[${index}]`;
+      if (!isRecord(rule)) {
+        issues.push({ path: at, message: 'must be an object' });
+        return;
+      }
+      addRequiredStringIssue(issues, rule.id, `${at}.id`);
+      if (isNonEmpty(rule.id)) {
+        if (ids.has(rule.id)) {
+          issues.push({ path: `${at}.id`, message: 'must be unique' });
+        }
+        ids.add(rule.id);
+      }
+      for (const field of ['claimName', 'descriptor', 'provision', 'foodFormProvision'] as const) {
+        addRequiredStringIssue(issues, rule[field], `${at}.${field}`);
+      }
+      addDateIssue(issues, rule.effectiveFrom, `${at}.effectiveFrom`);
+      if (rule.effectiveTo !== undefined) {
+        addDateIssue(issues, rule.effectiveTo, `${at}.effectiveTo`);
+        if (isIsoDate(rule.effectiveTo) && isIsoDate(rule.effectiveFrom) && rule.effectiveTo < rule.effectiveFrom) {
+          issues.push({ path: `${at}.effectiveTo`, message: 'must not be before effectiveFrom' });
+        }
+      }
+      if (!Object.keys(CLAIM_NUTRIENT_UNITS).includes(String(rule.nutrient))) {
+        issues.push({ path: `${at}.nutrient`, message: 'has an unsupported nutrient' });
+      }
+      if (!['atMost', 'atLeast'].includes(String(rule.comparison))) {
+        issues.push({ path: `${at}.comparison`, message: 'has an unsupported comparison' });
+      }
+      if (!['draft', 'reviewed'].includes(String(rule.reviewStatus))) {
+        issues.push({ path: `${at}.reviewStatus`, message: 'has an unsupported status' });
+      }
+      if (!['Provision', 'Standard', 'Instrument', 'Guidance-only', 'Unmapped'].includes(String(rule.mappingConfidence))) {
+        issues.push({ path: `${at}.mappingConfidence`, message: 'has an unsupported mapping confidence' });
+      }
+      if (typeof rule.deterministic !== 'boolean') {
+        issues.push({ path: `${at}.deterministic`, message: 'must be a boolean' });
+      } else if (rule.deterministic && rule.mappingConfidence !== 'Provision') {
+        issues.push({ path: `${at}.deterministic`, message: 'needs Provision mapping confidence' });
+      }
+      for (const field of ['permittedWording', 'governingProvisions'] as const) {
+        const list = rule[field];
+        if (!Array.isArray(list) || list.length === 0 || !list.every(isNonEmpty)) {
+          issues.push({ path: `${at}.${field}`, message: 'must be a non-empty array of non-empty strings' });
+        }
+      }
+      for (const field of ['excludedContexts', 'requiredFacts', 'mandatoryStatements', 'requiredNipRows', 'notYetVerified'] as const) {
+        const list = rule[field];
+        if (!Array.isArray(list) || !list.every(isNonEmpty)) {
+          issues.push({ path: `${at}.${field}`, message: 'must be an array of non-empty strings' });
+        }
+      }
+      checkSources(rule.sourceIds, `${at}.sourceIds`, false);
+      if (Array.isArray(rule.sourceIds)) {
+        for (const sourceId of rule.sourceIds) {
+          if (!catalogSourceIds.has(sourceId as string)) {
+            issues.push({ path: `${at}.sourceIds`, message: `source "${String(sourceId)}" is not listed on the catalog` });
+          }
+        }
+      }
+      const limits = isRecord(rule.limits) ? rule.limits : undefined;
+      if (limits === undefined) {
+        issues.push({ path: `${at}.limits`, message: 'must be an object' });
+      } else if (rule.basis === 'per100ByFoodForm') {
+        checkQuantity(limits.liquid, `${at}.limits.liquid`, rule.nutrient);
+        checkQuantity(limits.solid, `${at}.limits.solid`, rule.nutrient);
+        if (limits.perServing !== undefined) {
+          issues.push({ path: `${at}.limits.perServing`, message: 'is not allowed for a per-100 basis' });
+        }
+      } else if (rule.basis === 'perServing') {
+        checkQuantity(limits.perServing, `${at}.limits.perServing`, rule.nutrient);
+        if (limits.liquid !== undefined || limits.solid !== undefined) {
+          issues.push({ path: `${at}.limits`, message: 'must only have a per-serving limit' });
+        }
+      } else {
+        issues.push({ path: `${at}.basis`, message: 'has an unsupported basis' });
+      }
+      if (rule.generalCondition !== undefined) {
+        if (!isRecord(rule.generalCondition)) {
+          issues.push({ path: `${at}.generalCondition`, message: 'must be an object' });
+        } else {
+          addRequiredStringIssue(issues, rule.generalCondition.text, `${at}.generalCondition.text`);
+          checkQuantity(
+            rule.generalCondition.minimumPerServing,
+            `${at}.generalCondition.minimumPerServing`,
+            rule.nutrient,
+          );
+        }
+      }
+      if (active && rule.reviewStatus !== 'reviewed') {
+        issues.push({ path: `${at}.reviewStatus`, message: 'must be reviewed before release activation' });
+      }
+    });
+  }
+  if (!Array.isArray(catalog.reviewNotes) || catalog.reviewNotes.length === 0 || !catalog.reviewNotes.every(isNonEmpty)) {
+    issues.push({ path: `${path}.reviewNotes`, message: 'must contain non-empty review notes' });
+  }
+  if (active && catalog.status !== 'reviewed') {
+    issues.push({ path: `${path}.status`, message: 'must be reviewed before release activation' });
+  }
+}
+
 export function validateRuleRelease(value: unknown): asserts value is RuleReleaseManifest {
   const issues: RuleValidationIssue[] = [];
   if (!isRecord(value)) {
@@ -442,6 +652,9 @@ export function validateRuleRelease(value: unknown): asserts value is RuleReleas
   }
   if (!isRecord(value.prescribedNameCandidateCatalog)) {
     issues.push({ path: 'release.prescribedNameCandidateCatalog', message: 'must be an object' });
+  }
+  if (!isRecord(value.claimRuleCatalog)) {
+    issues.push({ path: 'release.claimRuleCatalog', message: 'must be an object' });
   }
 
   if (issues.length > 0) {
@@ -1429,6 +1642,8 @@ export function validateRuleRelease(value: unknown): asserts value is RuleReleas
   ) {
     issues.push({ path: `${namePath}.reviewNotes`, message: 'must contain non-empty review notes' });
   }
+
+  validateClaimRuleCatalog(value.claimRuleCatalog as Record<string, unknown>, sourceById, value.status === 'active', issues);
 
   if (value.status === 'active') {
     if (nameCatalog.status !== 'reviewed') {

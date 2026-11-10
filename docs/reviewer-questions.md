@@ -280,6 +280,23 @@ compliance.
 - **R5-08 - Non-Code claims.** Should "natural", "organic", "free from" and similar claims be review-only with Australian Consumer Law context?
   - Answer: (pending)
 
+### R5 claims (C1 additions, 2026-11-10)
+
+Added from the Phase 3 Turn C1 research (see [section 23](./mvp-regulatory-research.md)). Judgement questions only; the Code text was read directly.
+
+- **R5-C1-01 - First claim priorities and wording.** Which of the proposed low-energy, low-fat, low-sugars, low-sodium and good-source-of-fibre claims should be first, and which exact wordings should be approved?
+  - Answer: (pending)
+- **R5-C1-02 - Infant protein claims.** Does Standard 2.9.2-8(2) apply to all proposed protein-source wording, including "good source"? What evidence and energy basis should be required for the 12% condition?
+  - Answer: (pending)
+- **R5-C1-03 - Fibre serving basis.** What evidence and preparation or reconstitution basis are acceptable for a dietary-fibre per-serving claim on infant foods and formulated caffeinated beverages?
+  - Answer: (pending)
+- **R5-C1-04 - Comparative references.** What reference-food identity, evidence and display of the absolute difference are acceptable for future reduced or increased claims?
+  - Answer: (pending)
+- **R5-C1-05 - No-added claims.** What supplier and formulation evidence should be required before considering "no added" sugars or sodium?
+  - Answer: (pending)
+- **R5-C1-06 - Caffeinated-beverage label interaction.** How should reviewers confirm that claim-related NIP information and the separate Standard 2.6.4 caffeine and listed-substance declarations and advisories are presented together correctly?
+  - Answer: (pending)
+
 ## R6 - Before beta
 
 - **R6-01 - Catalogue review.** Review the whole rule catalogue, its mappings and its limits.

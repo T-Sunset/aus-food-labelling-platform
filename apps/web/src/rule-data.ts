@@ -1,10 +1,13 @@
 import {
   additivePermissionCatalog,
+  allergenVocabulary,
+  claimRuleCatalog,
   prescribedNameCandidateCatalog,
   sources,
 } from '@aus-food/rules/release-0.1.0-draft.json';
 import type {
   AdditivePermissionCatalogView,
+  ClaimRuleView,
   PrescribedNameRuleView,
   RuleTraceMetadata,
 } from '@aus-food/domain';
@@ -12,9 +15,27 @@ import type {
 // Draft rule data shipped with the app. It is not reviewed and is never presented as an approved release.
 export const RULE_RELEASE_LABEL = 'Draft rule data 0.1.0-draft (not reviewed)';
 
+export const allergenChoices: readonly { id: string; label: string }[] = (
+  allergenVocabulary.entries as readonly { id: string; summaryName: string }[]
+).map((entry) => ({
+  id: entry.id,
+  label: entry.summaryName.charAt(0).toUpperCase() + entry.summaryName.slice(1),
+}));
+
 export const permissionCatalog = additivePermissionCatalog as unknown as AdditivePermissionCatalogView;
 export const nameCatalogStatus = prescribedNameCandidateCatalog.status;
 export const nameRules = prescribedNameCandidateCatalog.rules as unknown as readonly PrescribedNameRuleView[];
+
+export interface ClaimRuleEntry extends ClaimRuleView {
+  readonly mappingConfidence: RuleTraceMetadata['mappingConfidence'];
+  readonly reviewStatus: 'draft' | 'reviewed';
+  readonly sourceIds: readonly string[];
+  readonly effectiveFrom: string;
+  readonly notYetVerified: readonly string[];
+}
+
+export const claimRules = claimRuleCatalog.rules as unknown as readonly ClaimRuleEntry[];
+export const claimCatalogReviewed = claimRuleCatalog.status === 'reviewed';
 
 interface SourceEntry {
   readonly id: string;
@@ -86,4 +107,19 @@ export function sweetenedRuleTrace(): RuleTraceMetadata {
 
 export function sweetenedRuleApproved(): boolean {
   return nameRules.find((item) => item.id === 'name.infant.sweetened-word')?.reviewStatus === 'reviewed';
+}
+
+export function claimRuleTrace(rule: ClaimRuleEntry): RuleTraceMetadata {
+  return trace(rule.id, `${rule.claimName} (draft data)`, rule.provision, rule.sourceIds[0] ?? 'SRC-CLAIM-001', rule.mappingConfidence);
+}
+
+// Used when a claim has no supported rule, so the result still carries rule metadata.
+export function claimRoutingTrace(): RuleTraceMetadata {
+  return trace(
+    'claim.routing.draft',
+    'Claim routing (draft data)',
+    'Standard 1.2.7 and Schedule 4',
+    'SRC-CLAIM-002',
+    'Unmapped',
+  );
 }

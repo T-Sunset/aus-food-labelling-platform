@@ -10,12 +10,11 @@ test('workspace screens have no WCAG 2.1 A/AA automated accessibility violations
 
   for (const section of [
     'Overview',
-    'Ingredients & specifications',
+    'Ingredients',
     'Formulations',
     'Products',
     'Review & trace',
-    'Additives & names',
-    'Label layout & PDF',
+    'Labels',
     'Backup & restore',
   ]) {
     await page.getByRole('button', { name: section, exact: true }).click();

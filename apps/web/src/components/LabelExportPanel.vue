@@ -176,7 +176,7 @@ async function exportPdf(): Promise<void> {
         <p class="eyebrow">
           LAYOUT DEMONSTRATION
         </p>
-        <h1>Label layout &amp; PDF</h1>
+        <h1>Labels</h1>
         <p class="lede">
           Preview a local layout draft and export it with a separate provenance and review report.
         </p>

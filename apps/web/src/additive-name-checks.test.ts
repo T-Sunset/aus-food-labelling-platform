@@ -88,4 +88,37 @@ describe('buildAdditiveNameReport', () => {
     expect(report.error).toBeTruthy();
     expect(report.additives).toHaveLength(0);
   });
-});
+
+  it('adds previews only on request and never changes the official status', () => {
+    const confirmed: ProductRecord = {
+      ...product,
+      additiveNameInputs: {
+        confirmedCohorts: ['food_for_infants'],
+        additiveCategoryId: 'category-13-2',
+        outputUnit: 'mg/kg',
+        noProcessMassChangeConfirmed: true,
+        gmpConfirmed: false,
+        addedSugarsPer100g: '5',
+        sugarsBasisConfirmed: true,
+        evidence: { reference: 'calc', sourceDate: '2026-11-10' },
+      },
+    };
+    const off = buildAdditiveNameReport(confirmed, [formulation], [ingredient]);
+    expect(off.sweetenedPreview).toBeUndefined();
+    expect(off.additives[0]?.preview).toBeUndefined();
+
+    const on = buildAdditiveNameReport(confirmed, [formulation], [ingredient], true);
+    expect(on.sweetened?.status).toBe(off.sweetened?.status);
+    expect(on.additives[0]?.permission.status).toBe(off.additives[0]?.permission.status);
+    expect(on.names?.status).toBe('REVIEW REQUIRED');
+    expect(on.sweetenedPreview?.eligible).toBe(true);
+    expect(on.sweetenedPreview?.illustrativeStatus).toBeDefined();
+    expect(on.additives[0]?.preview).toBeDefined();
+    expect(on.sweetenedPreview).not.toHaveProperty('status');
+  });
+
+  it('does not preview when facts are missing', () => {
+    const report = buildAdditiveNameReport(product, [formulation], [ingredient], true);
+    expect(report.sweetenedPreview?.eligible).toBe(false);
+    expect(report.additives[0]?.preview?.eligible).toBe(false);
+  });});

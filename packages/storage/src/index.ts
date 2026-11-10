@@ -19,6 +19,8 @@ import type {
   ProductClassificationEvidence,
   ProductClassificationProfile,
   ProductAdditiveNameInputs,
+  ProductClaim,
+  ProductClaimFacts,
 } from '@aus-food/domain';
 
 export interface DraftRecordBase {
@@ -51,12 +53,22 @@ export interface FormulationRecord extends DraftRecordBase {
   readonly processMassProfile?: ProcessMassProfile;
 }
 
+export interface ProductPackDetails {
+  readonly servingSize?: string;
+  readonly servingsPerPack?: string;
+  readonly netQuantity?: string;
+  readonly netUnit?: 'g' | 'mL';
+}
+
 export interface ProductRecord extends DraftRecordBase {
   readonly recordType: 'product';
   readonly formulationId: string;
   readonly foodState?: FoodState;
+  readonly packDetails?: ProductPackDetails;
   readonly classificationProfile?: ProductClassificationProfile;
   readonly additiveNameInputs?: ProductAdditiveNameInputs;
+  readonly claims?: readonly ProductClaim[];
+  readonly claimFacts?: ProductClaimFacts;
 }
 
 export type WorkspaceDraftRecord =
@@ -363,6 +375,10 @@ function validateAdditiveSource(
       || !allowedUnits.some((unit) => unit === concentration.unit)
       || typeof concentration.basis !== 'string'
       || !allowedBases.some((basis) => basis === concentration.basis)
+      || (concentration.calculatedAs !== undefined
+        && (typeof concentration.calculatedAs !== 'string'
+          || concentration.calculatedAs.trim() === ''
+          || concentration.calculatedAs.length > 80))
     ) {
       throw new RecordValidationError(`${path}.concentration must have a positive value, unit, and basis`);
     }
@@ -605,6 +621,106 @@ function validateAdditiveNameInputs(value: unknown): void {
   }
 }
 
+function validateClaims(value: unknown): void {
+  const classifications: readonly unknown[] = ['nutrition_content', 'comparative', 'health', 'not_code_regulated'];
+  const fail = (message: string): never => {
+    throw new RecordValidationError(`claims ${message}`);
+  };
+  if (!Array.isArray(value)) {
+    return fail('must be a list');
+  }
+  const ids = new Set<string>();
+  for (const claim of value) {
+    if (!isRecord(claim) || !isNonEmpty(claim.id) || ids.has(claim.id)) {
+      return fail('each claim needs a unique id');
+    }
+    ids.add(claim.id);
+    // Text is kept exactly as entered (CLAIM-006); only emptiness is rejected.
+    if (typeof claim.text !== 'string' || claim.text.trim() === '') {
+      return fail('each claim needs its text');
+    }
+    if (claim.classification !== undefined && !classifications.includes(claim.classification)) {
+      return fail('classification is unsupported');
+    }
+    if (claim.classificationConfirmed !== undefined && typeof claim.classificationConfirmed !== 'boolean') {
+      return fail('classificationConfirmed must be a boolean when present');
+    }
+    if (claim.classificationConfirmed === true && claim.classification === undefined) {
+      return fail('a classification cannot be confirmed before it is chosen');
+    }
+    if (claim.supportedClaimId !== undefined) {
+      if (!isNonEmpty(claim.supportedClaimId)) {
+        return fail('supportedClaimId must be a non-empty string when present');
+      }
+      if (claim.classification !== 'nutrition_content') {
+        return fail('supportedClaimId is only allowed on a nutrition content claim');
+      }
+    }
+    const amount = claim.nutrientAmount;
+    if (
+      amount !== undefined
+      && (
+        !isRecord(amount)
+        || typeof amount.value !== 'string'
+        || !/^\d+(\.\d+)?$/.test(amount.value)
+        || !isNonEmpty(amount.unit)
+      )
+    ) {
+      return fail('nutrientAmount needs a non-negative decimal value and a unit');
+    }
+    const evidence = claim.evidence;
+    if (
+      evidence !== undefined
+      && (!isRecord(evidence) || !isNonEmpty(evidence.reference) || !isIsoDate(evidence.sourceDate))
+    ) {
+      return fail('evidence needs a reference and a valid date');
+    }
+  }
+}
+
+function validatePackDetails(value: unknown): void {
+  if (!isRecord(value)) {
+    throw new RecordValidationError('packDetails must be an object');
+  }
+  for (const key of ['servingSize', 'servingsPerPack', 'netQuantity']) {
+    const entry = value[key];
+    if (entry !== undefined && (typeof entry !== 'string' || !/^\d+(\.\d+)?$/.test(entry) || Number(entry) <= 0)) {
+      throw new RecordValidationError(`packDetails ${key} must be a positive decimal string when present`);
+    }
+  }
+  if (value.netUnit !== undefined && value.netUnit !== 'g' && value.netUnit !== 'mL') {
+    throw new RecordValidationError('packDetails netUnit must be g or mL');
+  }
+}
+
+function validateClaimFacts(value: unknown): void {
+  const fail = (message: string): never => {
+    throw new RecordValidationError(`claimFacts ${message}`);
+  };
+  if (!isRecord(value)) {
+    return fail('must be an object');
+  }
+  if (value.foodForm !== undefined && value.foodForm !== 'liquid' && value.foodForm !== 'solid') {
+    fail('foodForm must be liquid or solid');
+  }
+  for (const key of ['formOfFoodConfirmed', 'servingConfirmed']) {
+    if (value[key] !== undefined && typeof value[key] !== 'boolean') {
+      fail(`${key} must be a boolean when present`);
+    }
+  }
+  const contexts = value.prohibitedContexts;
+  if (contexts !== undefined) {
+    if (!isRecord(contexts)) {
+      return fail('prohibitedContexts must be an object');
+    }
+    for (const key of ['infantFormulaProduct', 'kava', 'alcoholAbove1_15Percent']) {
+      if (contexts[key] !== undefined && typeof contexts[key] !== 'boolean') {
+        fail(`prohibitedContexts.${key} must be a boolean when present`);
+      }
+    }
+  }
+}
+
 function isWorkspaceDraftRecord(value: unknown): value is WorkspaceDraftRecord {
   if (
     !isRecord(value)
@@ -719,8 +835,17 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
   } else if (record.recordType === 'product' && record.classificationProfile !== undefined) {
     validateClassificationProfile(record.classificationProfile);
   }
+  if (record.recordType === 'product' && record.packDetails !== undefined) {
+    validatePackDetails(record.packDetails);
+  }
   if (record.recordType === 'product' && record.additiveNameInputs !== undefined) {
     validateAdditiveNameInputs(record.additiveNameInputs);
+  }
+  if (record.recordType === 'product' && record.claims !== undefined) {
+    validateClaims(record.claims);
+  }
+  if (record.recordType === 'product' && record.claimFacts !== undefined) {
+    validateClaimFacts(record.claimFacts);
   }
 }
 

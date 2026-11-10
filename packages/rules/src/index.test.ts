@@ -47,6 +47,17 @@ function markNameCatalogReviewed(candidate: Record<string, unknown>): void {
   }
 }
 
+function markClaimCatalogReviewed(candidate: Record<string, unknown>): void {
+  const catalog = candidate.claimRuleCatalog as {
+    status: string;
+    rules: { reviewStatus: string }[];
+  };
+  catalog.status = 'reviewed';
+  for (const rule of catalog.rules) {
+    rule.reviewStatus = 'reviewed';
+  }
+}
+
 function markPermissionCatalogReviewed(candidate: Record<string, unknown>): void {
   const catalog = candidate.additivePermissionCatalog as {
     status: string;
@@ -445,6 +456,7 @@ describe('rule release validation', () => {
     markDeclarationCatalogReviewed(fullyReviewed);
     markPermissionCatalogReviewed(fullyReviewed);
     markNameCatalogReviewed(fullyReviewed);
+    markClaimCatalogReviewed(fullyReviewed);
     expect(() => validateRuleRelease(fullyReviewed)).not.toThrow();
 
     const unreviewedVocabularyEntry = cloneRelease();
@@ -483,6 +495,82 @@ describe('rule release validation', () => {
     const unreviewed = cloneRelease();
     unreviewed.status = 'active';
     expectInvalid(unreviewed, 'prescribedNameCandidateCatalog.status: must be reviewed before release activation');
+  });
+
+  it('keeps the first claim set draft, source-linked and exactly as read from Schedule 4', () => {
+    expect(() => validateRuleRelease(release)).not.toThrow();
+    const catalog = (release as {
+      claimRuleCatalog: {
+        status: string;
+        rules: {
+          id: string;
+          reviewStatus: string;
+          deterministic: boolean;
+          mappingConfidence: string;
+          comparison: string;
+          limits: { liquid?: { value: string }; solid?: { value: string }; perServing?: { value: string } };
+        }[];
+      };
+    }).claimRuleCatalog;
+    expect(catalog.status).toBe('draft');
+    const byId = new Map(catalog.rules.map((rule) => [rule.id, rule]));
+    expect([...byId.keys()].sort()).toEqual([
+      'claim.good-source-dietary-fibre',
+      'claim.low-energy',
+      'claim.low-fat',
+      'claim.low-sodium',
+      'claim.low-sugars',
+    ]);
+    expect(byId.get('claim.low-energy')?.limits).toMatchObject({ liquid: { value: '80' }, solid: { value: '170' } });
+    expect(byId.get('claim.low-fat')?.limits).toMatchObject({ liquid: { value: '1.5' }, solid: { value: '3' } });
+    expect(byId.get('claim.low-sugars')?.limits).toMatchObject({ liquid: { value: '2.5' }, solid: { value: '5' } });
+    expect(byId.get('claim.low-sodium')?.limits).toMatchObject({ liquid: { value: '120' }, solid: { value: '120' } });
+    expect(byId.get('claim.good-source-dietary-fibre')?.limits).toMatchObject({ perServing: { value: '4' } });
+    expect(byId.get('claim.good-source-dietary-fibre')?.comparison).toBe('atLeast');
+    for (const rule of catalog.rules) {
+      expect(rule.reviewStatus).toBe('draft');
+    }
+  });
+
+  it('validates the claim rule catalog', () => {
+    const edit = (change: (rule: Record<string, unknown>, catalog: Record<string, unknown>) => void): Record<string, unknown> => {
+      const candidate = cloneRelease();
+      const catalog = candidate.claimRuleCatalog as { rules: Record<string, unknown>[] };
+      change(catalog.rules[0]!, catalog as unknown as Record<string, unknown>);
+      return candidate;
+    };
+    expectInvalid(edit((rule) => { rule.sourceIds = ['SRC-MISSING']; }), 'references missing source "SRC-MISSING"');
+    expectInvalid(edit((rule) => { rule.sourceIds = []; }), 'must contain unique source IDs');
+    expectInvalid(edit((rule) => { rule.mappingConfidence = 'Standard'; }), 'needs Provision mapping confidence');
+    expectInvalid(edit((rule) => { rule.nutrient = 'protein'; }), 'has an unsupported nutrient');
+    expectInvalid(edit((rule) => { rule.limits = { liquid: { value: '80', unit: 'g' }, solid: { value: '170', unit: 'kJ' } }; }), 'does not match the nutrient');
+    expectInvalid(edit((rule) => { rule.limits = { liquid: { value: '0', unit: 'kJ' }, solid: { value: '170', unit: 'kJ' } }; }), 'must have a positive decimal string value');
+    expectInvalid(edit((rule) => { rule.limits = { solid: { value: '170', unit: 'kJ' } }; }), 'limits.liquid');
+    expectInvalid(edit((rule) => { rule.basis = 'perServing'; }), 'must only have a per-serving limit');
+    expectInvalid(edit((rule) => { rule.effectiveTo = '2020-01-01'; }), 'must not be before effectiveFrom');
+    expectInvalid(edit((rule) => { rule.permittedWording = []; }), 'permittedWording');
+    expectInvalid(edit((rule, catalog) => { (catalog.rules as unknown[]).push({ ...rule }); }), 'must be unique');
+    expectInvalid(
+      edit((_rule, catalog) => { catalog.sourceIds = ['SRC-CLAIM-001']; }),
+      'is not listed on the catalog',
+    );
+
+    const stale = cloneRelease();
+    (stale.sources as { id: string; checkedOn: string }[]).find((source) => source.id === 'SRC-CLAIM-001')!.checkedOn = '2026-11-09';
+    expectInvalid(stale, 'was not rechecked on the catalog date');
+
+    const unverifiedSource = cloneRelease();
+    (unverifiedSource.sources as { id: string; verificationStatus: string }[]).find((source) => source.id === 'SRC-CLAIM-002')!.verificationStatus = 'needs-primary-source-recheck';
+    expectInvalid(unverifiedSource, 'needs a primary-source recheck');
+
+    const missing = cloneRelease();
+    delete missing.claimRuleCatalog;
+    expectInvalid(missing, 'release.claimRuleCatalog: must be an object');
+
+    const active = cloneRelease();
+    active.status = 'active';
+    expectInvalid(active, 'claimRuleCatalog.status: must be reviewed before release activation');
+    expectInvalid(active, 'claimRuleCatalog.rules[0].reviewStatus: must be reviewed before release activation');
   });
 
   it('blocks activation while a permission-catalog entry remains unreviewed', () => {

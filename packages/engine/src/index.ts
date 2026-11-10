@@ -26,6 +26,18 @@ export { evaluateAggregateColourLimit, evaluateSamePurposeMixture } from './addi
 export { evaluateAdditivePresencePath } from './additive-presence.js';
 export { identifyPrescribedNameCandidates } from './prescribed-name-candidates.js';
 export { evaluateInfantSweetenedWord } from './infant-sweetened-word.js';
+export { evaluateNutritionContentClaim } from './claim-evaluator.js';
+export { evaluateClaim } from './claim-router.js';
+export {
+  ILLUSTRATIVE_STATEMENT,
+  REVIEWER_GATE_REASONS,
+  REVIEWER_GATE_TEXT,
+  illustrate,
+  illustrateAdditivePermission,
+  illustrateInfantSweetenedWord,
+  illustrateNutritionContentClaim,
+  illustrateRoutedClaim,
+} from './illustrative-preview.js';
 export { formatAdditiveDeclarationCandidate } from './additive-declaration.js';
 export {
   createEmptyProductClassificationProfile,

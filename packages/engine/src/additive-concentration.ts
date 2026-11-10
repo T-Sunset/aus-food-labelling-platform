@@ -84,6 +84,12 @@ export function calculateAdditiveFinalConcentration(
     for (const source of input.sourcesByIngredient.get(ingredient.ingredientId) ?? []) {
       const label = `${source.id} (${ingredient.sourcePath.join(' > ')})`;
       if (normaliseCode(source.codeNumber) === '') {
+        // A source the person identified as added caffeine is a known, different substance.
+        // Caffeine's own limits (Standard 2.6.4) are not an additive check, so it is not
+        // part of any Schedule 15 concentration.
+        if (source.declarationSelection?.route === 'addedCaffeine') {
+          continue;
+        }
         flag('SOURCE_IDENTITY_MISSING', `Additive source ${label} has no code number, so it cannot be excluded.`);
         continue;
       }
@@ -137,6 +143,7 @@ export function calculateAdditiveFinalConcentration(
         sourcePath: [...ingredient.sourcePath],
         ingredientMass: ingredient.mass,
         additiveMilligrams,
+        ...(concentration.calculatedAs?.trim() ? { calculatedAs: concentration.calculatedAs.trim() } : {}),
         evidenceReference: evidence.reference,
         evidenceDate: evidence.sourceDate,
       });
@@ -164,6 +171,9 @@ export function calculateAdditiveFinalConcentration(
       ? multiplyDecimals(perKilogram, finalDensity.gramsPerMillilitre)
       : perKilogram;
 
+  const bases = new Set(contributions.map(({ calculatedAs }) => (calculatedAs ?? '').toLowerCase()));
+  const sharedBasis = bases.size === 1 ? contributions[0]?.calculatedAs : undefined;
+
   return {
     status: 'calculated',
     additiveCodeNumber: (input.additiveCodeNumber ?? '').trim(),
@@ -174,6 +184,7 @@ export function calculateAdditiveFinalConcentration(
     finalMass: input.processBalance.finalMass,
     yieldPercentage: input.processBalance.yieldPercentage,
     ...(input.outputUnit === 'mg/L' && finalDensity !== undefined ? { finalDensity } : {}),
+    ...(sharedBasis === undefined ? {} : { calculatedAs: sharedBasis }),
     contributions,
   };
 }

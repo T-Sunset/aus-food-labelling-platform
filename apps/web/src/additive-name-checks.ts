@@ -6,15 +6,20 @@ import {
   expandFormulation,
   formatAdditiveDeclarationCandidate,
   identifyPrescribedNameCandidates,
+  illustrateAdditivePermission,
+  illustrateInfantSweetenedWord,
   traceAdditiveSources,
 } from '@aus-food/engine';
 import type {
   AdditiveDeclarationCandidate,
   AdditiveFinalConcentration,
+  AdditivePermissionEvaluationInput,
   AdditivePermissionEvaluationValue,
   AdditivePermissionFoodState,
   EngineResult,
   ExpandedAdditiveSource,
+  IllustrativeResult,
+  InfantSweetenedWordInput,
   InfantSweetenedWordValue,
   IngredientAdditiveSource,
   PrescribedNameCandidateValue,
@@ -41,6 +46,7 @@ export interface AdditiveCheck {
   readonly names: readonly string[];
   readonly concentration: AdditiveFinalConcentration;
   readonly permission: EngineResult<AdditivePermissionEvaluationValue>;
+  readonly preview?: IllustrativeResult<AdditivePermissionEvaluationValue>;
 }
 
 export interface AdditiveNameReport {
@@ -50,6 +56,7 @@ export interface AdditiveNameReport {
   readonly uncodedAdditives: readonly string[];
   readonly names?: EngineResult<PrescribedNameCandidateValue>;
   readonly sweetened?: EngineResult<InfantSweetenedWordValue>;
+  readonly sweetenedPreview?: IllustrativeResult<InfantSweetenedWordValue>;
   readonly limitations: readonly string[];
 }
 
@@ -77,6 +84,7 @@ export function buildAdditiveNameReport(
   product: ProductRecord,
   formulations: readonly FormulationRecord[],
   ingredients: readonly IngredientRecord[],
+  illustrative = false,
 ): AdditiveNameReport {
   const inputs = product.additiveNameInputs;
   const base = { declarations: [], additives: [], uncodedAdditives: [], limitations: NOT_WIRED_LIMITATIONS } as const;
@@ -139,7 +147,7 @@ export function buildAdditiveNameReport(
     });
     const purposes = [...new Set(group.flatMap((item) => item.source.technologicalPurposes ?? []))];
     const statuses = [...new Set(group.map((item) => item.source.sourceStatus))];
-    const permission = evaluateAdditivePermission({
+    const permissionInput: AdditivePermissionEvaluationInput = {
       catalog: permissionCatalog,
       rule: permissionRuleTrace(),
       confirmedCategoryId: inputs?.additiveCategoryId,
@@ -149,16 +157,18 @@ export function buildAdditiveNameReport(
       sourceStatus: statuses.length === 1 && statuses[0] ? statuses[0] : 'unknown',
       gmpConfirmed: inputs?.gmpConfirmed,
       finalConcentration: concentration.status === 'calculated'
-        ? { value: concentration.value, unit: concentration.unit }
+        ? { value: concentration.value, unit: concentration.unit, calculatedAs: concentration.calculatedAs }
         : undefined,
       evidence,
       sourcePath: [product.id],
-    });
+    };
+    const permission = evaluateAdditivePermission(permissionInput);
     return {
       codeNumber,
       names: [...new Set(group.map((item) => item.source.additiveName))],
       concentration,
       permission,
+      ...(illustrative ? { preview: illustrateAdditivePermission(permission, permissionInput) } : {}),
     };
   });
 
@@ -170,7 +180,7 @@ export function buildAdditiveNameReport(
     ingredientNames: expanded.map((item) => nameOf(item.ingredientId)),
     sourcePath: [product.id],
   });
-  const sweetened = evaluateInfantSweetenedWord({
+  const sweetenedInput: InfantSweetenedWordInput = {
     rule: sweetenedRuleTrace(),
     ruleApproved: sweetenedRuleApproved(),
     confirmedCohorts: inputs?.confirmedCohorts,
@@ -179,14 +189,18 @@ export function buildAdditiveNameReport(
     evidence,
     proposedName: product.name,
     sourcePath: [product.id],
-  });
+  };
+  const sweetened = evaluateInfantSweetenedWord(sweetenedInput);
 
   return {
     declarations,
     additives,
-    uncodedAdditives: traced.filter((item) => !item.source.codeNumber?.trim()).map((item) => item.source.additiveName),
+    uncodedAdditives: traced
+      .filter((item) => !item.source.codeNumber?.trim() && item.source.declarationSelection?.route !== 'addedCaffeine')
+      .map((item) => item.source.additiveName),
     names,
     sweetened,
+    ...(illustrative ? { sweetenedPreview: illustrateInfantSweetenedWord(sweetened, sweetenedInput) } : {}),
     limitations: NOT_WIRED_LIMITATIONS,
   };
 }

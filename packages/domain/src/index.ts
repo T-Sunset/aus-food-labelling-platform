@@ -126,6 +126,9 @@ export interface AdditiveConcentration {
   readonly value: string;
   readonly unit: AdditiveConcentrationUnit;
   readonly basis: AdditiveConcentrationBasis;
+  // The person's own statement that this figure is already converted to this basis
+  // (for example "benzoic acid"). The system never converts between bases.
+  readonly calculatedAs?: string | undefined;
 }
 
 export interface IngredientAdditiveSource {
@@ -348,6 +351,7 @@ export interface AdditiveConcentrationContribution {
   readonly sourcePath: readonly string[];
   readonly ingredientMass: MassQuantity;
   readonly additiveMilligrams: string;
+  readonly calculatedAs?: string | undefined;
   readonly evidenceReference: string;
   readonly evidenceDate: string;
 }
@@ -379,6 +383,8 @@ export type AdditiveFinalConcentration =
       readonly finalMass: MassQuantity;
       readonly yieldPercentage: string;
       readonly finalDensity?: AdditiveDensityEvidence;
+      // Set only when every contributing source states the same basis; otherwise absent.
+      readonly calculatedAs?: string;
       readonly contributions: readonly AdditiveConcentrationContribution[];
     };
 
@@ -612,6 +618,132 @@ export interface ProductAdditiveNameInputs {
   readonly addedSugarsPer100g?: string | undefined;
   readonly sugarsBasisConfirmed?: boolean | undefined;
   readonly evidence?: { readonly reference: string; readonly sourceDate: string } | undefined;
+}
+
+// CLAIM-006. A person's own classification of a claim. 'not_code_regulated' covers claims such
+// as 'natural' that the Code does not regulate (CLAIM-005). Nothing classifies claim text for them.
+export type ClaimClassification =
+  | 'nutrition_content'
+  | 'comparative'
+  | 'health'
+  | 'not_code_regulated';
+
+// A claim exactly as the person typed it. `classification` is absent until a person sets it, and
+// `supportedClaimId` (a claim-rule id, added in C4) may only accompany a nutrition content claim.
+export interface ProductClaim {
+  readonly id: string;
+  readonly text: string;
+  readonly classification?: ClaimClassification | undefined;
+  readonly classificationConfirmed?: boolean | undefined;
+  readonly supportedClaimId?: string | undefined;
+  // Entered figure for the linked rule's nutrient, in the rule's unit, with dated evidence.
+  readonly nutrientAmount?: ClaimQuantityView | undefined;
+  readonly evidence?: { readonly reference: string; readonly sourceDate: string } | undefined;
+}
+
+// Product-level facts shared by every claim on a product. Nothing here is inferred.
+export interface ProductClaimFacts {
+  readonly foodForm?: 'liquid' | 'solid' | undefined;
+  readonly formOfFoodConfirmed?: boolean | undefined;
+  readonly servingConfirmed?: boolean | undefined;
+  readonly prohibitedContexts?: ClaimProhibitedContexts | undefined;
+}
+
+export interface ClaimQuantityView {
+  readonly value: string;
+  readonly unit: string;
+}
+
+// The parts of a claim rule record (packages/rules ClaimRule) the evaluator reads.
+export interface ClaimRuleView {
+  readonly id: string;
+  readonly claimName: string;
+  readonly descriptor: string;
+  readonly permittedWording: readonly string[];
+  readonly comparison: 'atMost' | 'atLeast';
+  readonly basis: 'per100ByFoodForm' | 'perServing';
+  readonly limits: {
+    readonly liquid?: ClaimQuantityView;
+    readonly solid?: ClaimQuantityView;
+    readonly perServing?: ClaimQuantityView;
+  };
+  readonly generalCondition?: { readonly text: string; readonly minimumPerServing: ClaimQuantityView };
+  readonly provision: string;
+}
+
+export type ClaimReason =
+  | 'RULE_NOT_APPROVED'
+  | 'RULE_BELOW_PROVISION_CONFIDENCE'
+  | 'CLAIM_NOT_LINKED_TO_RULE'
+  | 'CLASSIFICATION_NOT_CONFIRMED'
+  | 'CLASSIFICATION_NOT_NUTRITION_CONTENT'
+  | 'WORDING_NOT_PERMITTED'
+  | 'EXCLUSIONS_NOT_CONFIRMED'
+  | 'FOOD_FORM_MISSING'
+  | 'FORM_OF_FOOD_NOT_CONFIRMED'
+  | 'SERVING_NOT_CONFIRMED'
+  | 'AMOUNT_MISSING'
+  | 'UNIT_MISMATCH'
+  | 'EVIDENCE_MISSING'
+  | 'PROHIBITED_CONTEXT'
+  | 'COMPARATIVE_REVIEW_ONLY'
+  | 'HEALTH_REVIEW_ONLY'
+  | 'NOT_CODE_REGULATED_NOT_ASSESSED'
+  | 'NUTRITION_CLAIM_UNSUPPORTED';
+
+export type ClaimConditionStatus = 'MET' | 'NOT_MET' | 'REVIEW' | 'NOT_APPLICABLE';
+
+export interface ClaimConditionItem {
+  readonly id: string;
+  readonly label: string;
+  readonly status: ClaimConditionStatus;
+  readonly detail: string;
+  readonly reason?: ClaimReason;
+}
+
+export interface ClaimEvaluationInput {
+  readonly rule: RuleTraceMetadata;
+  // True only when the claim rule has reviewStatus 'reviewed'.
+  readonly ruleApproved: boolean;
+  readonly claimRule: ClaimRuleView;
+  readonly claim: ProductClaim;
+  // Person-confirmed: liquid or solid food (Schedule 4 conditions differ). Never inferred.
+  readonly foodForm?: 'liquid' | 'solid' | undefined;
+  // Person-confirmed: the figures are for the form of the food required by Standard 1.2.7-7.
+  readonly formOfFoodConfirmed?: boolean | undefined;
+  // Person-confirmed serving size, needed for per-serving conditions.
+  readonly servingConfirmed?: boolean | undefined;
+  // Average amount per 100 mL/100 g, or per serving, matching the rule basis.
+  readonly nutrientAmount?: { readonly value: string; readonly unit: string } | undefined;
+  readonly evidence?: { readonly reference: string; readonly sourceDate: string } | undefined;
+  // Person-confirmed: no prohibited context (for example infant formula, kava, alcohol) applies.
+  readonly exclusionsConfirmedNotApplicable?: boolean | undefined;
+  readonly sourcePath?: readonly string[] | undefined;
+}
+
+// Person answers to the contexts in Standard 1.2.7-4. true means the context applies;
+// undefined means not yet answered, which is never treated as "does not apply".
+export interface ClaimProhibitedContexts {
+  readonly infantFormulaProduct?: boolean | undefined;
+  readonly kava?: boolean | undefined;
+  readonly alcoholAbove1_15Percent?: boolean | undefined;
+}
+
+// Input for routing any claim. `claimRule` is absent when no supported rule exists for the claim.
+export type ClaimRoutingInput = Omit<
+  ClaimEvaluationInput,
+  'claimRule' | 'exclusionsConfirmedNotApplicable'
+> & {
+  readonly claimRule?: ClaimRuleView | undefined;
+  readonly prohibitedContexts?: ClaimProhibitedContexts | undefined;
+};
+
+export interface ClaimEvaluationValue {
+  readonly outcome: 'conditions_met' | 'condition_not_met' | 'review';
+  readonly claimText: string;
+  readonly checklist: readonly ClaimConditionItem[];
+  readonly blockingConditionIds: readonly string[];
+  readonly reasons: readonly ClaimReason[];
 }
 
 export type NutrientId =
@@ -848,6 +980,21 @@ export type EngineResult<T> = EngineResultBase<T> & (
       readonly applicationMode: 'CONTEXT';
     }
 );
+
+export type EngineStatus = EngineResult<unknown>['status'];
+
+// On-screen review material only (ADR-006). Deliberately has no `status` field and is not an
+// EngineResult, so a preview cannot be passed where an official result is expected.
+export interface IllustrativeResult<T> {
+  readonly officialStatus: EngineStatus;
+  readonly eligible: boolean;
+  readonly illustrativeStatus?: 'PASS' | 'FAIL' | 'WARNING';
+  readonly liftedGates: readonly string[];
+  readonly blockedBy: readonly string[];
+  readonly note: string;
+  readonly trace?: EngineResult<T>;
+  readonly statement: string;
+}
 
 export type AllergenEvidenceStatus =
   | 'present'

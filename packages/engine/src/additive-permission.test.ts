@@ -92,6 +92,26 @@ function reasons(input: AdditivePermissionEvaluationInput): readonly string[] {
 }
 
 describe('additive permission evaluation', () => {
+  it('reads a thousands value printed with a space ("3 000") as 3000', () => {
+    const spaced: AdditivePermissionEvaluationInput = {
+      ...complete,
+      catalog: {
+        ...catalog,
+        rows: catalog.rows.map((row) => (row.id === 'row-max' ? { ...row, limit: limit('3 000') } : row)),
+      },
+    };
+    const within = (value: string) =>
+      evaluateAdditivePermission({
+        ...spaced,
+        finalConcentration: { value, unit: 'mg/kg', calculatedAs: 'sorbic acid' },
+      });
+    expect(within('3000')).toMatchObject({
+      status: 'PASS',
+      value: { outcome: 'within_limit', maximum: { value: '3000', unit: 'mg/kg' } },
+    });
+    expect(within('3000.1')).toMatchObject({ status: 'FAIL', value: { outcome: 'exceeds_limit' } });
+  });
+
   it('passes at the maximum boundary and fails just above it, with trace and row', () => {
     const atLimit = evaluateAdditivePermission(complete);
     expect(atLimit).toMatchObject({

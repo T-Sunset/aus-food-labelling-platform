@@ -177,6 +177,45 @@ describe('additive final concentration', () => {
     })).toEqual(['SOURCE_IDENTITY_MISSING']);
   });
 
+  it('carries a stated calculation basis only when every contribution agrees', () => {
+    const as = (value: string, calculatedAs?: string): AdditiveConcentration => ({
+      ...mgPerKg(value),
+      ...(calculatedAs === undefined ? {} : { calculatedAs }),
+    });
+    const both = (a: AdditiveConcentration, b: AdditiveConcentration) => calculateAdditiveFinalConcentration(input({
+      sourcesByIngredient: new Map([
+        ['syrup', [source('s1', a)]],
+        ['water', [source('s2', b)]],
+      ]),
+    }));
+    expect(both(as('500', 'benzoic acid'), as('10', 'Benzoic Acid'))).toMatchObject({
+      status: 'calculated',
+      calculatedAs: 'benzoic acid',
+    });
+    expect('calculatedAs' in both(as('500', 'benzoic acid'), as('10', 'sorbic acid'))).toBe(false);
+    expect('calculatedAs' in both(as('500', 'benzoic acid'), as('10'))).toBe(false);
+    expect('calculatedAs' in calculateAdditiveFinalConcentration(input())).toBe(false);
+  });
+
+  it('treats added caffeine as a different, identified substance', () => {
+    const caffeine = source('caf', mgPerKg('300'), {
+      additiveName: 'Caffeine',
+      codeNumber: '',
+      declarationSelection: { route: 'addedCaffeine' },
+    });
+    const result = calculateAdditiveFinalConcentration(input({
+      sourcesByIngredient: new Map([
+        ['syrup', [source('s1', mgPerKg('500'))]],
+        ['water', [caffeine]],
+      ]),
+    }));
+    expect(result).toMatchObject({ status: 'calculated', value: '100' });
+    // An uncoded source that is not caffeine still blocks the calculation.
+    expect(reasonsOf({
+      sourcesByIngredient: new Map([['water', [{ ...caffeine, declarationSelection: { route: 'unknown' } }]]]),
+    })).toContain('SOURCE_IDENTITY_MISSING');
+  });
+
   it('leaves carry-over, processing aids and other bases to review', () => {
     for (const sourceStatus of ['carriedOver', 'processingAid', 'unknown'] as const) {
       expect(reasonsOf({

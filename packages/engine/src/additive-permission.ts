@@ -186,8 +186,10 @@ export function evaluateAdditivePermission(
   }
 
   const rule = input.rule;
-  const maximum = row?.limit.type === 'maximum' && row.limit.printedValue !== undefined
-    ? { value: row.limit.printedValue, unit: row.limit.unit === 'mg/L' ? 'mg/L' : 'mg/kg' }
+  // Schedule 15 prints thousands with a space ("3 000"); the decimal helpers need plain digits.
+  const printedLimit = row?.limit.printedValue?.replace(/\s+/g, '');
+  const maximum = row?.limit.type === 'maximum' && printedLimit !== undefined
+    ? { value: printedLimit, unit: row.limit.unit === 'mg/L' ? 'mg/L' : 'mg/kg' }
     : undefined;
   const base = {
     rule,
@@ -227,7 +229,7 @@ export function evaluateAdditivePermission(
   }
 
   const concentration = input.finalConcentration!;
-  const limit = row.limit.printedValue!;
+  const limit = printedLimit!;
   const exceeds = compareDecimals(concentration.value, limit) > 0;
   return {
     ...base,

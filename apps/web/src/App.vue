@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, shallowRef } from 'vue';
+import { computed, onMounted, ref, shallowRef } from 'vue';
 import {
   createEmptyProductClassificationProfile,
   expandFormulation,
@@ -12,12 +12,20 @@ import {
 } from '@aus-food/engine';
 import AppButton from './components/ui/button/AppButton.vue';
 import BackupPanel from './components/BackupPanel.vue';
-import AdditiveNameChecksPanel from './components/AdditiveNameChecksPanel.vue';
-import ClassificationEvidenceList from './components/ClassificationEvidenceList.vue';
-import ClassificationFactField from './components/ClassificationFactField.vue';
+import FormulationBuilder from './components/FormulationBuilder.vue';
+import IngredientBuilder from './components/IngredientBuilder.vue';
 import LabelExportPanel from './components/LabelExportPanel.vue';
+import ProductBuilder from './components/ProductBuilder.vue';
 import ReviewTracePanel from './components/ReviewTracePanel.vue';
+import { editableIngredientKeys } from './ingredient-form';
 import { seedIllustrativeDemo } from './demo-workspace.js';
+import { workedExampleSet } from './worked-example-data.js';
+import {
+  loadWorkedExamples,
+  removeWorkedExamples,
+  workedExampleCount,
+  workedExampleTag,
+} from './worked-examples.js';
 import {
   openLocalFoodStore,
   type ApprovedVersionRecord,
@@ -28,30 +36,8 @@ import {
   type WorkspaceDraftRecord,
 } from '@aus-food/storage';
 
-type ProductClassificationProfile = NonNullable<ProductRecord['classificationProfile']>;
-type ProductClassificationFact =
-  ProductClassificationProfile['foodForInfants'][keyof ProductClassificationProfile['foodForInfants']];
 type IngredientAdditiveSource = NonNullable<IngredientRecord['additiveSources']>[number];
 type AdditiveConcentration = NonNullable<IngredientAdditiveSource['concentration']>;
-type AdditiveDeclarationSelection = NonNullable<IngredientAdditiveSource['declarationSelection']>;
-type AdditiveSourceDraft = {
-  id: string;
-  additiveName: string;
-  codeNumber: string;
-  technologicalPurposes: string;
-  concentrationValue: string;
-  concentrationUnit: AdditiveConcentration['unit'] | '';
-  concentrationBasis: AdditiveConcentration['basis'];
-  sourceReference: string;
-  sourceDate: string;
-  allergenIdsPresent: string;
-  sourceKind: NonNullable<IngredientAdditiveSource['sourceEvidence']>[number]['kind'];
-  sourceStatus: IngredientAdditiveSource['sourceStatus'];
-  declarationRoute: AdditiveDeclarationSelection['route'];
-  schedule7ClassName: string;
-  substanceChoice: AdditiveDeclarationSelection['substanceChoice'] | '';
-  flavouringWording: AdditiveDeclarationSelection['flavouringWording'] | '';
-};
 
 type Section =
   | 'overview'
@@ -60,14 +46,7 @@ type Section =
   | 'products'
   | 'review'
   | 'labels'
-  | 'additives'
   | 'backup';
-type FormulationLineDraft = {
-  kind: 'ingredient' | 'formulation';
-  targetId: string;
-  quantity: string;
-  unit: 'g' | 'kg' | 'mg';
-};
 
 const activeSection = ref<Section>('overview');
 const store = shallowRef<LocalFoodStore>();
@@ -90,166 +69,23 @@ const expansion = ref<{
 }>();
 const expansionError = ref('');
 
-const ingredientForm = reactive({
-  name: '',
-  kind: '' as 'atomic' | 'compound' | '',
-  compoundFormulationId: '',
-  supplierName: '',
-  specificationReference: '',
-  supplierProductCode: '',
-  specificationDate: '',
-  knownAllergens: '',
-  protein: '',
-  fat: '',
-  saturatedFat: '',
-  carbohydrate: '',
-  sugars: '',
-  sodium: '',
-  additiveSources: [] as AdditiveSourceDraft[],
-});
-const formulationForm = reactive({
-  name: '',
-  lines: [] as FormulationLineDraft[],
-});
-const productForm = reactive({
-  name: '',
-  formulationId: '',
-  foodState: '' as NonNullable<ProductRecord['foodState']> | '',
-});
-const classificationProfile = ref(createEmptyProductClassificationProfile());
-
-function copyClassificationEvidence(
-  evidence: ProductClassificationProfile['identityEvidence'],
-): ProductClassificationProfile['identityEvidence'] {
-  return evidence.map((item) => ({
-    id: item.id,
-    reference: item.reference,
-    sourceDate: item.sourceDate,
-    kind: item.kind,
-  }));
-}
-
-function copyClassificationFact(fact: ProductClassificationFact): ProductClassificationFact {
-  return {
-    answer: fact.answer,
-    evidence: copyClassificationEvidence(fact.evidence),
-  };
-}
-
-function copyClassificationProfile(
-  profile: ProductClassificationProfile,
-): ProductClassificationProfile {
-  return {
-    intendedUseDescription: profile.intendedUseDescription,
-    intendedConsumerDescription: profile.intendedConsumerDescription,
-    processingDescription: profile.processingDescription,
-    presentationDescription: profile.presentationDescription,
-    identityEvidence: copyClassificationEvidence(profile.identityEvidence),
-    formulatedCaffeinatedBeverage: {
-      flavoured: copyClassificationFact(profile.formulatedCaffeinatedBeverage.flavoured),
-      nonAlcoholic: copyClassificationFact(profile.formulatedCaffeinatedBeverage.nonAlcoholic),
-      containsCaffeine: copyClassificationFact(profile.formulatedCaffeinatedBeverage.containsCaffeine),
-      representedForMentalPerformance: copyClassificationFact(
-        profile.formulatedCaffeinatedBeverage.representedForMentalPerformance,
-      ),
-    },
-    foodForInfants: {
-      intendedAsNourishmentForInfants: copyClassificationFact(
-        profile.foodForInfants.intendedAsNourishmentForInfants,
-      ),
-      infantFormulaProduct: copyClassificationFact(profile.foodForInfants.infantFormulaProduct),
-      formulatedMealReplacement: copyClassificationFact(
-        profile.foodForInfants.formulatedMealReplacement,
-      ),
-      formulatedSupplementaryFood: copyClassificationFact(
-        profile.foodForInfants.formulatedSupplementaryFood,
-      ),
-      unprocessedFruitOrVegetables: copyClassificationFact(
-        profile.foodForInfants.unprocessedFruitOrVegetables,
-      ),
-    },
-  };
-}
-
-const caffeinatedBeverageFacts: {
-  key: keyof ProductClassificationProfile['formulatedCaffeinatedBeverage'];
-  label: string;
-  description: string;
-}[] = [
-  {
-    key: 'flavoured',
-    label: 'Is the product flavoured?',
-    description: 'Record whether the product has flavouring; do not infer this from its marketing name.',
-  },
-  {
-    key: 'nonAlcoholic',
-    label: 'Is the product non-alcoholic?',
-    description: 'Use product specification or composition evidence.',
-  },
-  {
-    key: 'containsCaffeine',
-    label: 'Does the product contain caffeine?',
-    description: 'Record evidence for caffeine in the product, including its source where known.',
-  },
-  {
-    key: 'representedForMentalPerformance',
-    label: 'Is it represented as enhancing mental performance?',
-    description: 'Use product presentation or product-brief evidence; a product name alone is not enough.',
-  },
-];
-
-const infantFoodFacts: {
-  key: keyof ProductClassificationProfile['foodForInfants'];
-  label: string;
-  description: string;
-}[] = [
-  {
-    key: 'intendedAsNourishmentForInfants',
-    label: 'Is the food intended or represented as a source of nourishment for infants?',
-    description: 'Record the intended consumer and evidence for the intended or represented use.',
-  },
-  {
-    key: 'infantFormulaProduct',
-    label: 'Is this an infant formula product?',
-    description: 'A yes may place the product outside the Standard 2.9.2 food-for-infants definition.',
-  },
-  {
-    key: 'formulatedMealReplacement',
-    label: 'Is this a formulated meal replacement?',
-    description: 'A yes may place the product outside the Standard 2.9.2 food-for-infants definition.',
-  },
-  {
-    key: 'formulatedSupplementaryFood',
-    label: 'Is this a formulated supplementary food?',
-    description: 'A yes may place the product outside the Standard 2.9.2 food-for-infants definition.',
-  },
-  {
-    key: 'unprocessedFruitOrVegetables',
-    label: 'Is this unprocessed fruit or vegetables?',
-    description: 'A yes may place the product outside the Standard 2.9.2 food-for-infants definition.',
-  },
-];
+const productEditor = ref<ProductRecord | 'new'>();
 
 const sections: { id: Section; label: string }[] = [
   { id: 'overview', label: 'Overview' },
-  { id: 'ingredients', label: 'Ingredients & specifications' },
+  { id: 'ingredients', label: 'Ingredients' },
   { id: 'formulations', label: 'Formulations' },
   { id: 'products', label: 'Products' },
-  { id: 'review', label: 'Review & trace' },
-  { id: 'additives', label: 'Additives & names' },
-  { id: 'labels', label: 'Label layout & PDF' },
+  { id: 'labels', label: 'Labels' },
   { id: 'backup', label: 'Backup & restore' },
 ];
+const checkSections: { id: Section; label: string }[] = [{ id: 'review', label: 'Review & trace' }];
 
 const records = computed(() => ({
   ingredients: ingredients.value.length,
   formulations: formulations.value.length,
   products: products.value.length,
 }));
-
-const readyIngredients = computed(() =>
-  ingredients.value.filter((ingredient) => ingredient.kind === 'atomic'),
-);
 
 function makeId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -262,55 +98,6 @@ function clearMessages(): void {
 
 function explainError(error: unknown): string {
   return error instanceof Error ? error.message : 'An unexpected local storage error occurred.';
-}
-
-function updateClassificationDescription(
-  key: 'intendedUseDescription' | 'intendedConsumerDescription' | 'processingDescription' | 'presentationDescription',
-  event: Event,
-): void {
-  const target = event.currentTarget;
-  if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) {
-    return;
-  }
-  classificationProfile.value = {
-    ...classificationProfile.value,
-    [key]: target.value,
-  };
-}
-
-function updateCaffeinatedBeverageFact(
-  key: keyof ProductClassificationProfile['formulatedCaffeinatedBeverage'],
-  fact: ProductClassificationFact,
-): void {
-  classificationProfile.value = {
-    ...classificationProfile.value,
-    formulatedCaffeinatedBeverage: {
-      ...classificationProfile.value.formulatedCaffeinatedBeverage,
-      [key]: fact,
-    },
-  };
-}
-
-function updateInfantFoodFact(
-  key: keyof ProductClassificationProfile['foodForInfants'],
-  fact: ProductClassificationFact,
-): void {
-  classificationProfile.value = {
-    ...classificationProfile.value,
-    foodForInfants: {
-      ...classificationProfile.value.foodForInfants,
-      [key]: fact,
-    },
-  };
-}
-
-function updateIdentityEvidence(
-  evidence: ProductClassificationProfile['identityEvidence'],
-): void {
-  classificationProfile.value = {
-    ...classificationProfile.value,
-    identityEvidence: evidence,
-  };
 }
 
 function screeningOutcomeLabel(
@@ -373,6 +160,52 @@ async function loadIllustrativeDemo(): Promise<void> {
   }
 }
 
+const hasWorkedExamplesLoaded = computed(() =>
+  [...ingredients.value, ...formulations.value, ...products.value].some((record) =>
+    record.tags.includes(workedExampleTag),
+  ),
+);
+
+async function loadWorkedExampleRecords(): Promise<void> {
+  clearMessages();
+  if (store.value === undefined) {
+    actionError.value = 'Local storage is not available.';
+    return;
+  }
+  try {
+    const result = await loadWorkedExamples(store.value, workedExampleSet);
+    await refreshRecords();
+    actionMessage.value =
+      result.skipped > 0
+        ? `Worked examples loaded locally: ${result.created} added, ${result.skipped} already present and left unchanged. All figures are invented.`
+        : `Worked examples loaded locally: ${result.created} records added. All figures are invented.`;
+  } catch (error) {
+    actionError.value = explainError(error);
+  }
+}
+
+async function removeWorkedExampleRecords(): Promise<void> {
+  if (
+    store.value === undefined ||
+    !window.confirm(
+      'Remove the worked examples? Only records tagged worked-example are deleted; your own drafts are not touched. This cannot be undone.',
+    )
+  ) {
+    return;
+  }
+  clearMessages();
+  try {
+    const result = await removeWorkedExamples(store.value);
+    await refreshRecords();
+    actionMessage.value =
+      result.kept > 0
+        ? `Worked examples removed: ${result.removed} deleted, ${result.kept} kept because they are in use or have an approved version.`
+        : `Worked examples removed: ${result.removed} records deleted.`;
+  } catch (error) {
+    actionError.value = explainError(error);
+  }
+}
+
 onMounted(async () => {
   try {
     store.value = await openLocalFoodStore();
@@ -383,65 +216,6 @@ onMounted(async () => {
     loading.value = false;
   }
 });
-
-function parseNutrients(): IngredientRecord['nutrientProfile'] {
-  const sourceDate = ingredientForm.specificationDate;
-  const sourceId = ingredientForm.specificationReference.trim();
-  const fields = [
-    ['protein', ingredientForm.protein, 'g/100g'],
-    ['fat', ingredientForm.fat, 'g/100g'],
-    ['saturatedFat', ingredientForm.saturatedFat, 'g/100g'],
-    ['carbohydrate', ingredientForm.carbohydrate, 'g/100g'],
-    ['sugars', ingredientForm.sugars, 'g/100g'],
-    ['sodium', ingredientForm.sodium, 'mg/100g'],
-  ] as const;
-  const supplied = fields.filter(([, value]) => value.trim() !== '');
-  if (supplied.length === 0) {
-    return undefined;
-  }
-  if (!sourceId || !sourceDate) {
-    throw new Error(
-      'Add the supplier specification reference and date before entering nutrient values.',
-    );
-  }
-  const values: NonNullable<IngredientRecord['nutrientProfile']>['values'] = {};
-  for (const [nutrient, value, unit] of supplied) {
-    if (!/^(?:\d+)(?:\.\d+)?$/.test(value.trim())) {
-      throw new Error(
-        `Enter a non-negative number for ${nutrient}. Leave it blank if it was not supplied.`,
-      );
-    }
-    values[nutrient] = {
-      value: value.trim(),
-      unit,
-      sourceId,
-      sourceDate,
-      evidenceType: 'supplier',
-    };
-  }
-  return { ingredientId: 'pending', values };
-}
-
-function createAdditiveSourceDraft(): AdditiveSourceDraft {
-  return {
-    id: makeId('additive-source'),
-    additiveName: '',
-    codeNumber: '',
-    technologicalPurposes: '',
-    concentrationValue: '',
-    concentrationUnit: '',
-    concentrationBasis: 'unknown',
-    sourceReference: '',
-    sourceDate: '',
-    allergenIdsPresent: '',
-    sourceKind: 'supplierSpecification',
-    sourceStatus: 'unknown',
-    declarationRoute: 'unknown',
-    schedule7ClassName: '',
-    substanceChoice: '',
-    flavouringWording: '',
-  };
-}
 
 function additiveDeclarationCandidate(source: IngredientAdditiveSource, ingredientId: string, sourcePath: readonly string[]) {
   const selection = source.declarationSelection;
@@ -514,215 +288,36 @@ function additiveConcentrationBasisLabel(basis: AdditiveConcentration['basis']):
   }
 }
 
-function parseAdditiveSources(): readonly IngredientAdditiveSource[] {
-  return ingredientForm.additiveSources.map((draft, index) => {
-    const additiveName = draft.additiveName.trim();
-    if (!additiveName) {
-      throw new Error(`Additive source ${index + 1} needs an additive identity.`);
-    }
+const ingredientEditor = ref<IngredientRecord | 'new'>();
 
-    const hasSourceReference = Boolean(draft.sourceReference.trim());
-    if (hasSourceReference !== Boolean(draft.sourceDate)) {
-      throw new Error(`Additive source ${index + 1} evidence needs both a reference and date.`);
-    }
-    const allergenIds = draft.allergenIdsPresent
-      .split(',')
-      .map((id) => id.trim().toLowerCase())
-      .filter(Boolean);
-    if (new Set(allergenIds).size !== allergenIds.length) {
-      throw new Error(`Additive source ${index + 1} has duplicate allergen identifiers.`);
-    }
-    if (allergenIds.length > 0 && !hasSourceReference) {
-      throw new Error(`Additive source ${index + 1} allergen assessments need a dated evidence reference.`);
-    }
-    const allergenAssessments = Object.fromEntries(
-      allergenIds.map((id) => [id, 'present' as const]),
-    );
-
-    const hasConcentrationValue = Boolean(draft.concentrationValue.trim());
-    if (hasConcentrationValue !== Boolean(draft.concentrationUnit)) {
-      throw new Error(`Additive source ${index + 1} concentration needs both a value and unit.`);
-    }
-
-    const technologicalPurposes = draft.technologicalPurposes
-      .split('\n')
-      .map((purpose) => purpose.trim())
-      .filter(Boolean);
-
-    let concentration: AdditiveConcentration | undefined;
-    if (hasConcentrationValue) {
-      if (!draft.concentrationUnit) {
-        throw new Error(`Additive source ${index + 1} concentration needs a unit.`);
-      }
-      concentration = {
-        value: draft.concentrationValue.trim(),
-        unit: draft.concentrationUnit,
-        basis: draft.concentrationBasis,
-      };
-    }
-    let declarationSelection: AdditiveDeclarationSelection | undefined;
-    if (draft.declarationRoute !== 'unknown') {
-      declarationSelection = {
-        route: draft.declarationRoute,
-        ...(draft.schedule7ClassName.trim()
-          ? { schedule7ClassName: draft.schedule7ClassName.trim() }
-          : {}),
-        ...(draft.substanceChoice ? { substanceChoice: draft.substanceChoice } : {}),
-        ...(draft.flavouringWording ? { flavouringWording: draft.flavouringWording } : {}),
-      };
-    }
-
-    return {
-      id: draft.id,
-      additiveName,
-      ...(draft.codeNumber.trim() ? { codeNumber: draft.codeNumber.trim() } : {}),
-      ...(technologicalPurposes.length > 0 ? { technologicalPurposes } : {}),
-      ...(concentration ? { concentration } : {}),
-      ...(hasSourceReference
-        ? {
-            sourceEvidence: [{
-              id: makeId('additive-evidence'),
-              reference: draft.sourceReference.trim(),
-              sourceDate: draft.sourceDate,
-              kind: draft.sourceKind,
-            }],
-          }
-        : {}),
-      sourceStatus: draft.sourceStatus,
-      ...(declarationSelection ? { declarationSelection } : {}),
-      ...(allergenIds.length > 0 ? { allergenAssessments } : {}),
-    };
-  });
-}
-
-async function saveIngredient(): Promise<void> {
+async function saveIngredient(record: IngredientRecord): Promise<void> {
   clearMessages();
   if (store.value === undefined) {
     actionError.value = 'Local storage is not available.';
     return;
   }
   try {
-    const id = makeId('ingredient');
-    const ingredientKind = ingredientForm.kind;
-    if (!ingredientKind) {
-      throw new Error('Choose whether this is a single or compound ingredient.');
+    if (ingredientEditor.value === 'new' || ingredientEditor.value === undefined) {
+      await store.value.ingredients.create(record);
+    } else {
+      // Storage merges changes, so a field the person cleared is sent as an explicit undefined.
+      const changes: Record<string, unknown> = { name: record.name, kind: record.kind };
+      for (const key of editableIngredientKeys) {
+        changes[key] = record[key];
+      }
+      await store.value.ingredients.update(record.id, changes);
     }
-    const hasSpecificationDetails = Boolean(
-      ingredientForm.specificationReference.trim() ||
-      ingredientForm.specificationDate ||
-      ingredientForm.supplierProductCode.trim(),
-    );
-    if (
-      hasSpecificationDetails &&
-      (!ingredientForm.specificationReference.trim() || !ingredientForm.specificationDate)
-    ) {
-      throw new Error('Supplier specification details need both a reference and an issue date.');
-    }
-    const nutrientProfile = parseNutrients();
-    const additiveSources = parseAdditiveSources();
-    const knownAllergens = ingredientForm.knownAllergens
-      .split(',')
-      .map((allergen) => allergen.trim())
-      .filter(Boolean);
-    if (
-      knownAllergens.length > 0 &&
-      (!ingredientForm.specificationReference.trim() || !ingredientForm.specificationDate)
-    ) {
-      throw new Error(
-        'Add the supplier specification reference and date before recording allergen evidence.',
-      );
-    }
-    const record: IngredientRecord = {
-      id,
-      name: ingredientForm.name.trim(),
-      recordType: 'ingredient',
-      kind: ingredientKind,
-      ...(ingredientKind === 'compound' && ingredientForm.compoundFormulationId
-        ? { compoundFormulationId: ingredientForm.compoundFormulationId }
-        : {}),
-      ...(ingredientForm.supplierName.trim()
-        ? { supplierName: ingredientForm.supplierName.trim() }
-        : {}),
-      ...(ingredientForm.specificationReference.trim()
-        ? {
-            specification: {
-              reference: ingredientForm.specificationReference.trim(),
-              sourceDate: ingredientForm.specificationDate,
-              ...(ingredientForm.supplierProductCode.trim()
-                ? { supplierProductCode: ingredientForm.supplierProductCode.trim() }
-                : {}),
-            },
-          }
-        : {}),
-      ...(nutrientProfile ? { nutrientProfile: { ...nutrientProfile, ingredientId: id } } : {}),
-      ...(knownAllergens.length > 0
-        ? {
-            allergenEvidence: [
-              {
-                id: makeId('allergen-evidence'),
-                subjectId: id,
-                kind: 'ingredient',
-                sourceId: ingredientForm.specificationReference.trim(),
-                sourceDate: ingredientForm.specificationDate,
-                sourcePath: [id],
-                assessments: Object.fromEntries(
-                  knownAllergens.map((allergen) => [allergen, 'present']),
-                ),
-              },
-            ],
-          }
-        : {}),
-      ...(additiveSources.length > 0 ? { additiveSources } : {}),
-      tags: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    if (ingredientKind === 'compound' && !record.compoundFormulationId) {
-      throw new Error('Select the formulation used by this compound ingredient.');
-    }
-    await store.value.ingredients.create(record);
     await refreshRecords();
-    Object.assign(ingredientForm, {
-      name: '',
-      kind: '',
-      compoundFormulationId: '',
-      supplierName: '',
-      specificationReference: '',
-      supplierProductCode: '',
-      specificationDate: '',
-      knownAllergens: '',
-      protein: '',
-      fat: '',
-      saturatedFat: '',
-      carbohydrate: '',
-      sugars: '',
-      sodium: '',
-      additiveSources: [],
-    });
+    ingredientEditor.value = undefined;
     actionMessage.value = 'Ingredient draft saved locally.';
   } catch (error) {
     actionError.value = explainError(error);
   }
 }
 
-function addFormulationLine(): void {
-  formulationForm.lines.push({
-    kind: readyIngredients.value.length > 0 ? 'ingredient' : 'formulation',
-    targetId: '',
-    quantity: '',
-    unit: 'g',
-  });
-}
+const formulationEditor = ref<FormulationRecord | 'new'>();
 
-function onLineKindChange(line: FormulationLineDraft): void {
-  line.targetId = '';
-}
-
-function lineOptions(kind: FormulationLineDraft['kind']): readonly WorkspaceDraftRecord[] {
-  return kind === 'ingredient' ? readyIngredients.value : formulations.value;
-}
-
-async function saveFormulation(): Promise<void> {
+async function saveFormulation(record: FormulationRecord): Promise<void> {
   clearMessages();
   expansion.value = undefined;
   expansionError.value = '';
@@ -731,44 +326,14 @@ async function saveFormulation(): Promise<void> {
     return;
   }
   try {
-    if (formulationForm.lines.length === 0) {
-      throw new Error('Add at least one ingredient or nested formulation line.');
+    if (formulationEditor.value === 'new' || formulationEditor.value === undefined) {
+      await store.value.formulations.create(record);
+    } else {
+      // Only the fields the builder manages are changed; anything else on the record is kept.
+      await store.value.formulations.update(record.id, { name: record.name, lines: record.lines });
     }
-    const id = makeId('formulation');
-    const lines = formulationForm.lines.map((line) => {
-      if (!line.targetId) {
-        throw new Error('Choose a record for each formulation line.');
-      }
-      if (!/^(?:\d+)(?:\.\d+)?$/.test(line.quantity) || Number(line.quantity) <= 0) {
-        throw new Error('Each formulation line needs a positive quantity.');
-      }
-      return line.kind === 'ingredient'
-        ? {
-            id: makeId('line'),
-            kind: 'ingredient' as const,
-            ingredientId: line.targetId,
-            quantity: { value: line.quantity, unit: line.unit },
-          }
-        : {
-            id: makeId('line'),
-            kind: 'formulation' as const,
-            formulationId: line.targetId,
-            quantity: { value: line.quantity, unit: line.unit },
-          };
-    });
-    const record: FormulationRecord = {
-      id,
-      name: formulationForm.name.trim(),
-      recordType: 'formulation',
-      lines,
-      tags: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    await store.value.formulations.create(record);
     await refreshRecords();
-    formulationForm.name = '';
-    formulationForm.lines = [];
+    formulationEditor.value = undefined;
     actionMessage.value = 'Formulation draft saved locally.';
   } catch (error) {
     actionError.value = explainError(error);
@@ -841,49 +406,6 @@ function calculateFormulation(formulation: FormulationRecord): void {
   }
 }
 
-async function saveProduct(): Promise<void> {
-  clearMessages();
-  if (store.value === undefined) {
-    actionError.value = 'Local storage is not available.';
-    return;
-  }
-  try {
-    if (!formulationFormulationExists(productForm.formulationId)) {
-      throw new Error('Choose a saved formulation for this product.');
-    }
-    const foodState = productForm.foodState;
-    if (!foodState) {
-      throw new Error('Choose the food state for this product.');
-    }
-    const now = new Date().toISOString();
-    const record: ProductRecord = {
-      id: makeId('product'),
-      name: productForm.name.trim(),
-      recordType: 'product',
-      formulationId: productForm.formulationId,
-      foodState,
-      classificationProfile: copyClassificationProfile(classificationProfile.value),
-      tags: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-    await store.value.products.create(record);
-    await refreshRecords();
-    productForm.name = '';
-    productForm.formulationId = '';
-    productForm.foodState = '';
-    classificationProfile.value = createEmptyProductClassificationProfile();
-    actionMessage.value =
-      'Product draft saved locally. Regulatory review is not performed; class screening remains review-only.';
-  } catch (error) {
-    actionError.value = explainError(error);
-  }
-}
-
-function formulationFormulationExists(id: string): boolean {
-  return formulations.value.some((formulation) => formulation.id === id);
-}
-
 function confirmDelete(record: WorkspaceDraftRecord): boolean {
   return window.confirm(`Delete the draft "${record.name}"? This cannot be undone.`);
 }
@@ -944,6 +466,26 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
         <nav>
           <button
             v-for="section in sections"
+            :key="section.id"
+            type="button"
+            class="nav-link"
+            :class="{ active: activeSection === section.id }"
+            :aria-current="activeSection === section.id ? 'page' : undefined"
+            @click="activeSection = section.id"
+          >
+            <span
+              class="nav-indicator"
+              aria-hidden="true"
+            />
+            {{ section.label }}
+          </button>
+        </nav>
+        <p class="nav-caption">
+          CHECKS
+        </p>
+        <nav aria-label="Checks">
+          <button
+            v-for="section in checkSections"
             :key="section.id"
             type="button"
             class="nav-link"
@@ -1037,8 +579,9 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 </p>
                 <h1>Good work starts with good records.</h1>
                 <p class="lede">
-                  Capture ingredients, supplier specifications and formulations before you prepare a
-                  product for review.
+                  Make a draft pack-copy label in three steps: add your ingredients from your supplier spec
+                  sheets, put them together into a recipe, then set up your product. Nothing leaves your
+                  device.
                 </p>
               </div>
               <div
@@ -1056,17 +599,17 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
               <article class="summary-card">
                 <span class="summary-label">Ingredients</span>
                 <strong>{{ records.ingredients }}</strong>
-                <span class="summary-detail">with supplier evidence</span>
+                <span class="summary-detail">from your supplier spec sheets</span>
               </article>
               <article class="summary-card">
                 <span class="summary-label">Formulations</span>
                 <strong>{{ records.formulations }}</strong>
-                <span class="summary-detail">nested recipes supported</span>
+                <span class="summary-detail">recipes, which can include other recipes</span>
               </article>
               <article class="summary-card">
                 <span class="summary-label">Products</span>
                 <strong>{{ records.products }}</strong>
-                <span class="summary-detail">linked to a formulation</span>
+                <span class="summary-detail">each based on one recipe</span>
               </article>
             </div>
 
@@ -1075,7 +618,7 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 <div class="panel-heading">
                   <div>
                     <p class="eyebrow">
-                      A CLEAR STARTING POINT
+                      START HERE
                     </p>
                     <h2>Build your product foundation</h2>
                   </div>
@@ -1085,8 +628,8 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                   <li>
                     <span class="journey-number">01</span>
                     <div>
-                      <strong>Record an ingredient</strong>
-                      <p>Add the supplier and specification details you have.</p>
+                      <strong>Add your ingredients</strong>
+                      <p>Have each supplier spec sheet to hand. Enter what it says: the nutrition figures, allergens and any additives.</p>
                     </div>
                     <AppButton
                       variant="link"
@@ -1100,8 +643,8 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                   <li>
                     <span class="journey-number">02</span>
                     <div>
-                      <strong>Build a formulation</strong>
-                      <p>Enter ingredient amounts and see the expanded 100 g basis.</p>
+                      <strong>Put them into a recipe</strong>
+                      <p>Enter how much of each ingredient goes in. We work out the amounts per 100 g.</p>
                     </div>
                     <AppButton
                       variant="link"
@@ -1115,8 +658,8 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                   <li>
                     <span class="journey-number">03</span>
                     <div>
-                      <strong>Create a product draft</strong>
-                      <p>Link a product name and food state to a formulation.</p>
+                      <strong>Set up your product</strong>
+                      <p>Name your product and choose the recipe it is made from.</p>
                     </div>
                     <AppButton
                       variant="link"
@@ -1137,10 +680,11 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 <p class="eyebrow">
                   IMPORTANT
                 </p>
-                <h2>Drafts are not a compliance result.</h2>
+                <h2>This is a drafting aid, not a clearance.</h2>
                 <p>
-                  This workspace records your inputs. Regulatory checks are not performed; the label
-                  tool is an illustrative layout export only.
+                  Everything here is a draft to take to a food consultant. Our rule data has not been
+                  reviewed yet, so no result should be relied on as legal advice. The label page is a
+                  demonstration layout only.
                 </p>
                 <span class="review-status"><span aria-hidden="true" /> No regulatory release installed</span>
               </aside>
@@ -1169,6 +713,82 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 Load illustrative demo data
               </AppButton>
             </section>
+            <section
+              v-if="workedExampleCount(workedExampleSet) > 0"
+              class="panel demo-panel"
+              aria-labelledby="worked-examples-title"
+            >
+              <div>
+                <p class="eyebrow">
+                  OPTIONAL · LOCAL ONLY
+                </p>
+                <h2 id="worked-examples-title">
+                  Worked examples for review
+                </h2>
+                <p>
+                  Adds invented caffeinated beverage and infant food products with additive and claim
+                  inputs so every page can be seen working. Every figure is invented and every result
+                  stays REVIEW REQUIRED. Existing records are never overwritten.
+                </p>
+              </div>
+              <div class="button-row">
+                <AppButton
+                  type="button"
+                  @click="loadWorkedExampleRecords"
+                >
+                  Load worked examples
+                </AppButton>
+                <AppButton
+                  v-if="hasWorkedExamplesLoaded"
+                  type="button"
+                  variant="outline"
+                  @click="removeWorkedExampleRecords"
+                >
+                  Remove worked examples
+                </AppButton>
+              </div>
+            </section>
+            <section
+              v-if="hasWorkedExamplesLoaded"
+              class="panel"
+              aria-labelledby="worked-guide-title"
+            >
+              <h2 id="worked-guide-title">
+                Guide to the worked examples
+              </h2>
+              <p>
+                Open each product on the pages named below. Turn on "Show what each result would be" on
+                Additives &amp; names or Claims to see the illustrative preview. Every official status stays
+                REVIEW REQUIRED, and nothing here certifies compliance.
+              </p>
+              <ul>
+                <li>
+                  <strong>Example Citrus Boost</strong> (caffeinated beverage, good): additives within their
+                  limits, including sodium benzoate stated as benzoic acid, and "Low sugars" would meet its
+                  condition.
+                </li>
+                <li>
+                  <strong>Example Citrus Boost Max</strong> (caffeinated beverage, problem): wood rosin esters
+                  over the limit, a missing concentration, an unknown source status, "Low sugars" not met,
+                  "Low energy" missing its figure, and a health claim that is review-only.
+                </li>
+                <li>
+                  <strong>Example Apple and Oat Puree</strong> (infant food, good): additives within limits,
+                  the "sweetened" word not required, and "Good source of dietary fibre" would meet its
+                  condition.
+                </li>
+                <li>
+                  <strong>Example Honey and Oat Puree</strong> (infant food, problem): carrageenan over the
+                  limit, "sweetened" blocked by an unconfirmed sugars basis, "Low fat" blocked as a prohibited
+                  context, "Low sodium" blocked by an unconfirmed classification, and a sterilised-honey
+                  name candidate.
+                </li>
+              </ul>
+              <p>
+                The Labels page also works for these products. It remains a demonstration
+                layout, not a food label.
+              </p>
+            </section>
             <p class="privacy-footnote">
               Your formulation data is stored locally in this browser. Back up important work using
               your browser profile and workspace backup tools when available.
@@ -1184,369 +804,30 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 <p class="eyebrow">
                   INGREDIENT LIBRARY
                 </p>
-                <h1>Ingredients & specifications</h1>
+                <h1>Ingredients</h1>
                 <p class="lede">
-                  Keep supplier evidence with each ingredient. Missing values stay missing; they are
-                  never treated as zero.
+                  Your ingredient library. Add each ingredient from its supplier's spec sheet, and edit or
+                  delete them any time. If a value isn't on the sheet, leave it blank. We never treat a
+                  blank as zero.
                 </p>
               </div>
               <span class="record-count">{{ records.ingredients }} saved</span>
             </div>
 
             <div class="content-grid">
-              <form
-                class="panel editor-panel"
-                @submit.prevent="saveIngredient"
-              >
-                <div class="panel-heading">
-                  <div>
-                    <p class="eyebrow">
-                      NEW DRAFT
-                    </p>
-                    <h2>Ingredient record</h2>
-                  </div>
-                  <span class="draft-pill">Draft</span>
-                </div>
-                <div class="form-grid">
-                  <label class="field full">
-                    <span>Ingredient name <b aria-hidden="true">*</b></span>
-                    <input
-                      v-model="ingredientForm.name"
-                      required
-                      maxlength="120"
-                      autocomplete="off"
-                      placeholder="e.g. Rolled oats"
-                    >
-                  </label>
-                  <label class="field">
-                    <span>Ingredient type</span>
-                    <select
-                      v-model="ingredientForm.kind"
-                      required
-                    >
-                      <option
-                        value=""
-                        disabled
-                      >Select ingredient type</option>
-                      <option value="atomic">Single ingredient</option>
-                      <option value="compound">Compound ingredient</option>
-                    </select>
-                  </label>
-                  <label
-                    v-if="ingredientForm.kind === 'compound'"
-                    class="field"
-                  >
-                    <span>Composition formulation <b aria-hidden="true">*</b></span>
-                    <select
-                      v-model="ingredientForm.compoundFormulationId"
-                      required
-                    >
-                      <option
-                        value=""
-                        disabled
-                      >Select a formulation</option>
-                      <option
-                        v-for="item in formulations"
-                        :key="item.id"
-                        :value="item.id"
-                      >
-                        {{ item.name }}
-                      </option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>Supplier name</span>
-                    <input
-                      v-model="ingredientForm.supplierName"
-                      maxlength="120"
-                      autocomplete="organization"
-                      placeholder="Supplier or manufacturer"
-                    >
-                  </label>
-                  <label class="field">
-                    <span>Supplier product code</span>
-                    <input
-                      v-model="ingredientForm.supplierProductCode"
-                      maxlength="80"
-                      autocomplete="off"
-                      placeholder="Optional"
-                    >
-                  </label>
-                </div>
-
-                <fieldset class="field-group">
-                  <legend>Supplier specification</legend>
-                  <p class="field-hint">
-                    Reference and issue date make supplier evidence traceable.
-                  </p>
-                  <div class="form-grid">
-                    <label class="field">
-                      <span>Specification reference</span>
-                      <input
-                        v-model="ingredientForm.specificationReference"
-                        maxlength="120"
-                        autocomplete="off"
-                        placeholder="Document number or version"
-                      >
-                    </label>
-                    <label class="field">
-                      <span>Specification date</span>
-                      <input
-                        v-model="ingredientForm.specificationDate"
-                        type="date"
-                      >
-                    </label>
-                  </div>
-                </fieldset>
-
-                <fieldset class="field-group">
-                  <legend>Additive source records</legend>
-                  <p class="field-hint">
-                    Capture what the source documents say. Declaration selections produce review-only
-                    wording candidates; they do not establish an approved class, identity, permission,
-                    or final declaration.
-                  </p>
-                  <fieldset
-                    v-for="(source, index) in ingredientForm.additiveSources"
-                    :key="source.id"
-                    class="field-group additive-source-field"
-                  >
-                    <legend>Additive source {{ index + 1 }}</legend>
-                    <div class="form-grid">
-                      <label class="field">
-                        <span>Additive identity <b aria-hidden="true">*</b></span>
-                        <input
-                          v-model="source.additiveName"
-                          required
-                          maxlength="120"
-                          autocomplete="off"
-                          placeholder="Name from the source record"
-                        >
-                      </label>
-                      <label class="field">
-                        <span>Code number (source)</span>
-                        <input
-                          v-model="source.codeNumber"
-                          maxlength="40"
-                          autocomplete="off"
-                          placeholder="If recorded by the supplier"
-                        >
-                        <small class="field-hint">Stored as source data only; not checked for Australian declaration.</small>
-                      </label>
-                      <label class="field full">
-                        <span>Technological purpose(s)</span>
-                        <textarea
-                          v-model="source.technologicalPurposes"
-                          rows="2"
-                          maxlength="500"
-                          placeholder="One source-described purpose per line"
-                        />
-                        <small class="field-hint">Use the source wording; this is not checked against the Code.</small>
-                      </label>
-                      <label class="field">
-                        <span>Source status</span>
-                        <select v-model="source.sourceStatus">
-                          <option value="unknown">Unknown / not assessed</option>
-                          <option value="added">Added to this ingredient</option>
-                          <option value="carriedOver">Carried over</option>
-                          <option value="processingAid">Processing aid</option>
-                        </select>
-                      </label>
-                      <label class="field">
-                        <span>Declaration route</span>
-                        <select v-model="source.declarationRoute">
-                          <option value="unknown">Not selected / needs review</option>
-                          <option value="schedule7Class">Schedule 7 class + Schedule 8 identifier</option>
-                          <option value="noSchedule7Class">No Schedule 7 class; Schedule 8 name</option>
-                          <option value="enzyme">Enzyme</option>
-                          <option value="flavouring">Flavouring</option>
-                          <option value="specifiedFlavouringSubstance">Specified flavouring substance</option>
-                          <option value="addedCaffeine">Added caffeine</option>
-                        </select>
-                      </label>
-                      <label
-                        v-if="source.declarationRoute === 'schedule7Class'"
-                        class="field"
-                      >
-                        <span>Proposed Schedule 7 class name</span>
-                        <input
-                          v-model="source.schedule7ClassName"
-                          maxlength="120"
-                          autocomplete="off"
-                          placeholder="Enter from Schedule 7; mapping remains unverified"
-                        >
-                      </label>
-                      <label
-                        v-if="source.declarationRoute === 'schedule7Class'"
-                        class="field"
-                      >
-                        <span>Proposed Schedule 8 identifier</span>
-                        <select v-model="source.substanceChoice">
-                          <option value="">Not selected</option>
-                          <option value="schedule8Name">Schedule 8 name</option>
-                          <option value="schedule8CodeNumber">Schedule 8 code number</option>
-                        </select>
-                      </label>
-                      <label
-                        v-if="source.declarationRoute === 'flavouring'"
-                        class="field"
-                      >
-                        <span>Flavouring wording</span>
-                        <select v-model="source.flavouringWording">
-                          <option value="">Not selected</option>
-                          <option value="flavouring">flavouring</option>
-                          <option value="flavour">flavour</option>
-                          <option value="specificName">Specific name or description</option>
-                        </select>
-                      </label>
-                      <label class="field">
-                        <span>Concentration</span>
-                        <input
-                          v-model="source.concentrationValue"
-                          inputmode="decimal"
-                          autocomplete="off"
-                          placeholder="Not supplied"
-                        >
-                      </label>
-                      <label class="field">
-                        <span>Concentration unit</span>
-                        <select v-model="source.concentrationUnit">
-                          <option value="">Not supplied</option>
-                          <option value="mgPerKg">mg/kg</option>
-                          <option value="gPerKg">g/kg</option>
-                          <option value="mgPerL">mg/L</option>
-                          <option value="gPerL">g/L</option>
-                          <option value="mgPer100g">mg/100 g</option>
-                          <option value="gPer100g">g/100 g</option>
-                          <option value="mgPer100mL">mg/100 mL</option>
-                          <option value="gPer100mL">g/100 mL</option>
-                          <option value="percentByMass">% by mass</option>
-                          <option value="percentByVolume">% by volume</option>
-                        </select>
-                      </label>
-                      <label class="field">
-                        <span>Concentration basis</span>
-                        <select v-model="source.concentrationBasis">
-                          <option value="unknown">Unknown / not supplied</option>
-                          <option value="asSupplied">As supplied</option>
-                          <option value="dryMatter">Dry matter</option>
-                          <option value="asAdded">As added</option>
-                          <option value="asPrepared">As prepared</option>
-                          <option value="asReconstituted">As reconstituted</option>
-                          <option value="asDrained">As drained</option>
-                        </select>
-                      </label>
-                      <label class="field">
-                        <span>Evidence reference</span>
-                        <input
-                          v-model="source.sourceReference"
-                          maxlength="160"
-                          autocomplete="off"
-                          placeholder="Document and section"
-                        >
-                      </label>
-                      <label class="field">
-                        <span>Evidence date</span>
-                        <input
-                          v-model="source.sourceDate"
-                          type="date"
-                        >
-                      </label>
-                      <label class="field">
-                        <span>Evidence type</span>
-                        <select v-model="source.sourceKind">
-                          <option value="supplierSpecification">Supplier specification</option>
-                          <option value="certificateOfAnalysis">Certificate of analysis</option>
-                          <option value="formulationRecord">Formulation record</option>
-                          <option value="productPackaging">Product packaging</option>
-                          <option value="processRecord">Process record</option>
-                          <option value="other">Other</option>
-                        </select>
-                      </label>
-                      <label class="field full">
-                        <span>Allergen identifiers recorded as present</span>
-                        <input
-                          v-model="source.allergenIdsPresent"
-                          maxlength="300"
-                          autocomplete="off"
-                          placeholder="e.g. milk, soy"
-                        >
-                        <small class="field-hint">
-                          Use vocabulary IDs and the evidence reference above. Blank means not recorded,
-                          not absent. These are traced as additive sources, not evaluated for an exemption.
-                        </small>
-                      </label>
-                    </div>
-                    <AppButton
-                      variant="outline"
-                      size="sm"
-                      type="button"
-                      :aria-label="`Remove additive source ${index + 1}`"
-                      @click="ingredientForm.additiveSources.splice(index, 1)"
-                    >
-                      Remove additive source
-                    </AppButton>
-                  </fieldset>
-                  <AppButton
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    @click="ingredientForm.additiveSources.push(createAdditiveSourceDraft())"
-                  >
-                    Add additive source
-                  </AppButton>
-                </fieldset>
-
-                <fieldset class="field-group">
-                  <legend>Nutrient values, per 100 g</legend>
-                  <p class="field-hint">
-                    Only enter values shown on the source. Blank means not supplied, not zero.
-                  </p>
-                  <div class="nutrient-grid">
-                    <label
-                      v-for="nutrient in [
-                        { key: 'protein', label: 'Protein', unit: 'g' },
-                        { key: 'fat', label: 'Fat, total', unit: 'g' },
-                        { key: 'saturatedFat', label: 'Saturated fat', unit: 'g' },
-                        { key: 'carbohydrate', label: 'Carbohydrate', unit: 'g' },
-                        { key: 'sugars', label: 'Sugars', unit: 'g' },
-                        { key: 'sodium', label: 'Sodium', unit: 'mg' },
-                      ]"
-                      :key="nutrient.key"
-                      class="field"
-                    >
-                      <span>{{ nutrient.label }} <small>{{ nutrient.unit }}/100 g</small></span>
-                      <input
-                        v-model="ingredientForm[nutrient.key as keyof typeof ingredientForm]"
-                        inputmode="decimal"
-                        autocomplete="off"
-                        placeholder="Not supplied"
-                      >
-                    </label>
-                  </div>
-                </fieldset>
-
-                <label class="field">
-                  <span>Allergens identified by supplier</span>
-                  <input
-                    v-model="ingredientForm.knownAllergens"
-                    maxlength="300"
-                    autocomplete="off"
-                    placeholder="e.g. wheat, milk (comma separated)"
-                  >
-                  <small class="field-hint">Only records allergens you enter as present. Leaving this blank does not mean
-                    “absent”.</small>
-                </label>
-                <div class="form-actions">
-                  <span class="required-hint"><b aria-hidden="true">*</b> Required</span>
-                  <AppButton type="submit">
-                    Save ingredient draft <span aria-hidden="true">→</span>
-                  </AppButton>
-                </div>
-              </form>
+              <IngredientBuilder
+                v-if="ingredientEditor !== undefined"
+                :key="ingredientEditor === 'new' ? 'new' : ingredientEditor.id"
+                :record="ingredientEditor === 'new' ? undefined : ingredientEditor"
+                :formulations="formulations"
+                :make-id="makeId"
+                @save="saveIngredient"
+                @cancel="ingredientEditor = undefined"
+              />
 
               <section
-                class="panel records-panel"
+                v-else
+                class="panel records-panel wide"
                 aria-labelledby="ingredient-records-title"
               >
                 <div class="panel-heading">
@@ -1559,6 +840,12 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                     </h2>
                   </div>
                   <span class="count-badge">{{ ingredients.length }}</span>
+                  <AppButton
+                    type="button"
+                    @click="ingredientEditor = 'new'"
+                  >
+                    Add ingredient
+                  </AppButton>
                 </div>
                 <div
                   v-if="ingredients.length === 0"
@@ -1570,8 +857,8 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                   >01</span>
                   <h3>No ingredients yet</h3>
                   <p>
-                    Start with a supplier ingredient or specification. You can save incomplete
-                    drafts and fill in missing evidence later.
+                    Choose "Add ingredient" to start with a supplier ingredient or specification. You can save
+                    incomplete drafts and fill in missing evidence later.
                   </p>
                 </div>
                 <ul
@@ -1644,6 +931,15 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                       <small v-else>Additive source records not supplied</small>
                     </div>
                     <AppButton
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      :aria-label="`Edit ingredient ${record.name}`"
+                      @click="ingredientEditor = record"
+                    >
+                      Edit
+                    </AppButton>
+                    <AppButton
                       variant="destructive"
                       size="sm"
                       type="button"
@@ -1669,145 +965,29 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 </p>
                 <h1>Formulations</h1>
                 <p class="lede">
-                  Create weighted, nested drafts. Expand a saved formulation to inspect ingredient
-                  paths on a 100 g basis.
+                  A formulation is a recipe: list each ingredient and how much goes in, as measured before
+                  any cooking or processing. A recipe can also include another saved recipe, for example a
+                  sauce. Open a saved recipe to see the amounts per 100 g.
                 </p>
               </div>
               <span class="record-count">{{ records.formulations }} saved</span>
             </div>
 
             <div class="content-grid">
-              <form
-                class="panel editor-panel"
-                @submit.prevent="saveFormulation"
-              >
-                <div class="panel-heading">
-                  <div>
-                    <p class="eyebrow">
-                      NEW DRAFT
-                    </p>
-                    <h2>Formulation record</h2>
-                  </div>
-                  <span class="draft-pill">Draft</span>
-                </div>
-                <label class="field">
-                  <span>Formulation name <b aria-hidden="true">*</b></span>
-                  <input
-                    v-model="formulationForm.name"
-                    required
-                    maxlength="120"
-                    autocomplete="off"
-                    placeholder="e.g. Breakfast base"
-                  >
-                </label>
-                <div class="field-group">
-                  <div class="line-heading">
-                    <div>
-                      <h3>Ingoing lines</h3>
-                      <p class="field-hint">
-                        Use the quantities from the recipe before processing.
-                      </p>
-                    </div>
-                    <AppButton
-                      variant="outline"
-                      size="sm"
-                      type="button"
-                      @click="addFormulationLine"
-                    >
-                      Add line <span aria-hidden="true">+</span>
-                    </AppButton>
-                  </div>
-                  <div
-                    v-if="formulationForm.lines.length === 0"
-                    class="inline-empty"
-                  >
-                    Add a line to start. A formulation needs at least one ingredient or nested
-                    formulation.
-                  </div>
-                  <div
-                    v-for="(line, index) in formulationForm.lines"
-                    :key="index"
-                    class="line-row"
-                  >
-                    <label class="field line-type">
-                      <span class="visually-hidden">Line {{ index + 1 }} type</span>
-                      <select
-                        v-model="line.kind"
-                        :aria-label="`Line ${index + 1} type`"
-                        @change="onLineKindChange(line)"
-                      >
-                        <option value="ingredient">Ingredient</option>
-                        <option value="formulation">Formulation</option>
-                      </select>
-                    </label>
-                    <label class="field line-record">
-                      <span class="visually-hidden">Line {{ index + 1 }} record</span>
-                      <select
-                        v-model="line.targetId"
-                        :aria-label="`Line ${index + 1} record`"
-                        required
-                      >
-                        <option
-                          value=""
-                          disabled
-                        >Select record</option>
-                        <option
-                          v-for="option in lineOptions(line.kind)"
-                          :key="option.id"
-                          :value="option.id"
-                        >
-                          {{ option.name }}
-                        </option>
-                      </select>
-                    </label>
-                    <label class="field line-quantity">
-                      <span class="visually-hidden">Line {{ index + 1 }} quantity</span>
-                      <input
-                        v-model="line.quantity"
-                        :aria-label="`Line ${index + 1} quantity`"
-                        inputmode="decimal"
-                        required
-                        placeholder="Amount"
-                      >
-                    </label>
-                    <label class="field line-unit">
-                      <span class="visually-hidden">Line {{ index + 1 }} unit</span>
-                      <select
-                        v-model="line.unit"
-                        :aria-label="`Line ${index + 1} unit`"
-                      >
-                        <option value="g">g</option>
-                        <option value="kg">kg</option>
-                        <option value="mg">mg</option>
-                      </select>
-                    </label>
-                    <button
-                      class="remove-line"
-                      type="button"
-                      :aria-label="`Remove line ${index + 1}`"
-                      @click="formulationForm.lines.splice(index, 1)"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-                <div class="info-callout">
-                  <span aria-hidden="true">i</span>
-                  <p>
-                    Saved formulations are drafts. No yield or processing loss is assumed. Circular
-                    formulation references are rejected.
-                  </p>
-                </div>
-                <div class="form-actions">
-                  <span class="required-hint"><b aria-hidden="true">*</b> Required</span>
-                  <AppButton type="submit">
-                    Save formulation draft <span aria-hidden="true">→</span>
-                  </AppButton>
-                </div>
-              </form>
+              <FormulationBuilder
+                v-if="formulationEditor !== undefined"
+                :key="formulationEditor === 'new' ? 'new' : formulationEditor.id"
+                :record="formulationEditor === 'new' ? undefined : formulationEditor"
+                :ingredients="ingredients"
+                :formulations="formulations"
+                :make-id="makeId"
+                @save="saveFormulation"
+                @cancel="formulationEditor = undefined"
+              />
 
               <section
-                class="panel records-panel"
+                v-else
+                class="panel records-panel wide"
                 aria-labelledby="formulation-records-title"
               >
                 <div class="panel-heading">
@@ -1820,6 +1000,12 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                     </h2>
                   </div>
                   <span class="count-badge">{{ formulations.length }}</span>
+                  <AppButton
+                    type="button"
+                    @click="formulationEditor = 'new'"
+                  >
+                    Add formulation
+                  </AppButton>
                 </div>
                 <div
                   v-if="formulations.length === 0"
@@ -1870,6 +1056,15 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                       @click="calculateFormulation(record)"
                     >
                       Expand
+                    </AppButton>
+                    <AppButton
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      :aria-label="`Edit formulation ${record.name}`"
+                      @click="formulationEditor = record"
+                    >
+                      Edit
                     </AppButton>
                     <AppButton
                       variant="destructive"
@@ -2031,19 +1226,6 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
           </section>
 
           <section
-            v-else-if="activeSection === 'additives' && store"
-            class="page"
-          >
-            <AdditiveNameChecksPanel
-              :store="store"
-              :products="products"
-              :formulations="formulations"
-              :ingredients="ingredients"
-              @saved="refreshRecords"
-            />
-          </section>
-
-          <section
             v-else-if="activeSection === 'labels'"
             class="page"
           >
@@ -2065,172 +1247,31 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 </p>
                 <h1>Products</h1>
                 <p class="lede">
-                  Connect a product draft to a formulation and record sourced facts for review-only class screening.
+                  A product is what you sell. Add one and we'll walk you through it: what it is, the pack
+                  details, additives and names, and any claims.
                 </p>
               </div>
               <span class="record-count">{{ records.products }} saved</span>
             </div>
 
             <div class="content-grid">
-              <form
-                class="panel editor-panel"
-                @submit.prevent="saveProduct"
-              >
-                <div class="panel-heading">
-                  <div>
-                    <p class="eyebrow">
-                      NEW DRAFT
-                    </p>
-                    <h2>Product record</h2>
-                  </div>
-                  <span class="draft-pill">Draft</span>
-                </div>
-                <div class="form-grid">
-                  <label class="field full">
-                    <span>Proposed product name <b aria-hidden="true">*</b></span>
-                    <input
-                      v-model="productForm.name"
-                      required
-                      maxlength="120"
-                      autocomplete="off"
-                      placeholder="Working name"
-                    >
-                  </label>
-                  <label class="field full">
-                    <span>Linked formulation <b aria-hidden="true">*</b></span>
-                    <select
-                      v-model="productForm.formulationId"
-                      required
-                    >
-                      <option
-                        value=""
-                        disabled
-                      >Select a formulation</option>
-                      <option
-                        v-for="item in formulations"
-                        :key="item.id"
-                        :value="item.id"
-                      >
-                        {{ item.name }}
-                      </option>
-                    </select>
-                  </label>
-                  <label class="field full">
-                    <span>Food state</span>
-                    <select v-model="productForm.foodState">
-                      <option
-                        value=""
-                        disabled
-                      >Select food state</option>
-                      <option value="asSold">As sold</option>
-                      <option value="asAdded">As added</option>
-                      <option value="asProcessed">As processed</option>
-                      <option value="asPrepared">As prepared</option>
-                      <option value="asReconstituted">As reconstituted</option>
-                      <option value="asDrained">As drained</option>
-                    </select>
-                  </label>
-                </div>
-                <details class="classification-details">
-                  <summary>Classification facts and evidence · review only</summary>
-                  <p class="field-hint">
-                    These questions produce candidate prompts only. Answer from product records and attach dated
-                    references. The product name does not assign a class; uncertain or conflicting facts stay
-                    REVIEW REQUIRED.
-                  </p>
-                  <div class="classification-context">
-                    <label class="field">
-                      <span>Intended use and product purpose</span>
-                      <textarea
-                        :value="classificationProfile.intendedUseDescription"
-                        rows="2"
-                        @input="updateClassificationDescription('intendedUseDescription', $event)"
-                      />
-                    </label>
-                    <label class="field">
-                      <span>Intended consumer or age range</span>
-                      <textarea
-                        :value="classificationProfile.intendedConsumerDescription"
-                        rows="2"
-                        @input="updateClassificationDescription('intendedConsumerDescription', $event)"
-                      />
-                    </label>
-                    <label class="field">
-                      <span>Processing and preparation</span>
-                      <textarea
-                        :value="classificationProfile.processingDescription"
-                        rows="2"
-                        @input="updateClassificationDescription('processingDescription', $event)"
-                      />
-                    </label>
-                    <label class="field">
-                      <span>Product presentation</span>
-                      <textarea
-                        :value="classificationProfile.presentationDescription"
-                        rows="2"
-                        @input="updateClassificationDescription('presentationDescription', $event)"
-                      />
-                    </label>
-                  </div>
-                  <ClassificationEvidenceList
-                    label="Product identity"
-                    description="Attach dated references relevant to the proposed name and product identity."
-                    :model-value="classificationProfile.identityEvidence"
-                    @update:model-value="updateIdentityEvidence"
-                  />
-                  <fieldset class="classification-question-group">
-                    <legend>Formulated caffeinated beverage candidate</legend>
-                    <p class="field-hint">
-                      Screens facts referenced by Standard 2.6.4 and Schedule 15 item 14.1.3. A candidate is not a
-                      confirmed food category.
-                    </p>
-                    <div class="classification-fact-grid">
-                      <ClassificationFactField
-                        v-for="fact in caffeinatedBeverageFacts"
-                        :key="fact.key"
-                        :label="fact.label"
-                        :description="fact.description"
-                        :model-value="classificationProfile.formulatedCaffeinatedBeverage[fact.key]"
-                        @update:model-value="updateCaffeinatedBeverageFact(fact.key, $event)"
-                      />
-                    </div>
-                  </fieldset>
-                  <fieldset class="classification-question-group">
-                    <legend>Food for infants candidate</legend>
-                    <p class="field-hint">
-                      Screens the Standard 2.9.2 definition and listed exclusions against supplied evidence. It does
-                      not decide the product's classification.
-                    </p>
-                    <div class="classification-fact-grid">
-                      <ClassificationFactField
-                        v-for="fact in infantFoodFacts"
-                        :key="fact.key"
-                        :label="fact.label"
-                        :description="fact.description"
-                        :model-value="classificationProfile.foodForInfants[fact.key]"
-                        @update:model-value="updateInfantFoodFact(fact.key, $event)"
-                      />
-                    </div>
-                  </fieldset>
-                </details>
-                <div class="info-callout">
-                  <span aria-hidden="true">i</span>
-                  <p>
-                    Candidate screening does not determine legal classification. Prescribed-name rules are not
-                    activated; additives and claims are not evaluated. This record is a draft, not a compliance
-                    assessment.
-                  </p>
-                </div>
-                <div class="form-actions">
-                  <span class="required-hint"><b aria-hidden="true">*</b> Required</span>
-                  <AppButton type="submit">
-                    Save product draft <span aria-hidden="true">→</span>
-                  </AppButton>
-                </div>
-              </form>
+              <ProductBuilder
+                v-if="productEditor !== undefined && store"
+                :key="productEditor === 'new' ? 'new' : productEditor.id"
+                :store="store"
+                :record="productEditor === 'new' ? undefined : productEditor"
+                :products="products"
+                :formulations="formulations"
+                :ingredients="ingredients"
+                :make-id="makeId"
+                :refresh="refreshRecords"
+                @cancel="productEditor = undefined"
+                @go="activeSection = $event as Section"
+              />
 
               <section
-                class="panel records-panel"
+                v-else
+                class="panel records-panel wide"
                 aria-labelledby="product-records-title"
               >
                 <div class="panel-heading">
@@ -2243,6 +1284,12 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                     </h2>
                   </div>
                   <span class="count-badge">{{ products.length }}</span>
+                  <AppButton
+                    type="button"
+                    @click="productEditor = 'new'"
+                  >
+                    Add product
+                  </AppButton>
                 </div>
                 <div
                   v-if="products.length === 0"
@@ -2305,6 +1352,15 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                         </div>
                       </details>
                     </div>
+                    <AppButton
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      :aria-label="`Edit product ${record.name}`"
+                      @click="productEditor = record"
+                    >
+                      Edit
+                    </AppButton>
                     <AppButton
                       variant="destructive"
                       size="sm"

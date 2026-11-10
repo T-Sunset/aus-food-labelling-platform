@@ -547,3 +547,54 @@ Only one composition-triggered name rule was mapped in Turn 10: Standard 2.9.2-7
 ## 22. Phase 2 Turn 12: workspace integration
 
 The workspace now runs the Turn 6 to 11 evaluators for a product from facts a person confirms and saves on the product record. No new regulatory fact was added. Results use the draft catalogs, so permission, name-candidate and 'sweetened' results are all REVIEW REQUIRED, and the UI labels the data as draft and unreviewed. Not wired: same-purpose mixture, aggregate colour, carry-over and processing-aid checks (review-only); per-ingredient density evidence (per-volume sources need review); the permission calculation-basis text (rows needing it stay review-only). Concentrations use a 100 g ingoing formulation and a no-mass-change confirmation or a saved process profile. Not a compliance conclusion.
+
+## 23. Phase 3 Turn C1: claims research and proposed first supported set
+
+Research only; no rule data, code or activation. Checked 2026-11-10 against the Federal Register of Legislation by the Australian Food Requirements Analyst agent. Not a compliance conclusion. Values below must be re-read against the source when entered as rule data (Turn C4).
+
+**Sources read**
+
+| Source | Compilation and effective date | URL |
+| ------ | ------------------------------ | --- |
+| Standard 1.2.7 Nutrition, health and related claims | F2025C00833, Compilation 8; in force 2025-08-13 | https://www.legislation.gov.au/F2015L00394/2025-08-13/2025-08-13/text/original/epub/OEBPS/document_1/document_1.html |
+| Schedule 4 Nutrition, health and related claims | F2026C00415, Compilation 7; effective 2026-04-30 | https://www.legislation.gov.au/F2015L00474/2026-04-30/2026-04-30/text/original/epub/OEBPS/document_1/document_1.html |
+| Standard 2.9.2 Food for infants | F2024C00903, Compilation 4; effective 2024-09-13 | https://www.legislation.gov.au/F2015L00417/2024-09-13/2024-09-13/text/original/epub/OEBPS/document_1/document_1.html |
+| Standard 2.6.4 Formulated caffeinated beverages | F2015L00467; as-made text checked as in force; commenced 2016-03-01 | https://www.legislation.gov.au/F2015L00467/asmade/2015-04-01/text/original/epub/OEBPS/document_1/document_1.html |
+| Standard 1.2.8 Nutrition information requirements | F2026C00411, Compilation 6; effective 2026-04-30 | https://www.legislation.gov.au/F2015L00395/2026-04-30/2026-04-30/text/original/word |
+
+**Explicit Code text relevant to scope**
+
+- Standard 1.2.7-12 and Schedule 4 S4-3 require both the general conditions and the descriptor-specific conditions to be met. Standard 1.2.7-7 determines the food form (liquid or solid) to which a condition applies; it must not be inferred from a product name.
+- Standard 1.2.7-4 prohibits nutrition content and health claims about kava and infant formula products, and restricts claims on foods above 1.15% alcohol by volume with specified nutrition-content exceptions. It names infant formula products, not all foods for infants. A separate prohibition for cannabidiol in hemp foods is in Standard 1.4.4-7.
+- Standard 2.9.2-8(2): a claim that a food for infants is a source of protein must not be made unless at least 12% of the food's average energy content is derived from protein.
+- Standard 2.6.4-2 defines the food; 2.6.4-5 requires average quantities of caffeine and any listed substance per serving and per 100 mL, plus advisory statements, and says these may not be placed in the NIP. The checked text identified no separate prohibition on Standard 1.2.7 nutrition content claims. These declarations apply independently of any claim.
+- Health claims need a food that passes the NPSC and a permitted general-level or high-level pathway (1.2.7-18; Schedule 4 S4-4, S4-5, S4-6).
+
+**Proposed first supported set (nutrition content claims on nutrients the app already calculates)**
+
+| Claim | Schedule 4 S4-3 threshold | Required inputs | Notes and review boundary |
+| ----- | ------------------------- | --------------- | ------------------------- |
+| Low energy | No more than 80 kJ/100 mL (liquid) or 170 kJ/100 g (solid) | Average energy in the applicable food form and state; confirmed food form; evidence | Not extended to "diet" (extra NPSC and energy-reduction conditions) |
+| Low fat | No more than 1.5 g/100 mL (liquid) or 3 g/100 g (solid) | Average total fat; food form and state; evidence | "Free" is not in the first set |
+| Low sugars | No more than 2.5 g/100 mL (liquid) or 5 g/100 g (solid) | Average sugars; food form and state; evidence | "No added" cannot be decided from nutrient totals |
+| Low sodium | No more than 120 mg/100 mL (liquid) or 120 mg/100 g (solid) | Average sodium; food form and state; evidence | "No added" needs ingredient-level evidence |
+| Good source of dietary fibre | At least 4 g per serving (general condition: at least 2 g per serving) | Average fibre; serving size; preparation or reconstitution basis; evidence | "Excellent source" (7 g) not in the first set |
+
+Both selected cohorts are candidates for these five. Every result stays tied to a person-confirmed food form and serving, and missing values are REVIEW REQUIRED, never zero.
+
+**Review-only or unsupported in the first set**
+
+- Protein claims: general condition of at least 5 g protein per serving (except low or reduced) and a Good source threshold of 10 g per serving, but the infant-specific 12%-of-energy condition and the "source" wording need a reviewed rule. Not enabled.
+- Saturated fat: standalone mapping not verified against the saturated-and-trans-fat conditions; trans-fat inputs needed. Not enabled.
+- Carbohydrate: reduced or light/lite claims are comparative (at least 25% less than a reference food); the app's carbohydrate figure alone cannot support them. Low carbohydrate is not in the checked table conditions.
+- Comparative claims (reduced, increased, light/lite): need a reference food and the difference shown with the claim. Exact section number TO BE VERIFIED.
+- Health claims: screening and flag only; no NPSC calculation, pre-approved list matching or self-substantiation in this set.
+- "No added", "free", "natural" and other claims not covered by this research: no automated conclusion; Australian Consumer Law context and human review.
+- Infant formula products: claims are prohibited (1.2.7-4); out of scope.
+
+**Verified in the checked text:** source identities and dates; the five thresholds and descriptors; the infant formula restriction in 1.2.7-4; the infant protein condition in 2.9.2-8(2); the health-claim and NPSC framework in 1.2.7-18; the 2.6.4-5 declarations.
+
+**Not verified or not mapped:** the comparative-claim section number; the full claimed-nutrient to NIP-row mapping (Standard 1.2.8-6 and Schedule 12 are relevant); saturated-fat-only conditions; wording equivalence; "no added" and "free" as executable rules; product-specific classification as an infant food or formulated caffeinated beverage; whether particular protein-source wording triggers 2.9.2-8(2). Reviewer questions R5-C1-01 to R5-C1-06 are in `docs/reviewer-questions.md`.
+
+
+**C4 re-verification (2026-11-10):** the five thresholds in this section were re-read against Schedule 4 S4-3 (F2026C00415) and matched: Energy Low 80 kJ/100 mL, 170 kJ/100 g; Fat Low 1.5 g/100 mL, 3 g/100 g; Sugar or sugars Low 2.5 g/100 mL, 5 g/100 g; Salt or sodium Low 120 mg per 100 mL or 100 g; Dietary fibre general condition 2 g per serving and Good source 4 g per serving. Standard 1.2.7-4, -7 and -12 were re-read for the restrictions, food form and synonym wording. The rules are in the draft claim catalog; they are not reviewed.

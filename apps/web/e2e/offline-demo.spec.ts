@@ -16,7 +16,7 @@ test('loads the illustrative workflow and exports a PDF while offline', async ({
   await expect(page.getByText('No approved prescribed-name candidate rules; human review required'))
     .toBeVisible();
 
-  await page.getByRole('button', { name: 'Label layout & PDF' }).click();
+  await page.getByRole('button', { name: 'Labels', exact: true }).click();
   await expect(page.getByText('PDF renderer loaded locally for this session.')).toBeVisible();
   await expect(
     page.getByRole('img', {
@@ -33,7 +33,7 @@ test('loads the illustrative workflow and exports a PDF while offline', async ({
   )
     .toBeVisible();
 
-  await page.getByRole('button', { name: 'Label layout & PDF' }).click();
+  await page.getByRole('button', { name: 'Labels', exact: true }).click();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export illustrative PDF draft' }).click();
   const download = await downloadPromise;

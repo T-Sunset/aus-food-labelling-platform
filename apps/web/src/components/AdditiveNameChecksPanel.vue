@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import type { EngineResult, PrescribedNameCohortId, ProductAdditiveNameInputs } from '@aus-food/domain';
+import type { EngineResult, IllustrativeResult, PrescribedNameCohortId, ProductAdditiveNameInputs } from '@aus-food/domain';
 import type {
   FormulationRecord,
   IngredientRecord,
@@ -8,7 +8,10 @@ import type {
   ProductRecord,
 } from '@aus-food/storage';
 import { buildAdditiveNameReport } from '../additive-name-checks';
+import { illustrativePreviewOn } from '../illustrative-state';
 import { permissionCatalog, RULE_RELEASE_LABEL } from '../rule-data';
+import IllustrativeNote from './IllustrativeNote.vue';
+import IllustrativeToggle from './IllustrativeToggle.vue';
 import AppButton from './ui/button/AppButton.vue';
 
 const props = defineProps<{
@@ -16,6 +19,7 @@ const props = defineProps<{
   products: readonly ProductRecord[];
   formulations: readonly FormulationRecord[];
   ingredients: readonly IngredientRecord[];
+  productId?: string;
 }>();
 const emit = defineEmits<{ saved: [] }>();
 
@@ -49,7 +53,9 @@ const selectedProduct = computed(() =>
 watch(
   () => props.products,
   (products) => {
-    if (!products.some((product) => product.id === selectedProductId.value)) {
+    if (props.productId !== undefined) {
+      selectedProductId.value = props.productId;
+    } else if (!products.some((product) => product.id === selectedProductId.value)) {
       selectedProductId.value = products[0]?.id ?? '';
     }
   },
@@ -78,7 +84,7 @@ watch(
 
 const report = computed(() =>
   selectedProduct.value
-    ? buildAdditiveNameReport(selectedProduct.value, props.formulations, props.ingredients)
+    ? buildAdditiveNameReport(selectedProduct.value, props.formulations, props.ingredients, illustrativePreviewOn.value)
     : undefined,
 );
 
@@ -88,10 +94,18 @@ interface ResultCard {
   result: EngineResult<unknown>;
   reasons: readonly string[];
   detail: readonly string[];
+  preview?: IllustrativeResult<unknown> | undefined;
 }
 
-function card(key: string, heading: string, result: EngineResult<unknown>, reasons: readonly string[], detail: readonly string[] = []): ResultCard {
-  return { key, heading, result, reasons, detail };
+function card(
+  key: string,
+  heading: string,
+  result: EngineResult<unknown>,
+  reasons: readonly string[],
+  detail: readonly string[] = [],
+  preview?: IllustrativeResult<unknown>,
+): ResultCard {
+  return { key, heading, result, reasons, detail, preview };
 }
 
 const resultCards = computed<ResultCard[]>(() => {
@@ -111,6 +125,7 @@ const resultCards = computed<ResultCard[]>(() => {
       concentration.status === 'calculated'
         ? [`Calculated final concentration: ${concentration.value} ${concentration.unit} (from ${concentration.contributions.length} source record(s))`]
         : [`Concentration not calculated: ${concentration.reasons.join(', ')}`, ...concentration.detail],
+      additive.preview,
     ));
   }
   if (current.names) {
@@ -118,7 +133,7 @@ const resultCards = computed<ResultCard[]>(() => {
       (current.names.value?.candidates ?? []).map((item) => `${item.provision}: ${item.requirement}`)));
   }
   if (current.sweetened) {
-    cards.push(card('sweetened', "Infant food 'sweetened' word", current.sweetened, current.sweetened.value?.reasons ?? []));
+    cards.push(card('sweetened', "Infant food 'sweetened' word", current.sweetened, current.sweetened.value?.reasons ?? [], [], current.sweetenedPreview));
   }
   return cards;
 });
@@ -167,8 +182,11 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <section class="page">
-    <div class="page-heading compact">
+  <section :class="productId === undefined ? 'page' : 'embedded'">
+    <div
+      v-if="productId === undefined"
+      class="page-heading compact"
+    >
       <div>
         <p class="eyebrow">
           ADDITIVES &amp; PRESCRIBED NAMES
@@ -199,7 +217,10 @@ async function save(): Promise<void> {
     </section>
 
     <template v-else>
-      <label class="field">
+      <label
+        v-if="productId === undefined"
+        class="field"
+      >
         <span>Product draft</span>
         <select v-model="selectedProductId">
           <option
@@ -338,6 +359,8 @@ async function save(): Promise<void> {
         {{ report.error }}
       </div>
 
+      <IllustrativeToggle />
+
       <section
         v-if="report"
         class="panel"
@@ -424,6 +447,11 @@ async function save(): Promise<void> {
               </li>
             </ul>
           </details>
+          <IllustrativeNote
+            v-if="item.preview"
+            :preview="item.preview"
+            :label="item.heading"
+          />
           <p class="field-hint">
             {{ item.result.nonCertificationStatement }}
           </p>
