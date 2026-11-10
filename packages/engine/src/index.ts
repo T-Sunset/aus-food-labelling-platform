@@ -20,6 +20,8 @@ export { calculateSchedule11Energy } from './energy.js';
 export { propagateAllergens } from './allergens.js';
 export { orderIngredientDeclaration } from './ingredient-declaration.js';
 export { traceAdditiveAllergenEvidence, traceAdditiveSources } from './additive-sources.js';
+export { evaluateAdditivePermission } from './additive-permission.js';
+export { calculateAdditiveFinalConcentration } from './additive-concentration.js';
 export { formatAdditiveDeclarationCandidate } from './additive-declaration.js';
 export {
   createEmptyProductClassificationProfile,

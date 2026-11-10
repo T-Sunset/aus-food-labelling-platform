@@ -207,8 +207,8 @@ broadening or guessing the scope.
 | 3 | [x] Add first-class additive source records and capture workflow: identity/code, purpose, concentration, unit/basis, source evidence/date, ingredient path, and added/carried-over/processing-aid status. | Validation preserves provenance and nested source paths; missing purpose, concentration or evidence stays unknown/REVIEW REQUIRED. Complete 2026-11-09; capture only, no permission or exemption result. |
 | 4 | [x] Map additive declaration names separately from permission: versioned Schedule 7 class-name and Schedule 8 name/code data, declaration choice, ingredient-order placement and allergen inheritance. | Declaration mapping has exact sources and tests for supported options; unsupported naming cases remain review-only and no permission is inferred from a declaration. Complete 2026-11-09: 25 Schedule 7 class names and both 344-row Schedule 8 listings are source-linked; four listing differences are preserved and no class crosswalk is inferred. All candidates remain REVIEW REQUIRED. |
 | 5 | [x] Build versioned, source-validated permission data for only the mapped cohorts from Standard 1.3.1 and applicable Schedules 14–16, including inherited category headings, purposes, limits, GMP entries, conditions and equivalents where verified. | Validation rejects missing or stale source metadata, ambiguous category rows and unsupported conditions. Candidate data remains inactive until its reviewer gate is met. Complete 2026-11-09: added 59 Schedule 15 rows, 3 Schedule 16 type-level candidates, 21 Schedule 14 purposes and 7 calculation bases; classification and permission remain review-only. |
-| 6 | Implement pure permission evaluation for pinned food category, additive identity, technological purpose, food state and the mapped rule conditions. Return a trace with the provision, version, selected row, inputs and explanation. | Tests cover permitted, prohibited, conditional, missing and unmapped cases. Unverified or incomplete mappings cannot produce deterministic results. |
-| 7 | Calculate final-food additive concentrations across direct and nested sources, with explicit unit conversion, mass/volume density evidence, documented yield and applicable as-sold/prepared/reconstituted/drained basis. | Boundary and property tests verify source sums, units and denominator; missing concentration, density, yield or state returns REVIEW REQUIRED rather than zero. |
+| 6 | [x] Implement pure permission evaluation for pinned food category, additive identity, technological purpose, food state and the mapped rule conditions. Return a trace with the provision, version, selected row, inputs and explanation. | Tests cover permitted, prohibited, conditional, missing and unmapped cases. Unverified or incomplete mappings cannot produce deterministic results. Complete 2026-11-09: `evaluateAdditivePermission` is pure and returns a trace; PASS/FAIL needs Provision-level confidence, reviewed data, a person-confirmed category and a single reviewed row. Every shipped draft row evaluates to REVIEW REQUIRED. |
+| 7 | [x] Calculate final-food additive concentrations across direct and nested sources, with explicit unit conversion, mass/volume density evidence, documented yield and applicable as-sold/prepared/reconstituted/drained basis. | Boundary and property tests verify source sums, units and denominator; missing concentration, density, yield or state returns REVIEW REQUIRED rather than zero. Complete 2026-11-10: `calculateAdditiveFinalConcentration` sums added sources across nested paths over the documented final mass; per-volume sources and mg/L results need dated density evidence; other bases, non-added sources and missing data are review-only. Not yet wired to the permission evaluator or the UI. |
 | 8 | Evaluate same-technological-purpose mixtures and any separately applicable aggregate-colour limits, including verified “calculated as” equivalents. | Tests cover applicability and non-applicability, each contributor, below/equal/above boundaries and missing equivalents. No mixture or colour rule is generalized beyond its mapped provision. |
 | 9 | Map and implement carry-over, processing-aid and incidental-presence paths as distinct cases, using the exact applicable Code conditions and user-supplied evidence. | Tests show permitted, exceeded, missing-evidence and uncertain cases. A status flag alone cannot establish an exemption; unresolved cases remain review-only. |
 | 10 | Create versioned prescribed-name candidate rules for the mapped cohort classes, including trigger terms, exclusions, required identity/composition/process facts, source and mapping confidence. | Candidate identification always distinguishes “no rule identified” from PASS; unsupported or uncertain classes produce a review task, never an inferred prescribed name. |
@@ -396,6 +396,8 @@ Phase 2 groundwork - current workstream
 - [x] Turn 3: additive source capture with provenance and nested ingredient paths; no permission or exemption result.
 - [x] Turn 4: Schedule 7/8 declaration-name data and review-only declaration candidates; no permission crosswalk.
 - [x] Turn 5: source-validated, review-only additive permission catalog for the selected cohorts; no evaluation or activation.
+- [x] Turn 6: pure, trace-producing permission evaluator; review-only against the shipped draft data.
+- [x] Turn 7: final-food additive concentration calculation (units, density, yield, basis); review-only when data is missing.
 - Deterministic additive and prescribed-name results remain blocked on R4 and applicable reviewer-verified fixtures.
 
 Phases 3 to 6: not started.
@@ -584,8 +586,17 @@ Phase 1 manual demo: complete the flow offline; restore an encrypted backup on a
   Schedule 16 membership and category/product mappings remain explicit.
   Validation and tests prevent activation while any entry remains unreviewed;
   no permission evaluator or deterministic result was added.
+- 2026-11-09: Completed Phase 2 Turn 6 with a pure additive permission
+  evaluator in `packages/engine`. It returns a trace (rule, selected row,
+  inputs, explanation). PASS/FAIL requires Provision-level mapping confidence,
+  reviewed catalog/category/row data, a person-confirmed category, Schedule 14
+  purpose, matching unit and calculation basis, and no conditions or
+  aggregation. A missing row is never FAIL. All shipped draft data stays
+  REVIEW REQUIRED (guard test in `scripts/`). Concentration calculation,
+  mixtures, carry-over and the UI are not included.
 - 2026-11-09: At the product owner's direction, split Phase 1's reviewer-ready
   engineering baseline from reviewer acceptance. Began the bounded Phase 2
   groundwork workstream; R3 fixtures, print-scale acceptance and other
   applicable reviewer gates remain required before deterministic results or
   public release.
+- 2026-11-10: Completed Phase 2 Turn 7 with a pure final-food additive concentration calculator (direct and nested sources, explicit unit conversion, density evidence, documented yield). Missing or unsupported inputs return REVIEW REQUIRED; no compliance result and no UI wiring.

@@ -574,6 +574,14 @@ maximum remains explicitly unverified. This is data and validation groundwork
 for ADD-001 through ADD-003, ADD-008 and ADD-010, not permission evaluation or
 a compliance result.
 
+Turn 6 adds a pure evaluator for ADD-002, ADD-003 and ADD-008 that returns a
+trace. It yields PASS or FAIL only for a reviewed, unconditional,
+non-aggregated row selected under a person-confirmed category at
+Provision-level confidence; every other case, including a missing row, is
+`REVIEW REQUIRED`. Conditions are listed, not evaluated. Against the shipped
+draft catalog every result is `REVIEW REQUIRED`; this is not a compliance
+conclusion.
+
 ### 6.6 Prescribed-name validation
 
 REG-ADD-005 and REG-ADD-006 in 6.3 are realised by NAME-001 to NAME-003.

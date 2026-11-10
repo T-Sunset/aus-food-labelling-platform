@@ -164,6 +164,99 @@ export interface AdditiveDeclarationCandidate {
   readonly explanation: string;
 }
 
+export type AdditivePermissionFoodState = 'asSold' | 'asPrepared' | 'asReconstituted' | 'asDrained';
+
+export interface AdditivePermissionCatalogRow {
+  readonly id: string;
+  readonly categoryId: string;
+  readonly additiveIdentifiers: readonly string[];
+  readonly calculationBasisIds: readonly string[];
+  readonly description: string;
+  readonly limit: {
+    readonly type: 'GMP' | 'maximum';
+    readonly printedValue?: string;
+    readonly unit: 'not-applicable' | 'mg/kg-default' | 'mg/L';
+    readonly reviewStatus: 'draft' | 'reviewed';
+  };
+  readonly conditions: readonly { readonly type: 'sourceText'; readonly text: string }[];
+  readonly aggregationGroup?: string;
+  readonly sourceValidation: 'transcribed' | 'table-presentation-unverified';
+  readonly sourceIds: readonly string[];
+  readonly reviewStatus: 'draft' | 'reviewed';
+}
+
+export interface AdditivePermissionCatalogView {
+  readonly version: string;
+  readonly checkedOn: string;
+  readonly status: 'draft' | 'reviewed';
+  readonly categories: readonly {
+    readonly id: string;
+    readonly code: string;
+    readonly name: string;
+    readonly reviewStatus: 'draft' | 'reviewed';
+  }[];
+  readonly typeGrants: readonly { readonly categoryId: string; readonly description: string }[];
+  readonly rows: readonly AdditivePermissionCatalogRow[];
+  readonly calculationBases: readonly {
+    readonly id: string;
+    readonly calculatedAs: string;
+  }[];
+  readonly purposes: readonly {
+    readonly name: string;
+    readonly subClasses: readonly string[];
+  }[];
+}
+
+export interface AdditivePermissionEvaluationInput {
+  readonly catalog: AdditivePermissionCatalogView;
+  readonly rule: RuleTraceMetadata;
+  // Category id the user or reviewer has confirmed; screening candidates are not enough.
+  readonly confirmedCategoryId?: string | undefined;
+  readonly additiveCodeNumber?: string | undefined;
+  readonly technologicalPurpose?: string | undefined;
+  readonly foodState?: AdditivePermissionFoodState | undefined;
+  readonly sourceStatus: AdditiveSourceStatus;
+  readonly gmpConfirmed?: boolean | undefined;
+  readonly finalConcentration?: {
+    readonly value: string;
+    readonly unit: 'mg/kg' | 'mg/L';
+    readonly calculatedAs?: string | undefined;
+  } | undefined;
+  readonly evidence?: { readonly reference: string; readonly sourceDate: string } | undefined;
+  readonly sourcePath?: readonly string[] | undefined;
+}
+
+export type AdditivePermissionReviewReason =
+  | 'RULE_BELOW_PROVISION_CONFIDENCE'
+  | 'CATALOG_NOT_REVIEWED'
+  | 'CATEGORY_NOT_CONFIRMED'
+  | 'CATEGORY_NOT_IN_CATALOG'
+  | 'ADDITIVE_IDENTITY_MISSING'
+  | 'PURPOSE_MISSING'
+  | 'PURPOSE_NOT_IN_SCHEDULE_14'
+  | 'FOOD_STATE_MISSING'
+  | 'SOURCE_STATUS_NOT_ADDED'
+  | 'NO_ROW_IDENTIFIED'
+  | 'AMBIGUOUS_ROWS'
+  | 'ROW_NOT_REVIEWED'
+  | 'ROW_SOURCE_UNVERIFIED'
+  | 'ROW_CONDITIONS_NOT_EVALUATED'
+  | 'ROW_AGGREGATED_LIMIT'
+  | 'GMP_NOT_CONFIRMED'
+  | 'CONCENTRATION_MISSING'
+  | 'EVIDENCE_MISSING'
+  | 'UNIT_MISMATCH'
+  | 'CALCULATION_BASIS_MISMATCH';
+
+export interface AdditivePermissionEvaluationValue {
+  readonly outcome: 'within_limit' | 'exceeds_limit' | 'permitted_at_gmp' | 'review';
+  readonly reasons: readonly AdditivePermissionReviewReason[];
+  readonly selectedRowId?: string | undefined;
+  readonly categoryId?: string | undefined;
+  readonly maximum?: { readonly value: string; readonly unit: string } | undefined;
+  readonly conditions: readonly string[];
+}
+
 export interface MassQuantity {
   readonly value: string;
   readonly unit: MassUnit;
@@ -226,6 +319,67 @@ export type ProcessMassBalance =
       readonly finalMass: MassQuantity;
       readonly yieldPercentage: string;
       readonly changes: readonly ProcessMassChange[];
+    };
+
+export type AdditiveConcentrationOutputUnit = 'mg/kg' | 'mg/L';
+
+export interface AdditiveDensityEvidence {
+  readonly gramsPerMillilitre: string;
+  readonly evidenceReference: string;
+  readonly sourceDate: string;
+}
+
+export type AdditiveConcentrationReviewReason =
+  | 'ADDITIVE_CODE_MISSING'
+  | 'FOOD_STATE_MISSING'
+  | 'PROCESS_MASS_PROFILE_MISSING'
+  | 'NO_MATCHING_SOURCE'
+  | 'SOURCE_IDENTITY_MISSING'
+  | 'SOURCE_NOT_ADDED'
+  | 'CONCENTRATION_MISSING'
+  | 'EVIDENCE_MISSING'
+  | 'BASIS_NOT_SUPPORTED'
+  | 'INGREDIENT_DENSITY_MISSING'
+  | 'FINAL_DENSITY_MISSING';
+
+export interface AdditiveConcentrationContribution {
+  readonly sourceId: string;
+  readonly ingredientId: string;
+  readonly sourcePath: readonly string[];
+  readonly ingredientMass: MassQuantity;
+  readonly additiveMilligrams: string;
+  readonly evidenceReference: string;
+  readonly evidenceDate: string;
+}
+
+export interface AdditiveFinalConcentrationInput {
+  readonly additiveCodeNumber?: string | undefined;
+  readonly foodState?: AdditivePermissionFoodState | undefined;
+  readonly outputUnit: AdditiveConcentrationOutputUnit;
+  readonly ingredients: readonly ExpandedIngredient[];
+  readonly sourcesByIngredient: ReadonlyMap<string, readonly IngredientAdditiveSource[]>;
+  readonly processBalance: ProcessMassBalance;
+  readonly ingredientDensities?: ReadonlyMap<string, AdditiveDensityEvidence> | undefined;
+  readonly finalDensity?: AdditiveDensityEvidence | undefined;
+}
+
+export type AdditiveFinalConcentration =
+  | {
+      readonly status: 'review_required';
+      readonly reasons: readonly AdditiveConcentrationReviewReason[];
+      readonly detail: readonly string[];
+    }
+  | {
+      readonly status: 'calculated';
+      readonly additiveCodeNumber: string;
+      readonly foodState: AdditivePermissionFoodState;
+      readonly value: string;
+      readonly unit: AdditiveConcentrationOutputUnit;
+      readonly totalAdditiveMilligrams: string;
+      readonly finalMass: MassQuantity;
+      readonly yieldPercentage: string;
+      readonly finalDensity?: AdditiveDensityEvidence;
+      readonly contributions: readonly AdditiveConcentrationContribution[];
     };
 
 export type NutrientId =

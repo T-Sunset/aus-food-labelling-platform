@@ -441,7 +441,7 @@ gates or enable final declarations.
 
 ## 14. Recommended next actions
 
-1. Proceed to Turn 6 with pure, trace-producing permission evaluation only for fully mapped inputs; preserve `REVIEW REQUIRED` for candidate, incomplete and unsupported cases.
+1. Turns 6 and 7 (permission evaluation and final-food concentration calculation) are complete; proceed to Turn 8 (mixtures and aggregate limits), keeping `REVIEW REQUIRED` for candidate, incomplete and unsupported cases.
 2. Before deterministic rule activation, resolve additive row crosswalks, prescribed-name coverage, source versions and transitions, and obtain reviewer verification of product-specific classifications and fixtures.
 3. Keep unsupported categories, unresolved exemptions, uncertain name classification and all unverified evidence in `REVIEW REQUIRED`. This research does not certify a product or label as compliant.
 
@@ -509,3 +509,11 @@ additive-to-purpose/identity mappings, the infant-food INS 414 table
 presentation, complete permission coverage for either cohort, all applicable
 transitions, or reviewer acceptance. Continue to treat affected cases as
 `REVIEW REQUIRED`; no catalog entry certifies product compliance.
+
+## 16. Phase 2 Turn 6: permission evaluator
+
+The evaluator (packages/engine) applies the Turn 5 draft catalog as data and adds no regulatory facts. PASS or FAIL needs Provision-level mapping confidence, reviewed catalog, category and row, a person-confirmed category, an added-source additive with a Schedule 14 purpose, one matching row, no source-text conditions or aggregation, a matching unit and calculation basis, and dated evidence. A missing row is REVIEW REQUIRED, never FAIL, because Schedule 16 memberships are not transcribed. The row's applicable food state and Schedule 15 default unit for beverages are not modelled; unit mismatches go to review. Every shipped draft row evaluates to REVIEW REQUIRED. Activation still needs R4 and reviewer-verified fixtures. This is not a compliance conclusion.
+
+## 17. Phase 2 Turn 7: final-food additive concentration
+
+A pure calculation (packages/engine) adds no regulatory facts. It sums additive mass from every added source of one additive code across nested ingredient paths and divides by the final mass from a documented process-mass profile (an empty profile documents 100% yield). Units are converted explicitly; per-volume sources and mg/L results need dated density evidence. Review-required, never zero: missing code, food state, profile, concentration, evidence or density; sources without a code number; no matching source. Carry-over, processing-aid and unknown sources, and dry-matter, prepared, reconstituted and drained bases, are not converted (Turn 9 and later). The food state is recorded, not derived; for prepared or reconstituted states the process profile must include the added water. Output is not yet fed to the permission evaluator and is not a compliance conclusion.
