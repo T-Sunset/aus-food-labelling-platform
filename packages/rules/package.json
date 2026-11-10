@@ -7,7 +7,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./release-0.1.0-draft.json": "./data/release-0.1.0-draft.json"
   },
   "scripts": {
     "build": "tsc -b"

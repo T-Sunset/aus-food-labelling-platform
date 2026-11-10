@@ -36,6 +36,17 @@ function markDeclarationCatalogReviewed(candidate: Record<string, unknown>): voi
   }
 }
 
+function markNameCatalogReviewed(candidate: Record<string, unknown>): void {
+  const catalog = candidate.prescribedNameCandidateCatalog as {
+    status: string;
+    rules: { reviewStatus: string }[];
+  };
+  catalog.status = 'reviewed';
+  for (const rule of catalog.rules) {
+    rule.reviewStatus = 'reviewed';
+  }
+}
+
 function markPermissionCatalogReviewed(candidate: Record<string, unknown>): void {
   const catalog = candidate.additivePermissionCatalog as {
     status: string;
@@ -433,6 +444,7 @@ describe('rule release validation', () => {
     }
     markDeclarationCatalogReviewed(fullyReviewed);
     markPermissionCatalogReviewed(fullyReviewed);
+    markNameCatalogReviewed(fullyReviewed);
     expect(() => validateRuleRelease(fullyReviewed)).not.toThrow();
 
     const unreviewedVocabularyEntry = cloneRelease();
@@ -446,6 +458,31 @@ describe('rule release validation', () => {
     (unreviewedVocabularyEntry.allergenVocabulary as { status: string }).status = 'reviewed';
     markDeclarationCatalogReviewed(unreviewedVocabularyEntry);
     expectInvalid(unreviewedVocabularyEntry, 'must be reviewed before release activation');
+  });
+
+  it('validates the prescribed-name candidate catalog', () => {
+    const unknownSource = cloneRelease();
+    (unknownSource.prescribedNameCandidateCatalog as {
+      rules: { sourceIds: string[] }[];
+    }).rules[0]!.sourceIds = ['SRC-MISSING'];
+    expectInvalid(unknownSource, 'references missing source "SRC-MISSING"');
+
+    const weakName = cloneRelease();
+    const weakRule = (weakName.prescribedNameCandidateCatalog as {
+      rules: { kind: string; mappingConfidence: string }[];
+    }).rules[0]!;
+    weakRule.mappingConfidence = 'Guidance-only';
+    expectInvalid(weakName, 'is too weak for a name rule');
+
+    const badCohort = cloneRelease();
+    (badCohort.prescribedNameCandidateCatalog as {
+      rules: { cohort: string }[];
+    }).rules[0]!.cohort = 'other';
+    expectInvalid(badCohort, 'must be a supported MVP cohort');
+
+    const unreviewed = cloneRelease();
+    unreviewed.status = 'active';
+    expectInvalid(unreviewed, 'prescribedNameCandidateCatalog.status: must be reviewed before release activation');
   });
 
   it('blocks activation while a permission-catalog entry remains unreviewed', () => {

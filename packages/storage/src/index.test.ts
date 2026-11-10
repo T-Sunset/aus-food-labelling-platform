@@ -326,6 +326,43 @@ describe('local draft repositories', () => {
 
     expect(await store.products.get(product.id)).toEqual(productWithClassification);
   });
+
+  it('stores and validates person-entered additive and name inputs on a product', async () => {
+    const store = await openTestStore();
+    const withInputs: ProductRecord = {
+      ...product,
+      additiveNameInputs: {
+        confirmedCohorts: ['food_for_infants'],
+        additiveCategoryId: 'category-13-2',
+        outputUnit: 'mg/kg',
+        noProcessMassChangeConfirmed: true,
+        gmpConfirmed: false,
+        addedSugarsPer100g: '4.5',
+        sugarsBasisConfirmed: true,
+        evidence: { reference: 'calc sheet', sourceDate: '2026-11-10' },
+        finalDensity: { gramsPerMillilitre: '1.03', evidenceReference: 'lab note', sourceDate: '2026-11-10' },
+      },
+    };
+    await store.products.create(withInputs);
+    expect(await store.products.get(product.id)).toEqual(withInputs);
+
+    const invalid: Record<string, unknown>[] = [
+      { confirmedCohorts: ['bread'] },
+      { confirmedCohorts: ['food_for_infants', 'food_for_infants'] },
+      { confirmedCohorts: [], addedSugarsPer100g: '-1' },
+      { confirmedCohorts: [], addedSugarsPer100g: 'abc' },
+      { confirmedCohorts: [], outputUnit: 'g/kg' },
+      { confirmedCohorts: [], evidence: { reference: '', sourceDate: '2026-11-10' } },
+      { confirmedCohorts: [], evidence: { reference: 'x', sourceDate: 'tomorrow' } },
+      { confirmedCohorts: [], finalDensity: { gramsPerMillilitre: '0', evidenceReference: 'x', sourceDate: '2026-11-10' } },
+      { confirmedCohorts: [], gmpConfirmed: 'yes' },
+    ];
+    for (const additiveNameInputs of invalid) {
+      await expect(
+        store.products.update(product.id, { additiveNameInputs } as never),
+      ).rejects.toBeInstanceOf(RecordValidationError);
+    }
+  });
 });
 
 describe('immutable approved versions', () => {

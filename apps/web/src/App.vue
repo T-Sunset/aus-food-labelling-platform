@@ -12,6 +12,7 @@ import {
 } from '@aus-food/engine';
 import AppButton from './components/ui/button/AppButton.vue';
 import BackupPanel from './components/BackupPanel.vue';
+import AdditiveNameChecksPanel from './components/AdditiveNameChecksPanel.vue';
 import ClassificationEvidenceList from './components/ClassificationEvidenceList.vue';
 import ClassificationFactField from './components/ClassificationFactField.vue';
 import LabelExportPanel from './components/LabelExportPanel.vue';
@@ -59,6 +60,7 @@ type Section =
   | 'products'
   | 'review'
   | 'labels'
+  | 'additives'
   | 'backup';
 type FormulationLineDraft = {
   kind: 'ingredient' | 'formulation';
@@ -234,6 +236,7 @@ const sections: { id: Section; label: string }[] = [
   { id: 'formulations', label: 'Formulations' },
   { id: 'products', label: 'Products' },
   { id: 'review', label: 'Review & trace' },
+  { id: 'additives', label: 'Additives & names' },
   { id: 'labels', label: 'Label layout & PDF' },
   { id: 'backup', label: 'Backup & restore' },
 ];
@@ -2024,6 +2027,19 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
             <BackupPanel
               :store="store"
               @restored="refreshRecords"
+            />
+          </section>
+
+          <section
+            v-else-if="activeSection === 'additives' && store"
+            class="page"
+          >
+            <AdditiveNameChecksPanel
+              :store="store"
+              :products="products"
+              :formulations="formulations"
+              :ingredients="ingredients"
+              @saved="refreshRecords"
             />
           </section>
 

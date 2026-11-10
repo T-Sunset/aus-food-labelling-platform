@@ -249,6 +249,36 @@ export interface AdditivePermissionCatalog {
   readonly reviewNotes: readonly string[];
 }
 
+export type PrescribedNameCandidateKind =
+  | 'prescribed_name'
+  | 'name_linked_requirement'
+  | 'no_prescribed_name_identified';
+
+export interface PrescribedNameCandidateRule {
+  readonly id: string;
+  readonly cohort: 'formulated_caffeinated_beverage' | 'food_for_infants';
+  readonly kind: PrescribedNameCandidateKind;
+  readonly provision: string;
+  readonly sourceIds: readonly string[];
+  readonly mappingConfidence: MappingConfidence;
+  readonly labelTextTerms: readonly string[];
+  readonly ingredientTerms: readonly string[];
+  readonly triggerSummary: string;
+  readonly exclusions: readonly string[];
+  readonly requiredFacts: readonly string[];
+  readonly requirement: string;
+  readonly reviewStatus: 'draft' | 'reviewed';
+}
+
+export interface PrescribedNameCandidateCatalog {
+  readonly version: string;
+  readonly checkedOn: string;
+  readonly status: 'draft' | 'reviewed';
+  readonly sourceIds: readonly string[];
+  readonly rules: readonly PrescribedNameCandidateRule[];
+  readonly reviewNotes: readonly string[];
+}
+
 export interface RuleReleaseManifest {
   readonly id: string;
   readonly version: string;
@@ -262,6 +292,7 @@ export interface RuleReleaseManifest {
   readonly allergenVocabulary: AllergenVocabularyDraft;
   readonly additiveDeclarationCatalog: AdditiveDeclarationCatalog;
   readonly additivePermissionCatalog: AdditivePermissionCatalog;
+  readonly prescribedNameCandidateCatalog: PrescribedNameCandidateCatalog;
 }
 
 export interface RuleValidationIssue {
@@ -409,6 +440,9 @@ export function validateRuleRelease(value: unknown): asserts value is RuleReleas
   if (!isRecord(value.additivePermissionCatalog)) {
     issues.push({ path: 'release.additivePermissionCatalog', message: 'must be an object' });
   }
+  if (!isRecord(value.prescribedNameCandidateCatalog)) {
+    issues.push({ path: 'release.prescribedNameCandidateCatalog', message: 'must be an object' });
+  }
 
   if (issues.length > 0) {
     throw new RuleValidationError(issues);
@@ -419,6 +453,7 @@ export function validateRuleRelease(value: unknown): asserts value is RuleReleas
   const fixtures = value.fixtures as unknown[];
   const additiveDeclarationCatalog = value.additiveDeclarationCatalog as Record<string, unknown>;
   const additivePermissionCatalog = value.additivePermissionCatalog as Record<string, unknown>;
+  const nameCatalog = value.prescribedNameCandidateCatalog as Record<string, unknown>;
   const sourceById = new Map<string, Record<string, unknown>>();
   const ruleById = new Map<string, Record<string, unknown>>();
   const fixtureById = new Map<string, Record<string, unknown>>();
@@ -1303,7 +1338,112 @@ export function validateRuleRelease(value: unknown): asserts value is RuleReleas
     issues.push({ path: `${permissionPath}.reviewNotes`, message: 'must contain non-empty review notes' });
   }
 
+  const namePath = 'release.prescribedNameCandidateCatalog';
+  addRequiredStringIssue(issues, nameCatalog.version, `${namePath}.version`);
+  addDateIssue(issues, nameCatalog.checkedOn, `${namePath}.checkedOn`);
+  if (!['draft', 'reviewed'].includes(String(nameCatalog.status))) {
+    issues.push({ path: `${namePath}.status`, message: 'has an unsupported status' });
+  }
+  const checkNameSources = (ids: unknown, path: string, checkDate: boolean): void => {
+    if (!isUniqueNonEmptyList(ids)) {
+      issues.push({ path, message: 'must contain unique source IDs' });
+      return;
+    }
+    for (const sourceId of ids) {
+      const source = sourceById.get(sourceId);
+      if (source === undefined) {
+        issues.push({ path, message: `references missing source "${sourceId}"` });
+      } else if (source.verificationStatus !== 'primary-source-verified') {
+        issues.push({ path, message: `source "${sourceId}" needs a primary-source recheck` });
+      } else if (checkDate && source.checkedOn !== nameCatalog.checkedOn) {
+        issues.push({ path, message: `source "${sourceId}" was not rechecked on the catalog date` });
+      }
+    }
+  };
+  checkNameSources(nameCatalog.sourceIds, `${namePath}.sourceIds`, true);
+  const nameCatalogSourceIds = new Set(
+    Array.isArray(nameCatalog.sourceIds) ? nameCatalog.sourceIds.filter(isNonEmpty) : [],
+  );
+  const nameRuleIds = new Set<string>();
+  const nameCohorts = ['formulated_caffeinated_beverage', 'food_for_infants'];
+  const nameKinds = ['prescribed_name', 'name_linked_requirement', 'no_prescribed_name_identified'];
+  const confidences = ['Provision', 'Standard', 'Instrument', 'Guidance-only', 'Unmapped'];
+  if (!Array.isArray(nameCatalog.rules) || nameCatalog.rules.length === 0) {
+    issues.push({ path: `${namePath}.rules`, message: 'must be a non-empty array' });
+  } else {
+    nameCatalog.rules.forEach((rule, index) => {
+      const path = `${namePath}.rules[${index}]`;
+      if (!isRecord(rule)) {
+        issues.push({ path, message: 'must be an object' });
+        return;
+      }
+      addRequiredStringIssue(issues, rule.id, `${path}.id`);
+      if (isNonEmpty(rule.id)) {
+        if (nameRuleIds.has(rule.id)) {
+          issues.push({ path: `${path}.id`, message: 'must be unique' });
+        }
+        nameRuleIds.add(rule.id);
+      }
+      if (!nameCohorts.includes(String(rule.cohort))) {
+        issues.push({ path: `${path}.cohort`, message: 'must be a supported MVP cohort' });
+      }
+      if (!nameKinds.includes(String(rule.kind))) {
+        issues.push({ path: `${path}.kind`, message: 'has an unsupported kind' });
+      }
+      if (!confidences.includes(String(rule.mappingConfidence))) {
+        issues.push({ path: `${path}.mappingConfidence`, message: 'has an unsupported mapping confidence' });
+      }
+      if (!['draft', 'reviewed'].includes(String(rule.reviewStatus))) {
+        issues.push({ path: `${path}.reviewStatus`, message: 'has an unsupported status' });
+      }
+      for (const field of ['provision', 'triggerSummary', 'requirement'] as const) {
+        addRequiredStringIssue(issues, rule[field], `${path}.${field}`);
+      }
+      checkNameSources(rule.sourceIds, `${path}.sourceIds`, false);
+      if (Array.isArray(rule.sourceIds)) {
+        for (const sourceId of rule.sourceIds) {
+          if (!nameCatalogSourceIds.has(sourceId as string)) {
+            issues.push({ path: `${path}.sourceIds`, message: `source "${String(sourceId)}" is not listed on the catalog` });
+          }
+        }
+      }
+      for (const field of ['labelTextTerms', 'ingredientTerms', 'exclusions', 'requiredFacts'] as const) {
+        const list = rule[field];
+        if (!Array.isArray(list) || !list.every(isNonEmpty)) {
+          issues.push({ path: `${path}.${field}`, message: 'must be an array of non-empty strings' });
+        }
+      }
+      if (
+        rule.kind !== 'no_prescribed_name_identified'
+        && rule.mappingConfidence !== 'Provision'
+        && rule.mappingConfidence !== 'Standard'
+      ) {
+        issues.push({ path: `${path}.mappingConfidence`, message: 'is too weak for a name rule' });
+      }
+    });
+  }
+  if (
+    !Array.isArray(nameCatalog.reviewNotes)
+    || nameCatalog.reviewNotes.length === 0
+    || !nameCatalog.reviewNotes.every(isNonEmpty)
+  ) {
+    issues.push({ path: `${namePath}.reviewNotes`, message: 'must contain non-empty review notes' });
+  }
+
   if (value.status === 'active') {
+    if (nameCatalog.status !== 'reviewed') {
+      issues.push({ path: `${namePath}.status`, message: 'must be reviewed before release activation' });
+    }
+    if (Array.isArray(nameCatalog.rules)) {
+      nameCatalog.rules.forEach((rule, index) => {
+        if (isRecord(rule) && rule.reviewStatus !== 'reviewed') {
+          issues.push({
+            path: `${namePath}.rules[${index}].reviewStatus`,
+            message: 'must be reviewed before release activation',
+          });
+        }
+      });
+    }
     for (const [index, source] of sources.entries()) {
       if (isRecord(source) && source.verificationStatus !== 'primary-source-verified') {
         issues.push({

@@ -7,9 +7,11 @@
       "@/*": ["./src/*"]
     },
     "rootDir": "src",
+    "resolveJsonModule": true,
     "outDir": "dist/types"
   },
   "references": [
+    { "path": "../../packages/domain" },
     { "path": "../../packages/engine" },
     { "path": "../../packages/label" },
     { "path": "../../packages/storage" }

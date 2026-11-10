@@ -382,6 +382,238 @@ export type AdditiveFinalConcentration =
       readonly contributions: readonly AdditiveConcentrationContribution[];
     };
 
+export type AdditiveAggregateReviewReason =
+  | 'RULE_BELOW_PROVISION_CONFIDENCE'
+  | 'PURPOSE_NOT_CONFIRMED'
+  | 'COLOUR_CLASS_NOT_CONFIRMED'
+  | 'FOOD_KIND_NOT_CONFIRMED'
+  | 'LIMIT_MISSING'
+  | 'LIMIT_NOT_REVIEWED'
+  | 'LIMIT_NOT_POSITIVE'
+  | 'GMP_NOT_CONFIRMED'
+  | 'CONCENTRATION_MISSING'
+  | 'EVIDENCE_MISSING'
+  | 'UNIT_MISMATCH'
+  | 'CALCULATION_BASIS_MISMATCH';
+
+export interface AdditiveAggregateConcentration {
+  readonly value: string;
+  readonly unit: AdditiveConcentrationOutputUnit;
+  readonly calculatedAs?: string | undefined;
+}
+
+export interface AdditiveAggregateMemberBase {
+  readonly id: string;
+  readonly additiveCodeNumber?: string | undefined;
+  readonly concentration?: AdditiveAggregateConcentration | undefined;
+  readonly evidence?: { readonly reference: string; readonly sourceDate: string } | undefined;
+  // The "calculated as" basis the permission row requires, when it names one.
+  readonly requiredCalculatedAs?: string | undefined;
+  readonly sourcePath?: readonly string[] | undefined;
+}
+
+export interface AdditiveMixtureMember extends AdditiveAggregateMemberBase {
+  // Person-confirmed: does this additive perform the evaluated technological purpose in this food?
+  readonly performsPurpose?: boolean | undefined;
+  readonly gmpConfirmed?: boolean | undefined;
+  readonly limit?:
+    | { readonly type: 'GMP' }
+    | { readonly type: 'maximum'; readonly value: string; readonly unit: AdditiveConcentrationOutputUnit }
+    | undefined;
+  readonly limitReviewed?: boolean | undefined;
+  readonly rowId?: string | undefined;
+}
+
+export interface AdditiveColourMember extends AdditiveAggregateMemberBase {
+  // Person-confirmed: is this a colouring permitted to a maximum level (not GMP) in this food?
+  readonly colourPermittedToMaximumLevel?: boolean | undefined;
+}
+
+export interface AdditiveMixtureEvaluationInput {
+  readonly rule: RuleTraceMetadata;
+  readonly technologicalPurpose: string;
+  readonly members: readonly AdditiveMixtureMember[];
+}
+
+export interface AdditiveColourLimit {
+  readonly value: string;
+  readonly unit: AdditiveConcentrationOutputUnit;
+}
+
+export interface AdditiveColourAggregateInput {
+  readonly rule: RuleTraceMetadata;
+  // Person-confirmed: a beverage uses the beverage limit; any other food uses the other-food limit.
+  readonly foodKind?: 'beverage' | 'otherFood' | undefined;
+  // Supplied from versioned rule data, not hard-coded in the engine.
+  readonly limits: { readonly beverage: AdditiveColourLimit; readonly otherFood: AdditiveColourLimit };
+  readonly members: readonly AdditiveColourMember[];
+}
+
+export interface AdditiveAggregateContributor {
+  readonly id: string;
+  readonly additiveCodeNumber?: string;
+  readonly rowId?: string;
+  readonly concentration: string;
+  readonly unit: AdditiveConcentrationOutputUnit;
+  readonly maximum?: string;
+  readonly proportion?: string;
+}
+
+export interface AdditiveAggregateEvaluationValue {
+  readonly outcome: 'within_limit' | 'exceeds_limit' | 'review' | 'not_applicable';
+  readonly reasons: readonly { readonly memberId?: string; readonly reason: AdditiveAggregateReviewReason }[];
+  readonly contributors: readonly AdditiveAggregateContributor[];
+  readonly excluded: readonly { readonly id: string; readonly why: string }[];
+  // Mixture: sum of proportions (display value, rounded). Colour: total in the limit unit.
+  readonly total?: string;
+  readonly limit?: string;
+  readonly unit?: AdditiveConcentrationOutputUnit;
+}
+
+export type AdditivePresencePathReason =
+  | 'RULE_BELOW_PROVISION_CONFIDENCE'
+  | 'SOURCE_STATUS_UNKNOWN'
+  | 'INFANT_FORMULA_NOT_CONFIRMED'
+  | 'INFANT_FORMULA_EXCLUDED'
+  | 'NOT_CONFIRMED_PERMITTED_ADDITIVE'
+  | 'CONCENTRATION_MISSING'
+  | 'EVIDENCE_MISSING'
+  | 'CEILING_MISSING'
+  | 'CEILING_BASIS_NOT_CONFIRMED'
+  | 'UNIT_MISMATCH'
+  | 'PROCESSING_AID_CONDITIONS_UNCONFIRMED'
+  | 'PROCESSING_AID_PERMISSION_NOT_MAPPED';
+
+export interface AdditivePresencePathInput {
+  readonly rule: RuleTraceMetadata;
+  readonly sourceStatus: AdditiveSourceStatus;
+  readonly additiveCodeNumber?: string | undefined;
+  // Person-confirmed: is the food an infant formula product? Carry-over is not available for one.
+  readonly infantFormulaProduct?: boolean | undefined;
+  // Person-confirmed: is the substance permitted for use as a food additive (see the permission catalog)?
+  readonly permittedAsFoodAdditive?: boolean | undefined;
+  readonly finalConcentration?: { readonly value: string; readonly unit: AdditiveConcentrationOutputUnit } | undefined;
+  // Level the raw material or ingredient would introduce under proper technological conditions and GMP.
+  readonly carryOverCeiling?: {
+    readonly value: string;
+    readonly unit: AdditiveConcentrationOutputUnit;
+    readonly basisConfirmed?: boolean | undefined;
+  } | undefined;
+  readonly evidence?: { readonly reference: string; readonly sourceDate: string } | undefined;
+  readonly processingAidFacts?: {
+    readonly usedDuringProcessing?: boolean | undefined;
+    readonly performsPurposeInFinalFood?: boolean | undefined;
+    readonly identifiedInDefinitionList?: boolean | undefined;
+  } | undefined;
+  readonly sourcePath?: readonly string[] | undefined;
+}
+
+export interface AdditivePresencePathValue {
+  readonly path: 'added' | 'carryOver' | 'processingAid' | 'unknown';
+  readonly outcome: 'within_carry_over_level' | 'exceeds_carry_over_level' | 'review' | 'not_applicable';
+  readonly reasons: readonly AdditivePresencePathReason[];
+  readonly checklist?: readonly { readonly condition: string; readonly state: 'confirmed' | 'not met' | 'not confirmed' }[];
+}
+
+export type PrescribedNameCohortId = 'formulated_caffeinated_beverage' | 'food_for_infants';
+
+export interface PrescribedNameRuleView {
+  readonly id: string;
+  readonly cohort: PrescribedNameCohortId;
+  readonly kind: 'prescribed_name' | 'name_linked_requirement' | 'no_prescribed_name_identified';
+  readonly provision: string;
+  readonly mappingConfidence: MappingConfidence;
+  readonly labelTextTerms: readonly string[];
+  readonly ingredientTerms: readonly string[];
+  readonly triggerSummary: string;
+  readonly exclusions: readonly string[];
+  readonly requiredFacts: readonly string[];
+  readonly requirement: string;
+  readonly reviewStatus: 'draft' | 'reviewed';
+}
+
+export type PrescribedNameCandidateReason =
+  | 'COHORT_NOT_CONFIRMED'
+  | 'COHORT_UNSUPPORTED'
+  | 'NO_RULES_FOR_COHORT'
+  | 'NO_TERM_MATCH'
+  | 'RULES_DRAFT';
+
+export interface PrescribedNameCandidateInput {
+  readonly rule: RuleTraceMetadata;
+  readonly catalogRules: readonly PrescribedNameRuleView[];
+  // Person-confirmed cohorts only. A proposed name never infers a cohort.
+  readonly confirmedCohorts?: readonly string[] | undefined;
+  readonly proposedName?: string | undefined;
+  readonly labelTexts?: readonly string[] | undefined;
+  readonly ingredientNames?: readonly string[] | undefined;
+  readonly sourcePath?: readonly string[] | undefined;
+}
+
+export interface PrescribedNameCandidateMatch {
+  readonly ruleId: string;
+  readonly cohort: PrescribedNameCohortId;
+  readonly kind: PrescribedNameRuleView['kind'];
+  readonly provision: string;
+  readonly mappingConfidence: MappingConfidence;
+  readonly matchedTerms: readonly string[];
+  readonly triggerSummary: string;
+  readonly requirement: string;
+  readonly requiredFacts: readonly string[];
+  readonly exclusions: readonly string[];
+  readonly needsCompositionCheck: boolean;
+}
+
+export interface PrescribedNameCandidateValue {
+  readonly outcome: 'candidates' | 'no_rule_identified' | 'review';
+  readonly reasons: readonly PrescribedNameCandidateReason[];
+  readonly candidates: readonly PrescribedNameCandidateMatch[];
+  readonly noPrescribedNameStatements: readonly { readonly ruleId: string; readonly provision: string; readonly triggerSummary: string }[];
+}
+
+export type InfantSweetenedReason =
+  | 'COHORT_NOT_CONFIRMED'
+  | 'RULE_NOT_APPROVED'
+  | 'RULE_BELOW_PROVISION_CONFIDENCE'
+  | 'SUGARS_MISSING'
+  | 'SUGARS_BASIS_NOT_CONFIRMED'
+  | 'EVIDENCE_MISSING'
+  | 'NAME_MISSING';
+
+export interface InfantSweetenedWordInput {
+  readonly rule: RuleTraceMetadata;
+  // True only when the catalog rule has reviewStatus 'reviewed'.
+  readonly ruleApproved: boolean;
+  readonly confirmedCohorts?: readonly string[] | undefined;
+  // Total monosaccharides and disaccharides from added sugars, honey and native bee honey, g/100 g.
+  readonly addedSugarsPer100g?: string | undefined;
+  readonly sugarsBasisConfirmed?: boolean | undefined;
+  readonly evidence?: { readonly reference: string; readonly sourceDate: string } | undefined;
+  readonly proposedName?: string | undefined;
+  readonly sourcePath?: readonly string[] | undefined;
+}
+
+export interface InfantSweetenedWordValue {
+  readonly outcome: 'word_required_present' | 'word_required_missing' | 'word_not_required' | 'review';
+  readonly thresholdPer100g: '4';
+  readonly exceedsThreshold?: boolean;
+  readonly wordInName?: boolean;
+  readonly reasons: readonly InfantSweetenedReason[];
+}
+
+// Person-entered facts for the additive and prescribed-name checks. Nothing here is inferred.
+export interface ProductAdditiveNameInputs {
+  readonly confirmedCohorts: readonly PrescribedNameCohortId[];
+  readonly additiveCategoryId?: string | undefined;
+  readonly outputUnit?: AdditiveConcentrationOutputUnit | undefined;
+  readonly noProcessMassChangeConfirmed?: boolean | undefined;
+  readonly finalDensity?: AdditiveDensityEvidence | undefined;
+  readonly gmpConfirmed?: boolean | undefined;
+  readonly addedSugarsPer100g?: string | undefined;
+  readonly sugarsBasisConfirmed?: boolean | undefined;
+  readonly evidence?: { readonly reference: string; readonly sourceDate: string } | undefined;
+}
+
 export type NutrientId =
   | 'protein'
   | 'fat'

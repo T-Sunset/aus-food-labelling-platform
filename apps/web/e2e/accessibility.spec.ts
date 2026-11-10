@@ -14,6 +14,7 @@ test('workspace screens have no WCAG 2.1 A/AA automated accessibility violations
     'Formulations',
     'Products',
     'Review & trace',
+    'Additives & names',
     'Label layout & PDF',
     'Backup & restore',
   ]) {

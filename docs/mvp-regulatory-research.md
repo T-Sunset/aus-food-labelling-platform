@@ -441,7 +441,7 @@ gates or enable final declarations.
 
 ## 14. Recommended next actions
 
-1. Turns 6 and 7 (permission evaluation and final-food concentration calculation) are complete; proceed to Turn 8 (mixtures and aggregate limits), keeping `REVIEW REQUIRED` for candidate, incomplete and unsupported cases.
+1. Phase 2 Turns 6 to 13 are complete. Next: reviewer verification per `docs/phase2-gate-record.md` (R4, R3-01, R1-21); keep `REVIEW REQUIRED` for candidate, incomplete and unsupported cases until signed.
 2. Before deterministic rule activation, resolve additive row crosswalks, prescribed-name coverage, source versions and transitions, and obtain reviewer verification of product-specific classifications and fixtures.
 3. Keep unsupported categories, unresolved exemptions, uncertain name classification and all unverified evidence in `REVIEW REQUIRED`. This research does not certify a product or label as compliant.
 
@@ -517,3 +517,33 @@ The evaluator (packages/engine) applies the Turn 5 draft catalog as data and add
 ## 17. Phase 2 Turn 7: final-food additive concentration
 
 A pure calculation (packages/engine) adds no regulatory facts. It sums additive mass from every added source of one additive code across nested ingredient paths and divides by the final mass from a documented process-mass profile (an empty profile documents 100% yield). Units are converted explicitly; per-volume sources and mg/L results need dated density evidence. Review-required, never zero: missing code, food state, profile, concentration, evidence or density; sources without a code number; no matching source. Carry-over, processing-aid and unknown sources, and dry-matter, prepared, reconstituted and drained bases, are not converted (Turn 9 and later). The food state is recorded, not derived; for prepared or reconstituted states the process profile must include the added water. Output is not yet fed to the permission evaluator and is not a compliance conclusion.
+
+## 18. Phase 2 Turn 8: same-purpose mixtures and aggregate colours
+
+**Checked 2026-11-10** against Standard 1.3.1 F2024C00917 (Compilation 4, effective 2024-09-13), read from the Federal Register text. Section 1.3.1�6(1) requires the sum of proportions of additives used for the same technological purpose to be not more than 1; 1.3.1�6(2) defines it with Conc_i (concentration in the food) and MPL_i (maximum permitted level); 1.3.1�6(3) excludes substances that may be present in accordance with GMP. Section 1.3.1�4(3) caps all colourings permitted to a maximum level together at 70 mg/L in a beverage and 290 mg/kg in another food.
+
+TO BE VERIFIED: the equation in 1.3.1�6(2) is an image that was not read directly. The sum of Conc_i/MPL_i is inferred from the variable definitions and the phrase sum of the proportions. Compare with the published equation before activation.
+
+The evaluators (packages/engine) take limits and permitted levels as supplied data (the 70 and 290 values are caller-supplied from rule data, not hard-coded) and use exact arithmetic for the boundary. Person confirmation is required for: purpose per additive, GMP presence, colour-class membership and beverage versus other food. A unit or calculated-as mismatch, an unreviewed or missing level, and missing evidence go to REVIEW REQUIRED. Fewer than two contributing additives, or no maximum-level colour, returns INFORMATIONAL (not applicable), not PASS. Not modelled: which additives are colourings permitted to a maximum level (the Schedule 15 and 16 crosswalk is not transcribed), density conversion between mg/kg and mg/L, and whether beverage status follows the prepared food. No rule data entry is added, so nothing is enabled and no result is a compliance conclusion.
+
+## 19. Phase 2 Turn 9: carry-over and processing aids
+
+**Checked 2026-11-10.** Standard 1.3.1 F2024C00917 was read directly. Section 1.3.1—3(2): a substance permitted for use as a food additive may be present in any food other than an infant formula product through carry-over from a raw material or ingredient if its level in the food is no greater than would be introduced by using that raw material or ingredient under proper technological conditions and GMP. The infant-formula exclusion was inserted effective 2024-09-13. Section 1.1.2—13, as quoted in Standard 1.3.3 (search snippet, not the full text), defines a processing aid as used during processing for a technological purpose, not performing a technological purpose in the food for sale, and identified in subsection (3). Paragraph 1.1.1—10(6)(c) is noted there as barring processing aids unless expressly permitted by the Code.
+
+The engine evaluates carry-over only when a person confirms: not an infant formula product, the substance is a permitted additive, and the proper-technological-conditions-and-GMP level; it compares the food level to that confirmed level. Processing aids are a three-condition checklist that always returns REVIEW REQUIRED, because the Standard 1.3.3 permissions and the subsection (3) list are not transcribed (TO BE RESEARCHED). Incidental presence is not modelled: no Code provision for it was verified, so it falls to REVIEW REQUIRED. Infant formula products are therefore always review-only for carry-over, which matters for the infant-food cohort. No result is a compliance conclusion.
+
+## 20. Phase 2 Turn 10: prescribed-name candidate rules
+
+**Checked 2026-11-10.** Standard 2.9.2 (F2015L00417, compilation 4, 2024-09-13) and Standard 2.6.4 (F2015L00467, as made) were read directly. Neither prescribes a finished-food name. Name-linked items found: 2.9.2-7(3)(d) the word 'sweetened' above 4 g/100 g mono- and disaccharides from added sugars or honey; 2.9.2-7(3)(e) 'sterilised' in association with 'honey'; 2.9.2-8(1)(a) percentage declaration where the label, including the name, refers to milk, eggs, cheese, fish, meat (including poultry), nuts or legumes. Standard 2.6.4-5 sets declarations and advisory statements, which are labelling requirements and not names.
+
+The draft catalog (prescribedNameCandidateCatalog) lists these as candidates with whole-word trigger terms taken from the Code text (no synonyms), plus 'no prescribed name identified in this Standard' entries for each cohort. The engine returns REVIEW REQUIRED only: 'candidates' (with required facts), 'no_rule_identified' (never a pass; absence of a match is not proof) or 'review' (cohort unconfirmed or unsupported). A proposed name never infers a cohort. Not searched, and TO BE VERIFIED: Standard 1.2.2 and other Chapter 2 standards for these cohorts. Not a compliance conclusion.
+
+
+
+## 21. Phase 2 Turn 11: composition check for the infant 'sweetened' word
+
+Only one composition-triggered name rule was mapped in Turn 10: Standard 2.9.2-7(3)(d), the word 'sweetened' where mono- and disaccharides from added sugars, honey and native bee honey exceed 4 g/100 g. The engine compares a person-confirmed g/100 g figure (exactly 4 is not above) and checks the proposed name for the whole word. PASS or FAIL is returned only when the catalog rule is reviewed, mapped at Provision confidence, the cohort is confirmed, and the figure basis and evidence are supplied; otherwise REVIEW REQUIRED, with the comparison shown for information. TO BE VERIFIED: how the word must be placed in association with the name of the food, and how the figure is derived from the formulation (the engine does not compute it). The honey 'sterilised' wording, percentage declarations and all caffeinated-beverage items stay review-only; no true-nature judgement is made. Not a compliance conclusion.
+
+## 22. Phase 2 Turn 12: workspace integration
+
+The workspace now runs the Turn 6 to 11 evaluators for a product from facts a person confirms and saves on the product record. No new regulatory fact was added. Results use the draft catalogs, so permission, name-candidate and 'sweetened' results are all REVIEW REQUIRED, and the UI labels the data as draft and unreviewed. Not wired: same-purpose mixture, aggregate colour, carry-over and processing-aid checks (review-only); per-ingredient density evidence (per-volume sources need review); the permission calculation-basis text (rows needing it stay review-only). Concentrations use a 100 g ingoing formulation and a no-mass-change confirmation or a saved process profile. Not a compliance conclusion.

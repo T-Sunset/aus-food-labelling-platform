@@ -22,6 +22,10 @@ export { orderIngredientDeclaration } from './ingredient-declaration.js';
 export { traceAdditiveAllergenEvidence, traceAdditiveSources } from './additive-sources.js';
 export { evaluateAdditivePermission } from './additive-permission.js';
 export { calculateAdditiveFinalConcentration } from './additive-concentration.js';
+export { evaluateAggregateColourLimit, evaluateSamePurposeMixture } from './additive-aggregate.js';
+export { evaluateAdditivePresencePath } from './additive-presence.js';
+export { identifyPrescribedNameCandidates } from './prescribed-name-candidates.js';
+export { evaluateInfantSweetenedWord } from './infant-sweetened-word.js';
 export { formatAdditiveDeclarationCandidate } from './additive-declaration.js';
 export {
   createEmptyProductClassificationProfile,

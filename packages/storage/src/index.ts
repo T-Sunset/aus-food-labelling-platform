@@ -18,6 +18,7 @@ import type {
   ProcessMassProfile,
   ProductClassificationEvidence,
   ProductClassificationProfile,
+  ProductAdditiveNameInputs,
 } from '@aus-food/domain';
 
 export interface DraftRecordBase {
@@ -55,6 +56,7 @@ export interface ProductRecord extends DraftRecordBase {
   readonly formulationId: string;
   readonly foodState?: FoodState;
   readonly classificationProfile?: ProductClassificationProfile;
+  readonly additiveNameInputs?: ProductAdditiveNameInputs;
 }
 
 export type WorkspaceDraftRecord =
@@ -547,6 +549,62 @@ function validateClassificationProfile(value: unknown): void {
   }
 }
 
+function validateAdditiveNameInputs(value: unknown): void {
+  const fail = (message: string): never => {
+    throw new RecordValidationError(`additiveNameInputs ${message}`);
+  };
+  if (!isRecord(value)) {
+    return fail('must be an object');
+  }
+  const cohorts = value.confirmedCohorts;
+  if (
+    !Array.isArray(cohorts)
+    || !cohorts.every((cohort) => cohort === 'formulated_caffeinated_beverage' || cohort === 'food_for_infants')
+    || new Set(cohorts).size !== cohorts.length
+  ) {
+    fail('confirmedCohorts must list each supported cohort at most once');
+  }
+  const decimal = /^\d+(\.\d+)?$/;
+  if (value.additiveCategoryId !== undefined && !isNonEmpty(value.additiveCategoryId)) {
+    fail('additiveCategoryId must be a non-empty string when present');
+  }
+  if (value.outputUnit !== undefined && value.outputUnit !== 'mg/kg' && value.outputUnit !== 'mg/L') {
+    fail('outputUnit must be mg/kg or mg/L');
+  }
+  for (const key of ['noProcessMassChangeConfirmed', 'gmpConfirmed', 'sugarsBasisConfirmed']) {
+    if (value[key] !== undefined && typeof value[key] !== 'boolean') {
+      fail(`${key} must be a boolean when present`);
+    }
+  }
+  if (
+    value.addedSugarsPer100g !== undefined
+    && (typeof value.addedSugarsPer100g !== 'string' || !decimal.test(value.addedSugarsPer100g))
+  ) {
+    fail('addedSugarsPer100g must be a non-negative decimal string');
+  }
+  const evidence = value.evidence;
+  if (
+    evidence !== undefined
+    && (!isRecord(evidence) || !isNonEmpty(evidence.reference) || !isIsoDate(evidence.sourceDate))
+  ) {
+    fail('evidence needs a reference and a valid date');
+  }
+  const density = value.finalDensity;
+  if (
+    density !== undefined
+    && (
+      !isRecord(density)
+      || typeof density.gramsPerMillilitre !== 'string'
+      || !decimal.test(density.gramsPerMillilitre)
+      || Number(density.gramsPerMillilitre) <= 0
+      || !isNonEmpty(density.evidenceReference)
+      || !isIsoDate(density.sourceDate)
+    )
+  ) {
+    fail('finalDensity needs a positive g/mL value, an evidence reference and a valid date');
+  }
+}
+
 function isWorkspaceDraftRecord(value: unknown): value is WorkspaceDraftRecord {
   if (
     !isRecord(value)
@@ -660,6 +718,9 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
     throw new RecordValidationError('Product foodState is unsupported');
   } else if (record.recordType === 'product' && record.classificationProfile !== undefined) {
     validateClassificationProfile(record.classificationProfile);
+  }
+  if (record.recordType === 'product' && record.additiveNameInputs !== undefined) {
+    validateAdditiveNameInputs(record.additiveNameInputs);
   }
 }
 

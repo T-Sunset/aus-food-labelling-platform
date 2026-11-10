@@ -9,8 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@aus-food/domain": "workspace:*",
     "@aus-food/engine": "workspace:*",
     "@aus-food/label": "workspace:*",
+    "@aus-food/rules": "workspace:*",
     "@aus-food/storage": "workspace:*",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",

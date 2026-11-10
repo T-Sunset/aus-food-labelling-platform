@@ -125,6 +125,26 @@
       "effectiveFrom": "2021-02-25",
       "checkedOn": "2026-11-09",
       "verificationStatus": "needs-primary-source-recheck"
+    },
+    {
+      "id": "SRC-NAME-001",
+      "instrument": "Australia New Zealand Food Standards Code - Standard 2.9.2 - Food for infants",
+      "sourceUrl": "https://www.legislation.gov.au/F2015L00417/2024-09-13/2024-09-13/text/original/epub/OEBPS/document_1/document_1.html",
+      "jurisdiction": "Australia and New Zealand",
+      "referenceVersion": "F2024C00903, Compilation 4 (2024-09-13); text read 2026-11-10",
+      "effectiveFrom": "2024-09-13",
+      "checkedOn": "2026-11-10",
+      "verificationStatus": "primary-source-verified"
+    },
+    {
+      "id": "SRC-NAME-002",
+      "instrument": "Australia New Zealand Food Standards Code - Standard 2.6.4 - Formulated caffeinated beverages",
+      "sourceUrl": "https://www.legislation.gov.au/F2015L00467/asmade/2015-04-01/text/original/epub/OEBPS/document_1/document_1.html",
+      "jurisdiction": "Australia and New Zealand",
+      "referenceVersion": "F2015L00467, as made 2015-04-01 (latest Register text); text read 2026-11-10",
+      "effectiveFrom": "2016-03-01",
+      "checkedOn": "2026-11-10",
+      "verificationStatus": "primary-source-verified"
     }
   ],
   "rules": [
@@ -11150,6 +11170,95 @@
       "Five modified-starch rows in item 13.2 share the printed condition \"In total\"; their shared aggregation group prevents treating each maximum as independent.",
       "Standard 1.3.1 Amendment 231 has a transition concerning specified infant-formula changes through 2029-09-13. It is not a general transition for item 13.2. Any infant-formula classification or transition requires separate review.",
       "All category, type, limit, condition, purpose, calculation-basis and governing-provision data are draft candidates. This catalog performs no permission, mixture, concentration, exemption, classification or compliance evaluation."
+    ]
+  },
+  "prescribedNameCandidateCatalog": {
+    "version": "0.1.0-draft",
+    "checkedOn": "2026-11-10",
+    "status": "draft",
+    "sourceIds": ["SRC-NAME-001", "SRC-NAME-002"],
+    "rules": [
+      {
+        "id": "name.infant.percentage-declaration",
+        "cohort": "food_for_infants",
+        "kind": "name_linked_requirement",
+        "provision": "Standard 2.9.2-8(1)(a)",
+        "sourceIds": ["SRC-NAME-001"],
+        "mappingConfidence": "Provision",
+        "labelTextTerms": ["milk", "eggs", "cheese", "fish", "meat", "poultry", "nuts", "legumes"],
+        "ingredientTerms": [],
+        "triggerSummary": "A reference in the label, including in the name of the food, to milk, eggs, cheese, fish, meat (including poultry), nuts or legumes.",
+        "exclusions": ["Only the terms printed in the provision are listed. Synonyms and specific foods (for example a named meat) are not mapped and need review."],
+        "requiredFacts": ["Percentage of the referred-to ingredient in the food for sale"],
+        "requirement": "The label must declare the percentage of that ingredient in the food for sale.",
+        "reviewStatus": "draft"
+      },
+      {
+        "id": "name.infant.sweetened-word",
+        "cohort": "food_for_infants",
+        "kind": "name_linked_requirement",
+        "provision": "Standard 2.9.2-7(3)(d)",
+        "sourceIds": ["SRC-NAME-001"],
+        "mappingConfidence": "Provision",
+        "labelTextTerms": [],
+        "ingredientTerms": [],
+        "triggerSummary": "Composition-triggered: more than 4 g/100 g in total of monosaccharide and disaccharide from added sugars, honey or native bee honey.",
+        "exclusions": [],
+        "requiredFacts": ["Total monosaccharide and disaccharide from added sugars, honey and native bee honey, in g/100 g"],
+        "requirement": "The word 'sweetened' is required where the composition trigger is met.",
+        "reviewStatus": "draft"
+      },
+      {
+        "id": "name.infant.sterilised-honey",
+        "cohort": "food_for_infants",
+        "kind": "name_linked_requirement",
+        "provision": "Standard 2.9.2-7(3)(e)",
+        "sourceIds": ["SRC-NAME-001"],
+        "mappingConfidence": "Provision",
+        "labelTextTerms": [],
+        "ingredientTerms": ["honey", "native bee honey"],
+        "triggerSummary": "Honey or native bee honey has been used as an ingredient.",
+        "exclusions": [],
+        "requiredFacts": ["Whether honey or native bee honey is an ingredient", "Wording used in association with the honey"],
+        "requirement": "The word 'sterilised' is required in association with the word 'honey'.",
+        "reviewStatus": "draft"
+      },
+      {
+        "id": "name.infant.no-prescribed-name",
+        "cohort": "food_for_infants",
+        "kind": "no_prescribed_name_identified",
+        "provision": "Standard 2.9.2 (whole Standard read)",
+        "sourceIds": ["SRC-NAME-001"],
+        "mappingConfidence": "Standard",
+        "labelTextTerms": [],
+        "ingredientTerms": [],
+        "triggerSummary": "No finished-food prescribed name was found in Standard 2.9.2. Other standards may still prescribe a name for an individual product.",
+        "exclusions": ["Not a Code-wide prescribed-name inventory. Absence of a match is not proof that no prescribed name applies."],
+        "requiredFacts": [],
+        "requirement": "None identified in this Standard.",
+        "reviewStatus": "draft"
+      },
+      {
+        "id": "name.caffeinated.no-prescribed-name",
+        "cohort": "formulated_caffeinated_beverage",
+        "kind": "no_prescribed_name_identified",
+        "provision": "Standard 2.6.4 (whole Standard read)",
+        "sourceIds": ["SRC-NAME-002"],
+        "mappingConfidence": "Standard",
+        "labelTextTerms": [],
+        "ingredientTerms": [],
+        "triggerSummary": "No finished-food prescribed name was found in Standard 2.6.4. Its required declarations and advisory statements (section 2.6.4-5) are labelling requirements, not names.",
+        "exclusions": ["Not a Code-wide prescribed-name inventory. Absence of a match is not proof that no prescribed name applies."],
+        "requiredFacts": [],
+        "requirement": "None identified in this Standard.",
+        "reviewStatus": "draft"
+      }
+    ],
+    "reviewNotes": [
+      "Standards 2.9.2 (compilation 4, 2024-09-13) and 2.6.4 (as made) were read in full on 2026-11-10. Neither prescribes a finished-food name; only the name-linked wording in the rules above was found.",
+      "Terms come from the Code text and are not extended with synonyms. A name containing a term is a candidate only; a name without one does not show that no rule applies.",
+      "Standard 1.2.2 (true nature and prescribed names) and other Chapter 2 standards were not searched for these cohorts and remain TO BE VERIFIED.",
+      "All entries are draft candidates. This catalog identifies candidate rules and the facts needed; it performs no composition check, true-nature judgement or compliance evaluation."
     ]
   }
 }

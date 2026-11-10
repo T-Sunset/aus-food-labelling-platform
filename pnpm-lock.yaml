@@ -211,12 +211,18 @@ importers:
 
   apps/web:
     dependencies:
+      '@aus-food/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@aus-food/engine':
         specifier: workspace:*
         version: link:../../packages/engine
       '@aus-food/label':
         specifier: workspace:*
         version: link:../../packages/label
+      '@aus-food/rules':
+        specifier: workspace:*
+        version: link:../../packages/rules
       '@aus-food/storage':
         specifier: workspace:*
         version: link:../../packages/storage
