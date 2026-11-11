@@ -11,6 +11,17 @@ test('additive and name checks stay REVIEW REQUIRED and never claim compliance',
   // Missing-data path: nothing confirmed yet.
   await expect(page.getByRole('heading', { name: 'Facts you confirm' })).toBeVisible();
   await expect(page.getByText('Draft rule data 0.1.0-draft (not reviewed)')).toBeVisible();
+  await expect(page.getByLabel('Final density (g/mL, only for per-volume limits)')).toHaveCount(0);
+  await expect(page.getByLabel('Added sugars, honey and native bee honey (g per 100 g)')).toHaveCount(0);
+  await page.getByLabel('Concentration unit').selectOption('mg/L');
+  await page.getByLabel('Final density (g/mL, only for per-volume limits)').fill('1.2');
+  await page.getByLabel('Concentration unit').selectOption('mg/kg');
+  await expect(page.getByLabel('Final density (g/mL, only for per-volume limits)')).toHaveCount(0);
+  await page.getByLabel('Concentration unit').selectOption('mg/L');
+  await expect(page.getByLabel('Final density (g/mL, only for per-volume limits)')).toHaveValue('1.2');
+  await page.getByLabel('Final density evidence reference').fill('Density record');
+  await page.getByLabel('Final density evidence date').fill('2026-01-01');
+  await page.getByLabel('Concentration unit').selectOption('mg/kg');
   const names = page.getByRole('article', { name: 'Prescribed-name candidates' });
   await expect(names.getByText('Status: REVIEW REQUIRED')).toBeVisible();
   await expect(names.getByText(/COHORT_NOT_CONFIRMED/)).toBeVisible();
@@ -24,6 +35,9 @@ test('additive and name checks stay REVIEW REQUIRED and never claim compliance',
   await page.getByRole('button', { name: 'Save inputs' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'inputs saved on this product draft' }))
     .toBeVisible();
+  await page.getByLabel('Concentration unit').selectOption('mg/L');
+  await expect(page.getByLabel('Final density (g/mL, only for per-volume limits)')).toHaveValue('1.2');
+  await expect(page.getByLabel('Final density evidence reference')).toHaveValue('Density record');
 
   const sweetened = page.getByRole('article', { name: "Infant food 'sweetened' word" });
   await expect(sweetened.getByText('Status: REVIEW REQUIRED')).toBeVisible();

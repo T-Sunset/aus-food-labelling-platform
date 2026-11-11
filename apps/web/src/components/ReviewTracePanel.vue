@@ -219,6 +219,16 @@ const trace = computed(() => {
                   </dd>
                 </div>
                 <div>
+                  <dt>Supplier energy</dt>
+                  <dd v-if="row.ingredient?.energyPer100g">
+                    {{ row.ingredient.energyPer100g.value }} kJ/100 g ·
+                    {{ row.ingredient.energyPer100g.sourceId }} · {{ row.ingredient.energyPer100g.sourceDate }}
+                  </dd>
+                  <dd v-else>
+                    Not supplied — REVIEW REQUIRED
+                  </dd>
+                </div>
+                <div>
                   <dt>Nutrient evidence</dt>
                   <dd
                     v-if="

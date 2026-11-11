@@ -12,6 +12,7 @@ import { illustrativePreviewOn } from '../illustrative-state';
 import { claimRules, RULE_RELEASE_LABEL } from '../rule-data';
 import IllustrativeNote from './IllustrativeNote.vue';
 import IllustrativeToggle from './IllustrativeToggle.vue';
+import ChecklistStatus from './ChecklistStatus.vue';
 import AppButton from './ui/button/AppButton.vue';
 
 const props = defineProps<{
@@ -133,7 +134,10 @@ function removeClaim(index: number): void {
 }
 
 function buildClaims(): ProductClaim[] {
-  return drafts.value.map((draft): ProductClaim => {
+  return drafts.value.map((draft, index): ProductClaim => {
+    if (Boolean(draft.evidenceReference.trim()) !== Boolean(draft.evidenceDate)) {
+      throw new Error(`Claim ${index + 1} evidence needs both a reference and a date.`);
+    }
     const classification = draft.classification === '' ? undefined : draft.classification;
     const nutrition = classification === 'nutrition_content';
     const unit = nutrition && draft.ruleId ? ruleUnit(draft.ruleId) : undefined;
@@ -205,9 +209,9 @@ async function save(): Promise<void> {
       class="notice notice-warning"
       role="status"
     >
-      <strong>REVIEW REQUIRED</strong>
-      <span>{{ RULE_RELEASE_LABEL }}. These results assist review and do not certify legal compliance.
-        Claim rules are draft, so no claim can be shown as passing or failing yet.</span>
+      <strong>Consultant review recommended</strong>
+      <span>{{ RULE_RELEASE_LABEL }}. Claim checks use draft rules and cannot give an official pass or fail yet.
+        The official status is REVIEW REQUIRED. This does not certify legal compliance.</span>
     </div>
 
     <section
@@ -243,55 +247,67 @@ async function save(): Promise<void> {
         <h2 id="claim-facts-title">
           Facts about this product
         </h2>
-        <label class="field">
-          <span>Food form</span>
-          <select v-model="facts.foodForm">
-            <option value="">Not confirmed</option>
-            <option value="liquid">Liquid</option>
-            <option value="solid">Solid</option>
-          </select>
-        </label>
-        <label>
-          <input
-            v-model="facts.formOfFoodConfirmed"
-            type="checkbox"
-          >
-          I confirm the figures are for the form of the food required by Standard 1.2.7-7
-        </label>
-        <label>
-          <input
-            v-model="facts.servingConfirmed"
-            type="checkbox"
-          >
-          I confirm the serving size (needed for per-serving claims)
-        </label>
-        <fieldset class="field">
-          <legend>Contexts where nutrition content claims are restricted (Standard 1.2.7-4)</legend>
+        <p
+          v-if="!drafts.some((claim) => claim.classification === 'nutrition_content')"
+          class="field-hint"
+        >
+          Add a nutrition content claim below to see the questions used for its check.
+          Other types of claim need consultant review.
+        </p>
+        <template v-if="drafts.some((claim) => claim.classification === 'nutrition_content')">
+          <p class="field-hint">
+            These answers help check the claim. If you are unsure, leave them unanswered and ask your consultant.
+          </p>
           <label class="field">
-            <span>Is this an infant formula product?</span>
-            <select v-model="facts.infantFormulaProduct">
-              <option value="">Not answered</option>
-              <option value="yes">Yes, it applies</option>
-              <option value="no">No, it does not apply</option>
+            <span>Food form</span>
+            <select v-model="facts.foodForm">
+              <option value="">Not confirmed</option>
+              <option value="liquid">Liquid</option>
+              <option value="solid">Solid</option>
             </select>
           </label>
-          <label class="field">
-            <span>Is this a kava product?</span>
-            <select v-model="facts.kava">
-              <option value="">Not answered</option>
-              <option value="yes">Yes, it applies</option>
-              <option value="no">No, it does not apply</option>
-            </select>
+          <label>
+            <input
+              v-model="facts.formOfFoodConfirmed"
+              type="checkbox"
+            >
+            I confirm the figures are for the form of the food required by Standard 1.2.7-7
           </label>
-          <label class="field">
-            <span>Does it contain more than 1.15% alcohol by volume?</span>
-            <select v-model="facts.alcohol">
-              <option value="">Not answered</option>
-              <option value="yes">Yes, it applies</option>
-              <option value="no">No, it does not apply</option>
-            </select>
+          <label>
+            <input
+              v-model="facts.servingConfirmed"
+              type="checkbox"
+            >
+            I confirm the serving size (needed for per-serving claims)
           </label>
-        </fieldset>
+          <fieldset class="field">
+            <legend>Contexts where nutrition content claims are restricted (Standard 1.2.7-4)</legend>
+            <label class="field">
+              <span>Is this an infant formula product?</span>
+              <select v-model="facts.infantFormulaProduct">
+                <option value="">Not answered</option>
+                <option value="yes">Yes, it applies</option>
+                <option value="no">No, it does not apply</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Is this a kava product?</span>
+              <select v-model="facts.kava">
+                <option value="">Not answered</option>
+                <option value="yes">Yes, it applies</option>
+                <option value="no">No, it does not apply</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Does it contain more than 1.15% alcohol by volume?</span>
+              <select v-model="facts.alcohol">
+                <option value="">Not answered</option>
+                <option value="yes">Yes, it applies</option>
+                <option value="no">No, it does not apply</option>
+              </select>
+            </label>
+          </fieldset>
+        </template>
 
         <h2>Your claims</h2>
         <p
@@ -422,6 +438,11 @@ async function save(): Promise<void> {
           :aria-label="`Claim: ${check.claim.text}`"
         >
           <h3>&ldquo;{{ check.claim.text }}&rdquo;</h3>
+          <ChecklistStatus
+            :status="check.official.status"
+            :reasons="check.official.value?.reasons ?? []"
+            :preview="check.preview"
+          />
           <p>
             <strong>Status: {{ check.official.status }}</strong>
             ({{ check.official.applicationMode }})

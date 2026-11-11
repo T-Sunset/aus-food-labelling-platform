@@ -8,6 +8,7 @@ import {
 } from '@aus-food/label';
 import type { FormulationRecord, IngredientRecord, ProductRecord } from '@aus-food/storage';
 import { makeLabelDraft } from '../label-draft';
+import { makeConsultantNotes } from '../consultant-notes';
 import { RULE_RELEASE_LABEL } from '../rule-data';
 import AppButton from './ui/button/AppButton.vue';
 
@@ -131,7 +132,11 @@ const generatedLayout = computed<
           id: 'draft-notes',
           kind: 'advisoryStatements',
           title: 'DRAFT - consultant review required',
-          lines: draft.warnings.flatMap((warning) => wrapText(warning, 45)),
+          lines: [
+            'Nutrition, names, allergens and additives need review.',
+            'Other label content may be missing.',
+            'See the separate consultant notes.',
+          ],
           fontSizeMm: 2.5,
           minimumSizeStatus: 'review_required',
         },
@@ -202,6 +207,7 @@ async function exportPdf(): Promise<void> {
       productVersion: `draft-${current.product.updatedAt}`,
       ruleRelease: `${RULE_RELEASE_LABEL}; no active release`,
       exportedAt: new Date().toISOString(),
+      consultantNotes: makeConsultantNotes(current.product, props.formulations, props.ingredients, draft),
     });
     if (selectedDraft.value !== draft || selectedProductId.value !== current.product.id) {
       throw new Error('The product or its ingredients changed during export. Please try again.');
@@ -270,7 +276,8 @@ async function exportPdf(): Promise<void> {
             :class="{ unfinished: drafts.get(product.id)?.missing.length }"
           >
             <strong>{{ product.name }}</strong>
-            <span>{{ drafts.get(product.id)?.missing.length ? 'Needs attention' : 'Information entered; preview the draft' }}</span>
+            <span>{{ drafts.get(product.id)?.missing.length ? 'Needs attention!' : 'Consultant review recommended' }}</span>
+            <span v-if="!drafts.get(product.id)?.missing.length">Required draft information entered; this is not a legal check or clearance.</span>
             <ul v-if="drafts.get(product.id)?.missing.length">
               <li
                 v-for="item in drafts.get(product.id)?.missing"

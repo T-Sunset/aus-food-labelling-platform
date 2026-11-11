@@ -12,6 +12,7 @@ import { illustrativePreviewOn } from '../illustrative-state';
 import { permissionCatalog, RULE_RELEASE_LABEL } from '../rule-data';
 import IllustrativeNote from './IllustrativeNote.vue';
 import IllustrativeToggle from './IllustrativeToggle.vue';
+import ChecklistStatus from './ChecklistStatus.vue';
 import AppButton from './ui/button/AppButton.vue';
 
 const props = defineProps<{
@@ -139,6 +140,13 @@ const resultCards = computed<ResultCard[]>(() => {
 });
 
 function buildInputs(): ProductAdditiveNameInputs {
+  if (Boolean(form.evidenceReference.trim()) !== Boolean(form.evidenceDate)) {
+    throw new Error('Evidence needs both a reference and a date.');
+  }
+  const densityParts = [form.densityValue.trim(), form.densityReference.trim(), form.densityDate];
+  if (densityParts.some(Boolean) && !densityParts.every(Boolean)) {
+    throw new Error('Final density needs a value, evidence reference and date, even if its fields are currently hidden.');
+  }
   const evidence = form.evidenceReference.trim() && form.evidenceDate
     ? { evidence: { reference: form.evidenceReference.trim(), sourceDate: form.evidenceDate } }
     : {};
@@ -203,9 +211,9 @@ async function save(): Promise<void> {
       class="notice notice-warning"
       role="status"
     >
-      <strong>REVIEW REQUIRED</strong>
-      <span>{{ RULE_RELEASE_LABEL }}. These results assist review and do not certify legal compliance.
-        Rule data below Provision-level mapping, or not reviewed, cannot produce a pass or fail.</span>
+      <strong>Consultant review recommended</strong>
+      <span>{{ RULE_RELEASE_LABEL }}. Additive and name checks use draft rules and need expert review;
+        the official status is REVIEW REQUIRED. This does not certify legal compliance.</span>
     </div>
 
     <section
@@ -241,8 +249,11 @@ async function save(): Promise<void> {
         <h2 id="additive-inputs-title">
           Facts you confirm
         </h2>
+        <p class="field-hint">
+          Only confirm a fact if you have evidence for it. If you are unsure, leave it blank and ask your consultant.
+        </p>
         <fieldset class="field">
-          <legend>Confirmed product cohort</legend>
+          <legend>Product types you have confirmed</legend>
           <label
             v-for="option in cohortOptions"
             :key="option.id"
@@ -282,24 +293,26 @@ async function save(): Promise<void> {
           >
           I confirm no mass is added, gained or lost in processing
         </label>
-        <label class="field">
-          <span>Final density (g/mL, only for per-volume limits)</span>
-          <input
-            v-model="form.densityValue"
-            inputmode="decimal"
-          >
-        </label>
-        <label class="field">
-          <span>Final density evidence reference</span>
-          <input v-model="form.densityReference">
-        </label>
-        <label class="field">
-          <span>Final density evidence date</span>
-          <input
-            v-model="form.densityDate"
-            type="date"
-          >
-        </label>
+        <template v-if="form.outputUnit === 'mg/L'">
+          <label class="field">
+            <span>Final density (g/mL, only for per-volume limits)</span>
+            <input
+              v-model="form.densityValue"
+              inputmode="decimal"
+            >
+          </label>
+          <label class="field">
+            <span>Final density evidence reference</span>
+            <input v-model="form.densityReference">
+          </label>
+          <label class="field">
+            <span>Final density evidence date</span>
+            <input
+              v-model="form.densityDate"
+              type="date"
+            >
+          </label>
+        </template>
         <label>
           <input
             v-model="form.gmpConfirmed"
@@ -307,20 +320,22 @@ async function save(): Promise<void> {
           >
           I confirm good manufacturing practice (GMP) is met
         </label>
-        <label class="field">
-          <span>Added sugars, honey and native bee honey (g per 100 g)</span>
-          <input
-            v-model="form.addedSugars"
-            inputmode="decimal"
-          >
-        </label>
-        <label>
-          <input
-            v-model="form.sugarsBasisConfirmed"
-            type="checkbox"
-          >
-          I confirm the sugars figure is total monosaccharides and disaccharides from added sources
-        </label>
+        <template v-if="form.cohorts.includes('food_for_infants')">
+          <label class="field">
+            <span>Added sugars, honey and native bee honey (g per 100 g)</span>
+            <input
+              v-model="form.addedSugars"
+              inputmode="decimal"
+            >
+          </label>
+          <label>
+            <input
+              v-model="form.sugarsBasisConfirmed"
+              type="checkbox"
+            >
+            I confirm the sugars figure is total monosaccharides and disaccharides from added sources
+          </label>
+        </template>
         <label class="field">
           <span>Evidence reference</span>
           <input v-model="form.evidenceReference">
@@ -411,6 +426,11 @@ async function save(): Promise<void> {
           :aria-label="item.heading"
         >
           <h3>{{ item.heading }}</h3>
+          <ChecklistStatus
+            :status="item.result.status"
+            :reasons="item.reasons"
+            :preview="item.preview"
+          />
           <p>
             <strong>Status: {{ item.result.status }}</strong>
             ({{ item.result.applicationMode }})

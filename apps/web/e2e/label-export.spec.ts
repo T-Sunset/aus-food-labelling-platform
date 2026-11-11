@@ -10,6 +10,14 @@ test('exports a deterministic exact-size label and separate review report', asyn
 
   expect(result.firstBytes).toEqual(result.secondBytes);
   expect(result.unsafeSvgRejected).toBe(true);
+  expect(result.unsupportedNotesRejected).toBe(true);
+  expect(result.unsupportedLabelRejected).toBe(true);
+  expect(result.notesFirstBytes).toEqual(result.notesSecondBytes);
+  expect(result.notesFirstBytes).not.toEqual(result.firstBytes);
+  const notesText = Buffer.from(result.notesFirstBytes).toString('latin1');
+  expect(notesText).toContain('Notes for your consultant');
+  expect(notesText).toContain('Review detail 60');
+  expect(Array.from(notesText.matchAll(/\/MediaBox\s*\[/gu)).length).toBeGreaterThan(2);
   expect(result.report).toMatchObject({
     productVersion: 'product-v1',
     ruleRelease: 'rules-draft-0.1',

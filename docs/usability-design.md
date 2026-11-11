@@ -1,6 +1,6 @@
 # Usability track - design for approval (U1)
 
-Status: APPROVED by the user with the decisions in section 8. No code has been written for this track.
+Status: APPROVED by the user with the decisions in section 8. The implementation sequence and current progress are tracked in [implementation-plan.md](./implementation-plan.md); earlier sections describe the original design and baseline.
 
 ## 1. Who this is for
 
@@ -39,7 +39,7 @@ Navigation keeps Overview, Ingredients & specifications, Formulations and Produc
 
 ## 5. Replacing REVIEW REQUIRED with a three-way checklist
 
-Every check result is shown as one of three plain labels, each with an icon and words (never colour alone):
+The additive/name and claim checks have a three-way plain-English summary, with words rather than colour alone:
 
 | Label | Meaning | Rule behind it |
 |---|---|---|
@@ -47,7 +47,7 @@ Every check result is shown as one of three plain labels, each with an icon and 
 | **Needs attention!** | A fact is missing, or the details point to a problem. The reason is in plain English with the fix. | Missing facts, over-limit results, prohibited contexts |
 | **Consultant review recommended** | The rule needs a human decision (for example health claims, unusual products, unreviewed rule data). | Review-only paths |
 
-Nothing in the engine changes. This is a presentation layer over the existing statuses. The strict official status and the trace stay available behind "Show details", and the exported review report keeps the real REVIEW REQUIRED wording. "Entered information looks fine!" is never produced from a missing fact.
+Nothing in the engine changes. This is a presentation layer over the existing statuses: the official status and explanation remain visible and technical rule, source and input details can be expanded. Missing or unconfirmed facts get an actionable "Needs attention!" message; unsupported and review-only cases get "Consultant review recommended". An illustrative result is shown only when the existing session-only opt-in is on and the engine explicitly says it is eligible; its friendly label is marked illustrative, and it never changes the official status. Unknown reasons never produce a positive label. Builder summaries distinguish filled-in fields from a legal check.
 
 ## 6. The draft label
 
@@ -56,7 +56,7 @@ Built in this order, each marked DRAFT on the page and in the PDF:
 1. **Ingredient declaration** - uses the existing ordered declaration, with additive class names and percentages where the engine supports them.
 2. **Allergen statement** - from the allergens the person ticked and the propagation the engine already does.
 3. **Mock NIP** - the U8 base panel shows supplier-based nutrient and energy estimates per serving and per 100 g or 100 mL, in the base row order, on screen and in the PDF. It uses the FSANZ calculator's three-significant-figure, half-even and decimal-place conventions described in [nip-display-research.md](./nip-display-research.md); the rounding stage remains for consultant review. Optional "LESS THAN" wording is not yet implemented. Energy is entered from supplier evidence, not inferred from incomplete nutrient data. The user must confirm that recipe and nutrient values represent the food as sold without processing changes, choose the physical food form, and provide dated final density evidence when volume conversion is needed. Changing the recipe invalidates that confirmation. Unknown inputs remain unavailable, not zero. Processing, prepared/drained/reconstituted bases, claim-driven extra rows and exemptions are not implemented; relevant cases are explicitly blocked from export pending review. This mock is not a determination that a NIP or label complies.
-4. **Claims and additive guide** - not on the pack face. They go on a "Notes for your consultant" PDF page.
+4. **Claims and additive guide** - detailed entered claims, official claim and additive/name results, evidence traces and limitations go on the separate "Notes for your consultant" report, not on the pack face. Illustrative outcomes never enter the PDF. For an exportable product with no claims or additive sources the notes say so, rather than suggesting a legal check has passed.
 5. **PDF** - pack-copy page plus the consultant page.
 
 ## 7. Build order (each turn needs your approval)
@@ -84,3 +84,4 @@ The old Additives & names and Claims pages stay until their replacements (U6, U7
 5. Restructure (2026-11-10): the app becomes Overview, Ingredients, Formulations, Products, Labels and Backup. Each of the first three is a list (create, read, update, delete) with a guided step-by-step builder for new and existing records. Ingredient builder: spec sheet, nutrition, allergens, additive facts. Formulation builder: contents and amounts. Product builder: type, pack details, additive limit checks, claims, review. Checks that depend on the recipe (additive limits, claims) live in the Product builder, because an ingredient alone cannot be checked and is reused across products. Labels lists every product; unfinished ones are greyed out with what is missing, and only finished ones can be exported. "Finished" means all required answers are entered, is recalculated live so edits to an ingredient or recipe drop the product back to "Needs attention", and never means compliant. Build order is in section 7 of the plan's U-track table (U4-U9), which supersedes the build order above.
 6. U7 readiness (2026-11-11): the user chose the fuller essential-builder-information gate, rather than a gate limited to ingredient and allergen content. The ingredient builder asks for explicit allergen and additive coverage confirmation against the supplier specification; unticked or empty fields alone do not establish absence. Product type, serving and net-content units are recorded explicitly. Readiness also requires the six current ingredient nutrition inputs, linked recipes and relevant additive candidate inputs. Claims remain optional. This gate concerns completeness of entered information only: ingredient names, additives, allergen conditions, layout and unimplemented content still need consultant review. U7 does not calculate the NIP.
 7. U8 implementation: the base mock NIP adds supplier energy, a separately chosen food form and a recipe-specific sold-food confirmation; it also needs sourced density for volume. It does not assume that ingoing mass is final food, that 1 mL weighs 1 g, or that absent energy components are zero. Regulated claims are not rendered and their potentially required extra NIP rows are not implemented, so those products remain blocked from export. See [ADR 008](./adr/008-mock-nutrition-panel.md).
+8. U9 implementation: the PDF's existing separate report is extended with paginated consultant notes, retaining export metadata, official statuses, source links, layout issues and the non-certification statement. The layout page carries short draft caveats while the detailed notes remain separate. The current built-in PDF font cannot represent all Unicode characters; export reports an explicit error for unsupported label or consultant-note characters instead of silently corrupting them. This is a current limitation, not a requirement to alter a real label without consultant input.

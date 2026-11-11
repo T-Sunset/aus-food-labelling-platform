@@ -62,6 +62,8 @@ const missing = computed(() => {
   if (!statuses.value.about.done) list.push('Name and type of ingredient');
   if (!statuses.value.spec.done) list.push('Supplier spec sheet reference and date');
   if (!statuses.value.nutrition.done) list.push('Some nutrition values (blank means "not supplied", never zero)');
+  if (!statuses.value.allergens.done) list.push('Confirm the supplier allergen information');
+  if (!statuses.value.additives.done) list.push('Confirm the supplier additive information');
   return list;
 });
 
@@ -540,12 +542,12 @@ function submit(): void {
           v-if="missing.length === 0"
           class="field-hint"
         >
-          Entered information looks fine! Save it, or go back to change anything. A consultant should
-          still check the finished label.
+          The requested fields are filled in. Save the draft to check the entries; a consultant should
+          still check the label. This is a guide, not legal advice or a clearance.
         </p>
         <template v-else>
           <p class="field-hint">
-            You can save now and finish later. Still to do:
+            Needs attention! You can save now and finish later. Still to do:
           </p>
           <ul>
             <li

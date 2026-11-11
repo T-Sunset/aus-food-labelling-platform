@@ -22,7 +22,7 @@ export const CLAIM_LIMITATIONS: readonly string[] = [
   'Only the five first-set nutrition content claims are checked: low energy, low fat, low sugars, low sodium and good source of dietary fibre.',
   'Comparative, health, "no added", "free", protein, saturated fat, carbohydrate and unregulated-wording claims are review-only.',
   'Nutrition information panel rows and accompanying statements that a claim may trigger are not checked here. Treat them as REVIEW REQUIRED.',
-  'Claims never appear on the label preview or PDF; they are checked here only.',
+  'Claims are not added to the draft label; the separate consultant report includes the entered wording and official review results.',
 ];
 
 export function findClaimRule(claim: ProductClaim): ClaimRuleEntry | undefined {

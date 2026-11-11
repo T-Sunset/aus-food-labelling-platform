@@ -36,6 +36,8 @@ const errorMessage = ref('');
 const message = ref('');
 
 const saved = computed(() => props.products.find((item) => item.id === savedId.value));
+const savedLabelDraft = computed(() => saved.value
+  ? makeLabelDraft(saved.value, props.formulations, props.ingredients) : undefined);
 const recipe = computed(() => props.formulations.find((item) => item.id === draft.formulationId));
 const nutritionRecipe = computed(() => {
   if (!draft.formulationId) return { signature: '', error: '' };
@@ -61,7 +63,7 @@ const statuses = computed(() => {
     && (!needsDensity || densityEntered);
   result.pack = { done: packComplete, text: packComplete ? 'Answered' : 'Still needed' };
   if (saved.value && saved.value.formulationId === draft.formulationId) {
-    const complete = makeLabelDraft(saved.value, props.formulations, props.ingredients).additivesComplete;
+    const complete = savedLabelDraft.value?.additivesComplete === true;
     result.additives = { done: complete, text: complete ? 'Information entered' : 'Still needed' };
   }
   return result;
@@ -405,6 +407,16 @@ function summaryLine(done: boolean, doneText: string, todoText: string): string 
           Anything marked "Needs attention!" is still missing. You can save now and finish later. A label
           built from these answers is a draft: consultant review recommended before use.
         </p>
+        <template v-if="saved">
+          <h4>Label readiness</h4>
+          <p v-if="savedLabelDraft?.missing.length">
+            <strong>Needs attention!</strong> Open Labels for the full list of missing information.
+          </p>
+          <p v-else>
+            <strong>Consultant review recommended.</strong> The information needed for a draft is entered;
+            this is not a legal check or clearance.
+          </p>
+        </template>
         <AppButton
           variant="link"
           size="sm"

@@ -217,14 +217,14 @@ function submit(): void {
           v-if="statuses.name.done && statuses.lines.done"
           class="field-hint"
         >
-          Entered information looks fine! Save it, or go back to change anything. Open a saved recipe on the
-          list to see the amounts per 100 g.
+          The name and recipe lines are filled in. Save the draft to check the entries and check the amounts
+          before relying on them. This is a guide, not legal advice or a clearance.
         </p>
         <p
           v-else
           class="field-hint"
         >
-          You can save now and finish later. Still to do: a name and at least one complete ingredient line
+          Needs attention! You can save now and finish later. Still to do: a name and at least one complete ingredient line
           (a record and a positive amount).
         </p>
         <ul

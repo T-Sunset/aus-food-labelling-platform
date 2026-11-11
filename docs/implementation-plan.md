@@ -4,6 +4,13 @@
 **Audience:** engineers and AI agents implementing the product.
 **Related documents:** `AGENTS.md` (always-on agent rules), `docs/requirements.md` (the contract), `docs/reviewer-questions.md` (questions for the human regulatory reviewer).
 
+**2026-11-11 planning update:** The Victorian caffeinated-drink demo sequence
+in section 7 is the proposed next workstream. Its sequence takes precedence
+over older next-step ordering once approved; it does not itself change locked
+decisions, authorize code changes or mark previous release gates complete.
+Earlier phase descriptions and change-log entries record the policy and
+status at the time; see the demo sequence for the proposed direction.
+
 ## 1. How to use this document
 
 1. Read `AGENTS.md`, then this plan, then the sections of `docs/requirements.md` referenced by your task.
@@ -262,7 +269,101 @@ After C8: worked example products (turns W1-W7 below), a sports supplements slic
 | U6 | [x] | Product builder (done 2026-11-10): six steps (About it, What is it?, Pack details, Additives & names, Claims, Review) with Add, Edit and Delete on the list. Pack details (serving size, servings per pack, net contents and unit) are new optional product fields; blank means unknown, never zero. The old Additives & names, Claims and Label builder pages are retired; their logic now runs inside the builder steps and their tests were moved to the builder. |
 | U7 | [x] | Labels page: draft ingredient declaration and allergen summary, using ingoing recipe ordering and the draft allergen vocabulary. Products needing information are labelled and greyed out with the missing items and a link to the builder; only products with the U7 information entered can export. Readiness is recalculated live, never stored and never means compliance. Additive wording is shown as a review candidate, and sulphites requiring final-food evaluation are flagged rather than resolved. |
 | U8 | [x] | Mock base NIP in the Labels page and draft PDF, using the NPC rounding conventions in docs/nip-display-research.md section 12 (3 significant figures, half to even; round-down remark still unverified). Unsupported food states and claim-driven rows remain explicit export blockers, not completed regulatory coverage. |
-| U9 | [ ] | Three-way checklist wording, consultant notes PDF page, accessibility pass, final plain-language review. |
+| U9 | [x] | Three-way checklist wording, separate paginated consultant notes in the PDF, accessibility and plain-language pass. Official and illustrative results remain distinct; no regulatory acceptance implied. |
+
+### Proposed next workstream - Victorian drink end-to-end demo
+
+**Purpose.** Enable a small business unfamiliar with the Code to create a
+representative, locally generated label and PDF from a realistic recipe and
+supplier information, and give the reviewer a coherent product, label and
+explanation to critique. The product assists; it does not certify compliance.
+This is a local demo milestone, not public MVP release or regulatory approval.
+
+**First scenario.** A new fictional, non-alcoholic, citrus-flavoured
+caffeinated drink in a 330 mL can, intended for the Victorian retail market.
+The scenario will explicitly establish its purpose and all other facts needed
+to assess whether it is a formulated caffeinated beverage. It will contain
+water, sugar, citric acid, a supplier flavour blend and added caffeine. Exact
+amounts, supplier specifications, final yield, pack facts, name, artwork and
+any claims are to be defined and checked in D0, not inferred here. Synthetic
+values must be labelled as fictional. Existing worked examples are useful
+regressions but do not replace this new scenario.
+
+**Workflow principles.**
+
+- Enter supplier and ingredient facts once; derive product facts through
+  direct and nested formulations and reuse them in all relevant checks and
+  outputs. Ask only for facts not reliably derivable, such as a product's
+  purpose, sales presentation, production process or missing supplier data.
+- Use structured ingredient/substance identities and dated evidence where
+  needed. Do not infer identity or absence from a free-text name or an
+  incomplete supplier blend. Unknown, conflicting, stale and unsupported
+  facts remain explicit; missing is never zero or PASS.
+- Make changes to draft source data refresh affected draft calculations,
+  checks and previews. Preserve source paths and evidence; never silently
+  alter immutable approved snapshots or their historical results (FR-004,
+  FR-010, DATA-003 to DATA-006, FORM-004, VER-002).
+- Keep the ingredient, formulation, product, labels and backup workflow
+  local and understandable. Show a specific result and next action, not an
+  unqualified overall compliance verdict. Keep legal sources and detailed
+  traces accessible without making the label itself a technical report
+  (FR-002 to FR-008, TRACE-008, TRACE-012, TRACE-015).
+- Victoria is the initial market, alongside applicable national requirements.
+  Do not assume every Victorian, origin, trade-measurement or packaging rule
+  has already been researched. Other state/territory markets are out of this
+  demo, not removed from the longer-term product scope.
+
+**Policy decision before implementation.** The product owner has selected
+normally visible, clearly provisional source-verified results for the local
+demo instead of requiring an illustrative opt-in. This conflicts with D1/D8,
+ADR-006 and earlier gate descriptions. D0 proposes the precise replacement
+policy and an ADR; obtain explicit approval before changing those locked
+decisions or implementing different behaviour. Until then, existing D1/D8,
+official results and export restrictions remain in force. Any approved change
+must distinguish provisional from reviewer-validated results, use versioned
+source/provision/effective-date metadata and complete applicable inputs,
+retain TRACE-015's restriction on deterministic FAIL below Provision mapping
+confidence, and never bypass missing facts, ambiguity, unsupported cases or
+release and approval controls. Do not mark draft rules as reviewer-approved.
+Specify separately what may appear in the screen, draft label, PDF and
+explanation report; never let provisional results imply certification.
+Reviewer touchpoints, immutable versions and public-release gates remain.
+
+**Scope and sequencing.** These are intended as separate user-approved turns;
+split a turn further if research, implementation or validation proves too
+large. Each turn preserves existing functionality and ends with its tests and
+documentation. D0 is planning/research only; no subsequent implementation is
+authorized merely by writing this plan. Reuse existing engine, storage and
+builder work; avoid a parallel demo-only implementation that drifts from the
+real workflow. The infant-food cohort and claims remain public MVP
+commitments, not part of this first drink's comprehensive coverage; claims
+already entered must never be silently discarded or treated as cleared.
+HSR, GM and irradiation are not required for this first scenario. Origin
+labelling is investigated for the actual demo scenario, not promised as a
+general-purpose origin engine.
+
+| Turn | Scope and dependencies | Exit check |
+| ---- | ---------------------- | ---------- |
+| D0 | [ ] Define the scenario and acceptance contract; identify the actual user journey, proposed supplier specs, product purpose, sources, rule applicability, output inventory and unresolved matters. Primary-source research is bounded to this product, Victoria and its label; include Code changes and transitions, origin, trade measurement and Victorian can/container obligations as applicable. Produce a proposed ADR for the local-demo result policy and request approval before changing D1/D8. | A fully specified fictional happy path and negative/boundary variants with independently calculated expected values exist; each required output is sourced, conditional or explicitly unverified. Exact policy, exports, limitations and reviewer/public-release gates are agreed before D1/D8 or app behaviour changes. |
+| D1 | [ ] Inventory current workflow against D0; design structured identities, substance/nutrition/allergen evidence and data flow for this slice. Map existing records, migrations and backup/restore; distinguish direct ingredients, supplier blends and nested recipes. | A field-to-result map identifies existing capabilities, gaps, one source of truth, unknown/conflict states and downstream dependencies. Migration and compatibility strategy preserves existing data and approved snapshots; user approves any material design choice. |
+| D2 | [ ] Implement the agreed provisional-demo result policy for the selected, source-verified checks only, after D0 approval. Keep the unreviewed and approved states distinguishable and use the same rule and trace machinery. | Screen and export behaviour match the approved ADR; tests cover applicable/inapplicable, draft/approved, missing/conflicting facts, unsupported mappings, low-confidence FAIL and prevention of accidental promotion or public-release claims. Existing unrelated checks retain their intended behaviour. |
+| D3 | [ ] Improve ingredient and supplier-specification entry for the scenario, including structured identity, caffeine and relevant blend components, nutrient basis and allergen/additive evidence. Reuse current records and terminology where possible. | A non-expert can enter the fictional specs once; unit/storage/migration and browser tests cover known, absent-with-evidence, unknown, conflict, unrecognised identity and round-trip persistence. No nutrient or component is invented. |
+| D4 | [ ] Propagate identity, allergens, additives and substance amounts through direct and nested formulation paths, with evidence and duplicate-source safeguards. | Tests verify direct/nested paths, multiple sources, proportions, absent versus unknown, missing blend details and no double counting; edits refresh dependent draft results without changing approved snapshots. |
+| D5 | [ ] Make batch yield, finished volume, relevant mass/volume conversions and nutrition inputs practical for the drink; use explicit density/evidence when conversion needs it. Integrate with the existing NIP calculation. | Independent fixtures verify per-100 mL and per-serving results, batch scaling, density and yield, boundary rounding and missing data; no assumed density or silent nutrient zero. Supplier-provided and calculated bases are distinguished. |
+| D6 | [ ] Guide product classification using recipe-derived facts plus only genuinely product-specific purpose/presentation facts. Implement source-mapped caffeine concentration and drink-specific declaration/advisory checks, including listed substances only where supported. | Tests cover applicable/non-applicable and uncertain classification, all caffeine sources, threshold boundaries, units, serving versus pack size, missing yield/evidence and transition/effective-date cases. Outputs and source traces are provisional under D2 policy. |
+| D7 | [ ] Generate the scenario's ingredient declaration, supported additive wording and allergen content from the existing recipe and evidence; evaluate relevant specified permissions and percentage triggers where mapped. | Expected declaration, order, nesting and allergen formatting are verified for the scenario; unsupported blend details, exemptions, missing identity and uncertain permissions are explicit, not guessed. Positive, negative and non-applicable tests retain input paths. |
+| D8 | [ ] Complete product and pack inputs for the scenario, including supplier, lot/date placeholders, storage, origin and other applicable Victorian/national pack facts from D0. Ask only for facts not derivable from earlier records. | A user can complete the scenario without repeating known recipe facts; required but unavailable content is identified with a targeted next action. No invented shelf life, origin claim, exact date or unsupported claim is presented as established. |
+| D9 | [ ] Assemble a representative can label preview and exact-size PDF from D5-D8, separating pack-copy content from the explanation/report. Use conditional, source-backed label content and clear production placeholders. | Complete scenario produces a readable NIP, ingredient/allergen content, applicable caffeine content and required supported pack sections. Preview/PDF agree; actual dimensions, overflow, legibility and missing/unsupported-content behaviour are tested. Do not label an incomplete or unverified output as print-ready or approved. |
+| D10 | [ ] Refine the end-to-end guidance and specific status messages; link each missing fact to its source record and provide source/calculation detail in the separate report. Preserve claims handling and optional features without asking irrelevant questions. | Browser tests show no repeated question for derived facts, actionable missing/conflict paths, keyboard and non-colour status cues, and a clear distinction between provisional findings and reviewer approval. |
+| D11 | [ ] Run the complete local demo and regression gate using the D0 happy path and variants: incomplete supplier data, an out-of-range/boundary case, nested propagation, changed source, and unsupported input. Exercise preview, PDF, trace, offline use and backup/restore. | End-to-end results match the independently specified fixtures; the complete scenario yields a representative PDF, and each variant gives the correct specific outcome without a false PASS or hidden omission. Run relevant unit/property, rule-data, typecheck, lint, build, accessibility and browser checks; document remaining gaps and arrange reviewer critique. |
+
+**Milestone exit and what follows.** D11 delivers a usable, honestly scoped
+local demo with evidence, limitations and an explicit reviewer-ready package.
+It does not complete reviewer acceptance, physical print proof, all
+Victoria/national law, infant-food or claims coverage, HSR, a deployed SaaS,
+or public release. After the demo, incorporate reviewer feedback and plan the
+next vertical slices for the remaining MVP commitments; do not broaden the
+drink scenario by silently treating other foods as supported.
 
 ### Phase 4 - SaaS foundation
 
@@ -372,7 +473,11 @@ This table does not verify Standard 1.2.7/1.2.10, additive permissions, prescrib
 
 ## 12. Progress tracker
 
-**Current phase: Phase 1 (in progress).**
+**Current position:** Phase 1 reviewer-ready engineering baseline and Phase 2,
+Phase 3 and usability groundwork are recorded below and in section 7. The
+proposed next workstream is the Victorian drink demo, D0-D11 in section 7;
+the sequence and its locked-policy change require approval before activation.
+Historical phase and release gates remain open unless explicitly superseded.
 
 Repository preparation (2026-11-05)
 
@@ -448,7 +553,9 @@ Phase 2 groundwork - current workstream
 - [x] Turn 13: Phase 2 engineering quality gate and reviewer verification records (docs/phase2-gate-record.md); reviewer sign-off outstanding.
 - Deterministic additive and prescribed-name results remain blocked on R4 and applicable reviewer-verified fixtures.
 
-Phases 3 to 6: not started.
+Phase 3 claims groundwork and U1-U9 are recorded in section 7; this does not
+mean claims are reviewer-approved or complete for public release. Phases 4 to
+6 have not started.
 
 ## 13. Verification and definition of done
 
@@ -678,3 +785,5 @@ Phase 1 manual demo: complete the flow offline; restore an encrypted backup on a
 - 2026-11-10: U6 complete. New `apps/web/src/product-form.ts` (pure, 9 unit tests), `components/ProductBuilder.vue` and `components/ProductTypeStep.vue`; storage gains optional `packDetails` on products (validated, 1 test). The builder saves the first step to create the product, then later steps save onto it, so one step never overwrites another's answers. Additives & names and Claims panels take an optional `productId` and hide their own picker; the Label builder page was removed (its questions live in "What is it?"). Pack details are not yet used by the label or NIP (U7/U8). Checks: vue-tsc, eslint, 298 unit and 15 e2e tests pass.
 - 2026-11-11: U7: draft ingredient and allergen content and a live, local export-readiness gate (DATA-003, CALC-001, TRACE-008, TRACE-012). The user chose a gate requiring essential builder inputs, including explicit ingredient allergen/additive coverage and nutrition, product type, and pack details; claims remain optional. Existing records need those confirmations, an explicit product type and units before export. Nested compound ingredients retain their structure; additive wording is explicitly marked as a candidate and final-food allergen conditions remain for review. PDF exports include draft limitations and are blocked for missing information or layout overflow. The NIP and other mandatory label content are not yet assembled, and readiness does not mean compliance.
 - 2026-11-11: U8: added the draft base nutrition panel to the Labels page and PDF (CALC-001, CALC-004, CALC-011, CALC-013, CALC-015, PACK-004). Supplier energy, explicit food form, a recipe-specific sold-food confirmation and sourced final density for volume are required; missing evidence is never zero. NPC display conventions are used with rounding-stage review still open. Unsupported food states and regulated claims block export rather than silently omitting their required nutrition handling. Prepared-food calculations, claim-driven rows, optional less-than declarations and other label content remain open; see ADR 008. This is not regulatory acceptance.
+- 2026-11-11: U9: added plain-English three-way summaries and suggested actions to additive/name and claim checks (TRACE-008, TRACE-012), without changing official results or promoting missing facts to a pass. Extended the PDF's separate report with paginated consultant notes, official findings, sources and limitations (TRACE-009, PACK-005); illustrative previews stay on screen only. Improved builder readiness wording, conditional questions and automated accessibility coverage. PDF export explicitly rejects characters the built-in font cannot represent rather than silently corrupting text. Regulatory approval, further label content and U8's calculation limitations remain open.
+- 2026-11-11: Proposed the D0-D11 Victorian caffeinated-drink end-to-end demo sequence. It prioritizes a representative local label and PDF, reuse of known ingredient/formulation facts, specific actionable results and bounded source research. D1/D8 and ADR-006 remain in force until the precise provisional-demo policy is approved and recorded; no implementation or release gate is changed by this planning entry.

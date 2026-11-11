@@ -25,6 +25,8 @@ test('worked examples load, stay REVIEW REQUIRED, preview when asked, show label
   await page.getByLabel(/Show what each result would be/).check();
   await expect(rosin.getByText('ILLUSTRATIVE ONLY', { exact: true })).toBeVisible();
   await expect(rosin.getByText(/would be FAIL/)).toBeVisible();
+  await expect(rosin.getByText(/Needs attention!/)).toBeVisible();
+  await expect(rosin.getByText(/illustrative only, based on unapproved rules/)).toBeVisible();
   await expect(sulphite.getByText(/Blocked by: .*CONCENTRATION_MISSING/)).toBeVisible();
   await expect(rosin.getByText('Status: REVIEW REQUIRED')).toBeVisible();
   await expect(page.getByText('Status: PASS')).toHaveCount(0);
@@ -38,6 +40,8 @@ test('worked examples load, stay REVIEW REQUIRED, preview when asked, show label
 
   await openProductStep(page, 'Example Citrus Boost', 'Claims');
   await expect(page.getByRole('article', { name: 'Claim: Low sugars' }).getByText(/would be PASS/)).toBeVisible();
+  await expect(page.getByRole('article', { name: 'Claim: Low sugars' }).getByText(/Entered information looks fine!/)).toBeVisible();
+  await expect(page.getByRole('article', { name: 'Claim: Low sugars' }).getByText(/not legal advice or a clearance/)).toBeVisible();
 
   await openProductStep(page, 'Example Honey and Oat Puree', 'Claims');
   await expect(
@@ -62,7 +66,7 @@ test('worked examples load, stay REVIEW REQUIRED, preview when asked, show label
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
   await page.getByLabel('Product draft').selectOption({ label: 'Example Apple and Oat Puree' });
   await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeDisabled();
-  await expect(page.getByText('Needs attention').first()).toBeVisible();
+  await expect(page.getByText('Needs attention!').first()).toBeVisible();
 
   const axe = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])

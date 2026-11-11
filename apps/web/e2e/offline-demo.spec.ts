@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import AxeBuilder from '@axe-core/playwright';
 
 test('loads the illustrative workflow and exports a PDF while offline', async ({ page }) => {
   const response = await page.goto('/');
@@ -69,6 +70,8 @@ test('loads the illustrative workflow and exports a PDF while offline', async ({
   await expect(page.getByLabel('Draft declaration')).toContainText('Contains: milk');
   await expect(page.getByRole('table', { name: 'Draft nutrition information' }))
     .toContainText('50 kJ');
+  const accessibility = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  expect(accessibility.violations.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -92,6 +95,10 @@ test('loads the illustrative workflow and exports a PDF while offline', async ({
   expect(pdfText).toContain('Contains: milk');
   expect(pdfText).toContain('DRAFT NUTRITION INFORMATION');
   expect(pdfText).toContain('50 kJ');
+  expect(pdfText).toContain('Notes for your consultant');
+  expect(pdfText).toContain('No claims were entered.');
+  expect(pdfText).toContain('Official results and limitations only');
+  expect(pdfText).not.toContain('ILLUSTRATIVE ONLY');
   expect(pdfText).toContain('DRAFT - consultant review required');
   await expect(page.getByRole('status').filter({ hasText: 'Draft PDF exported' }))
     .toBeVisible();
@@ -130,6 +137,33 @@ test('loads the illustrative workflow and exports a PDF while offline', async ({
   expect(liquidText).toContain('Per 100 mL');
   expect(liquidText).toContain('60 kJ');
   expect(liquidText).toContain('120 kJ');
+  await page.getByRole('button', { name: 'Products', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Claims' }).click();
+  await page.getByRole('button', { name: 'Add a claim' }).click();
+  await page.getByLabel('Claim 1 text (exactly as it appears)').fill('Natural example');
+  await page.getByLabel('Claim 1 type (your classification)').selectOption('not_code_regulated');
+  await page.getByLabel('I confirm the type of claim 1').check();
+  await page.getByRole('button', { name: 'Save claims' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Claims and claim facts saved' })).toBeVisible();
+  await page.getByLabel(/Show what each result would be/).check();
+  await page.getByRole('button', { name: 'Labels', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeEnabled();
+  const claimDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export draft PDF' }).click();
+  const claimPath = await (await claimDownload).path();
+  if (!claimPath) throw new Error('The claim report PDF was not saved locally.');
+  const claimText = (await readFile(claimPath)).toString('latin1');
+  expect(claimText).toContain('Natural example');
+  expect(claimText).toContain('Claim check: REVIEW REQUIRED');
+  expect(claimText).not.toContain('ILLUSTRATIVE ONLY');
+  await page.getByRole('button', { name: 'Products', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Claims' }).click();
+  await page.getByLabel('Claim 1 text (exactly as it appears)').fill('Natural 🥝');
+  await page.getByRole('button', { name: 'Save claims' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Claims and claim facts saved' })).toBeVisible();
+  await page.getByRole('button', { name: 'Labels', exact: true }).click();
+  await page.getByRole('button', { name: 'Export draft PDF' }).click();
+  await expect(page.getByRole('alert')).toContainText('characters the PDF font cannot display');
   await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
   await page.getByRole('button', { name: 'Edit ingredient Illustrative carrier' }).click();
   await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Nutrition' }).click();

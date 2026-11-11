@@ -7,6 +7,13 @@ const nonCertificationStatement =
   'This label draft assists review and does not certify legal compliance.';
 const fontReviewMessage =
   'Font embedding and physical print legibility are not verified. Inspect a rendered proof at print scale before use.';
+const supportedPdfText = /^[\x20-\x7e\xa0-\xff\u0152\u0153\u0160\u0161\u0178\u017d\u017e\u0192\u02c6\u02dc\u2013\u2014\u2018\u2019\u201a\u201c\u201d\u201e\u2020\u2021\u2022\u2026\u2030\u2039\u203a\u20ac\u2122\r\n]*$/u;
+
+function assertRenderableText(text: string): void {
+  if (!supportedPdfText.test(text)) {
+    throw new RangeError('Label or consultant notes contain characters the PDF font cannot display. Replace those characters in the product, ingredient or claim details and try again.');
+  }
+}
 
 interface LabelPdfRenderer {
   readonly jsPDF: typeof import('jspdf').jsPDF;
@@ -32,6 +39,12 @@ export interface LabelPdfMetadata {
   readonly productVersion: string;
   readonly ruleRelease: string;
   readonly exportedAt: string;
+  readonly consultantNotes?: readonly LabelConsultantSection[];
+}
+
+export interface LabelConsultantSection {
+  readonly heading: string;
+  readonly lines: readonly string[];
 }
 
 export interface LabelPdfReport {
@@ -77,6 +90,17 @@ function assertMetadata(metadata: LabelPdfMetadata): void {
     date.toISOString() !== metadata.exportedAt
   ) {
     throw new RangeError('exportedAt must be a canonical ISO-8601 UTC timestamp');
+  }
+  if (metadata.consultantNotes !== undefined && (!Array.isArray(metadata.consultantNotes)
+    || metadata.consultantNotes.some((section) => typeof section.heading !== 'string'
+      || !section.heading.trim() || !Array.isArray(section.lines)
+      || section.lines.some((line: unknown) => typeof line !== 'string' || !line.trim())))) {
+    throw new RangeError('Consultant notes must contain headings and non-empty text lines');
+  }
+  assertRenderableText(metadata.productVersion);
+  assertRenderableText(metadata.ruleRelease);
+  for (const section of metadata.consultantNotes ?? []) {
+    for (const text of [section.heading, ...section.lines]) assertRenderableText(text);
   }
 }
 
@@ -193,6 +217,7 @@ function parseLabelSvg(layout: LabelLayoutResult): {
   }
 
   for (const text of Array.from(svg.querySelectorAll('text'))) {
+    assertRenderableText(text.textContent ?? '');
     const fontSizeMm = Number(text.getAttribute('font-size'));
     if (!Number.isFinite(fontSizeMm) || fontSizeMm <= 0) {
       throw new RangeError('SVG text font size must be positive and finite');
@@ -209,7 +234,7 @@ function pdfDate(timestamp: string): string {
 
 async function stableFileId(layoutSvg: string, metadata: LabelPdfMetadata): Promise<string> {
   const input = new TextEncoder().encode(
-    `${layoutSvg}\u0000${metadata.productVersion}\u0000${metadata.ruleRelease}\u0000${metadata.exportedAt}`,
+    `${layoutSvg}\u0000${metadata.productVersion}\u0000${metadata.ruleRelease}\u0000${metadata.exportedAt}\u0000${JSON.stringify(metadata.consultantNotes ?? [])}`,
   );
   const digest = await crypto.subtle.digest('SHA-256', input);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0'))
@@ -241,6 +266,12 @@ function writeReportPage(
     ...report.issues.map((issue) => `${issue.code}: ${issue.message}`),
     '',
     report.nonCertificationStatement,
+    ...(metadata.consultantNotes?.length ? [
+      '',
+      'Notes for your consultant',
+      'Official results and limitations only. No illustrative preview is included.',
+      ...metadata.consultantNotes.flatMap((section) => ['', section.heading, ...section.lines]),
+    ] : []),
   ];
 
   let cursorY = 32;

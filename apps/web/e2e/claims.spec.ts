@@ -12,11 +12,13 @@ test('claims stay REVIEW REQUIRED, preview is opt-in and per session, and nothin
   await openProductStep(page, 'Illustrative demo product', 'Claims');
   await expect(page.getByRole('heading', { name: 'Facts about this product' })).toBeVisible();
   await expect(page.getByText('No claims entered for this product.')).toBeVisible();
+  await expect(page.getByLabel('Food form')).toHaveCount(0);
 
   // Enter a claim with a person's classification, link, figure and evidence.
   await page.getByRole('button', { name: 'Add a claim' }).click();
   await page.getByLabel('Claim 1 text (exactly as it appears)').fill('Low sugars');
   await page.getByLabel('Claim 1 type (your classification)').selectOption('nutrition_content');
+  await expect(page.getByLabel('Food form')).toBeVisible();
   await page.getByLabel('I confirm the type of claim 1').check();
   await page.getByLabel('Claim 1 supported claim rule').selectOption({ label: 'Low sugars' });
   await page.getByLabel(/Claim 1 amount/).fill('1');

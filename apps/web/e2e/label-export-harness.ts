@@ -30,6 +30,28 @@ export async function createRepeatExportFixture() {
   };
   const first = await createLabelPdf(layout, metadata);
   const second = await createLabelPdf(layout, metadata);
+  const withNotes = {
+    ...metadata,
+    consultantNotes: [
+      { heading: 'Claims', lines: ['Claim "Natural": REVIEW REQUIRED.', ...Array.from({ length: 60 }, (_, index) => `Review detail ${index + 1}`)] },
+    ],
+  };
+  const notesFirst = await createLabelPdf(layout, withNotes);
+  const notesSecond = await createLabelPdf(layout, withNotes);
+  let unsupportedNotesRejected = false;
+  try {
+    await createLabelPdf(layout, { ...metadata, consultantNotes: [{ heading: 'Claims', lines: ['Unsupported character: 🥝'] }] });
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    unsupportedNotesRejected = true;
+  }
+  let unsupportedLabelRejected = false;
+  try {
+    await createLabelPdf({ ...layout, svg: layout.svg.replace('Oat beverage', 'Oat 🥝') }, metadata);
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    unsupportedLabelRejected = true;
+  }
   let unsafeSvgRejected = false;
   try {
     await createLabelPdf(
@@ -48,5 +70,9 @@ export async function createRepeatExportFixture() {
     secondBytes: Array.from(second.pdfBytes),
     report: first.report,
     unsafeSvgRejected,
+    notesFirstBytes: Array.from(notesFirst.pdfBytes),
+    notesSecondBytes: Array.from(notesSecond.pdfBytes),
+    unsupportedNotesRejected,
+    unsupportedLabelRejected,
   };
 }

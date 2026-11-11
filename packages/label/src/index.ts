@@ -362,4 +362,4 @@ export function layoutLabel(input: LabelLayoutInput): LabelLayoutResult {
 
 export { createLabelPdf } from './pdf.js';
 export { preloadLabelPdfRenderer } from './pdf.js';
-export type { LabelPdfExport, LabelPdfMetadata, LabelPdfReport } from './pdf.js';
+export type { LabelConsultantSection, LabelPdfExport, LabelPdfMetadata, LabelPdfReport } from './pdf.js';
