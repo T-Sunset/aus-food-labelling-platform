@@ -457,9 +457,10 @@ describe('local draft repositories', () => {
 
   it('stores pack details and rejects malformed ones', async () => {
     const store = await openTestStore();
-    const packDetails = { servingSize: '250', servingsPerPack: '2', netQuantity: '500', netUnit: 'mL' as const };
-    await store.products.create({ ...product, packDetails });
+    const packDetails = { servingSize: '250', servingUnit: 'mL' as const, servingsPerPack: '2', netQuantity: '500', netUnit: 'mL' as const };
+    await store.products.create({ ...product, packDetails, builderProductType: 'other' });
     expect((await store.products.get(product.id))?.packDetails).toEqual(packDetails);
+    expect((await store.products.get(product.id))?.builderProductType).toBe('other');
 
     const bad: unknown[] = [
       'big',
@@ -468,11 +469,49 @@ describe('local draft repositories', () => {
       { servingsPerPack: 'two' },
       { netQuantity: 500 },
       { netUnit: 'kg' },
+      { servingUnit: 'kg' },
+      { nutritionFoodForm: 'unknown' },
+      { nutritionRecipeSignature: '' },
+      { nutritionDensity: { gramsPerMillilitre: '0', evidenceReference: 'test', sourceDate: '2026-01-01' } },
+      { nutritionDensity: { gramsPerMillilitre: '1', evidenceReference: '', sourceDate: '2026-01-01' } },
+      { nutritionDensity: { gramsPerMillilitre: '1', evidenceReference: 'test', sourceDate: 'yesterday' } },
     ];
     for (const value of bad) {
       await expect(store.products.update(product.id, { packDetails: value } as never)).rejects.toBeInstanceOf(
         RecordValidationError,
       );
+    }
+    await expect(store.products.update(product.id, { builderProductType: 'unknown' } as never))
+      .rejects.toBeInstanceOf(RecordValidationError);
+  });
+
+  it('validates explicit ingredient coverage confirmations', async () => {
+    const store = await openTestStore();
+    await store.ingredients.create({ ...ingredient, allergensConfirmed: true, additivesConfirmed: false });
+    expect(await store.ingredients.get(ingredient.id)).toMatchObject({
+      allergensConfirmed: true, additivesConfirmed: false,
+    });
+
+    await expect(store.ingredients.update(ingredient.id, { allergensConfirmed: 'yes' } as never))
+      .rejects.toBeInstanceOf(RecordValidationError);
+    await expect(store.ingredients.update(ingredient.id, { additivesConfirmed: 'yes' } as never))
+      .rejects.toBeInstanceOf(RecordValidationError);
+    await expect(store.ingredients.update(ingredient.id, {
+      coverageSpecification: { reference: 'spec', sourceDate: 'yesterday' },
+    } as never)).rejects.toBeInstanceOf(RecordValidationError);
+  });
+
+  it('stores supplier energy and rejects incomplete or malformed evidence', async () => {
+    const store = await openTestStore();
+    const energyPer100g = { value: '100', sourceId: 'spec', sourceDate: '2026-01-01' };
+    await store.ingredients.create({ ...ingredient, energyPer100g });
+    expect((await store.ingredients.get(ingredient.id))?.energyPer100g).toEqual(energyPer100g);
+    for (const bad of [
+      { ...energyPer100g, value: '-1' },
+      { ...energyPer100g, sourceId: '' },
+      { ...energyPer100g, sourceDate: 'yesterday' },
+    ]) {
+      await expect(store.ingredients.update(ingredient.id, { energyPer100g: bad })).rejects.toBeInstanceOf(RecordValidationError);
     }
   });
 });
@@ -637,6 +676,28 @@ describe('schema migrations and recovery points', () => {
 });
 
 describe('versioned workspace backups', () => {
+  it('round-trips nutrition energy, food basis and density evidence', async () => {
+    const source = await openTestStore();
+    const ingredientWithEnergy: IngredientRecord = {
+      ...ingredient, energyPer100g: { value: '170', sourceId: 'spec', sourceDate: '2026-01-01' },
+    };
+    const productWithNutrition: ProductRecord = {
+      ...product, packDetails: {
+        nutritionFoodForm: 'liquid',
+        nutritionRecipeSignature: 'recipe-snapshot',
+        nutritionDensity: { gramsPerMillilitre: '1.2', evidenceReference: 'density test', sourceDate: '2026-01-01' },
+      },
+    };
+    await source.ingredients.create(ingredientWithEnergy);
+    await source.formulations.create(formulation);
+    await source.products.create(productWithNutrition);
+    const backup = await source.exportBackup({ encryption: 'none' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup);
+    expect(await target.ingredients.get(ingredient.id)).toEqual(ingredientWithEnergy);
+    expect(await target.products.get(product.id)).toEqual(productWithNutrition);
+  });
+
   it('exports encrypted by passphrase and restores all records on an empty profile', async () => {
     const source = await openTestStore();
     await source.ingredients.create(ingredient);

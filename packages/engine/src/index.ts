@@ -16,6 +16,7 @@ export {
 } from './mass.js';
 export { calculateProcessMassBalance, ProcessMassError } from './process-mass.js';
 export { aggregateNutrients } from './nutrition.js';
+export { formatNpcNutrient } from './nip-rounding.js';
 export { calculateSchedule11Energy } from './energy.js';
 export { propagateAllergens } from './allergens.js';
 export { orderIngredientDeclaration } from './ingredient-declaration.js';

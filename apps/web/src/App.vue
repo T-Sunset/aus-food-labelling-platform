@@ -70,6 +70,7 @@ const expansion = ref<{
 const expansionError = ref('');
 
 const productEditor = ref<ProductRecord | 'new'>();
+const createdProductId = ref<string>();
 
 const sections: { id: Section; label: string }[] = [
   { id: 'overview', label: 'Overview' },
@@ -137,6 +138,10 @@ async function refreshRecords(): Promise<void> {
     store.value.formulations.list(),
     store.value.products.list(),
   ]);
+  if (productEditor.value && productEditor.value !== 'new') {
+    const editingId = productEditor.value.id;
+    productEditor.value = products.value.find((product) => product.id === editingId);
+  }
   productVersions.value = (
     await Promise.all(
       products.value.map((product) => store.value!.approvedVersions.list('product', product.id)),
@@ -1233,6 +1238,8 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
               :products="products"
               :formulations="formulations"
               :ingredients="ingredients"
+              @edit-product="productEditor = products.find((item) => item.id === $event); activeSection = 'products'"
+              @go-ingredients="activeSection = 'ingredients'"
             />
           </section>
 
@@ -1259,13 +1266,14 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 v-if="productEditor !== undefined && store"
                 :key="productEditor === 'new' ? 'new' : productEditor.id"
                 :store="store"
-                :record="productEditor === 'new' ? undefined : productEditor"
+                :record="productEditor === 'new' ? products.find((item) => item.id === createdProductId) : productEditor"
                 :products="products"
                 :formulations="formulations"
                 :ingredients="ingredients"
                 :make-id="makeId"
                 :refresh="refreshRecords"
-                @cancel="productEditor = undefined"
+                @created="createdProductId = $event"
+                @cancel="productEditor = undefined; createdProductId = undefined"
                 @go="activeSection = $event as Section"
               />
 
@@ -1286,7 +1294,7 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                   <span class="count-badge">{{ products.length }}</span>
                   <AppButton
                     type="button"
-                    @click="productEditor = 'new'"
+                    @click="createdProductId = undefined; productEditor = 'new'"
                   >
                     Add product
                   </AppButton>

@@ -55,16 +55,14 @@ test('worked examples load, stay REVIEW REQUIRED, preview when asked, show label
   for (const name of ['Example Citrus Boost', 'Example Apple and Oat Puree', 'Example Honey and Oat Puree']) {
     await page.getByRole('button', { name: 'Labels', exact: true }).click();
     await page.getByLabel('Product draft').selectOption({ label: name });
-    await expect(page.getByRole('img', { name: /Illustrative label layout/ })).toBeVisible();
+    await expect(page.getByRole('img', { name: /Draft label layout/ })).toBeVisible();
     await expect(page.getByText('The selected product has no available formulation.')).toHaveCount(0);
     await page.getByRole('button', { name: 'Overview' }).click();
   }
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
   await page.getByLabel('Product draft').selectOption({ label: 'Example Apple and Oat Puree' });
-  const downloadPromise = page.waitForEvent('download');
-  await expect(page.getByRole('button', { name: 'Export illustrative PDF draft' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Export illustrative PDF draft' }).click();
-  expect((await downloadPromise).suggestedFilename()).toMatch(/\.pdf$/);
+  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeDisabled();
+  await expect(page.getByText('Needs attention').first()).toBeVisible();
 
   const axe = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])

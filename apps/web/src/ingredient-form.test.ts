@@ -39,6 +39,18 @@ describe('buildIngredientRecord', () => {
     expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/reference and date/);
   });
 
+  it('stores supplier energy evidence and removes it when cleared', () => {
+    const draft = filledDraft();
+    draft.energyPer100g = '123.4';
+    const record = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(record.energyPer100g).toEqual({ value: '123.4', sourceId: 'SPEC-1', sourceDate: '2026-01-01' });
+    const edit = draftFromIngredient(record);
+    edit.energyPer100g = '';
+    expect(buildIngredientRecord(edit, record, makeId, now).energyPer100g).toBeUndefined();
+    draft.energyPer100g = '-1';
+    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/energy/);
+  });
+
   it('requires a name and a type', () => {
     expect(() => buildIngredientRecord(emptyIngredientDraft(), undefined, makeId, now)).toThrow();
   });
@@ -54,6 +66,23 @@ describe('buildIngredientRecord', () => {
     draft.knownAllergens = ['wheat', 'milk'];
     const record = buildIngredientRecord(draft, undefined, makeId, now);
     expect(record.allergenEvidence?.[0]?.assessments).toEqual({ wheat: 'present', milk: 'present' });
+  });
+
+  it('requires a supplier reference for explicit coverage confirmations', () => {
+    const draft = emptyIngredientDraft();
+    draft.name = 'Water';
+    draft.kind = 'atomic';
+    draft.allergensConfirmed = true;
+    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/specification reference and date/);
+    draft.allergensConfirmed = false;
+    draft.additivesConfirmed = true;
+    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/specification reference and date/);
+    draft.specificationReference = 'SPEC';
+    draft.specificationDate = '2026-01-01';
+    const record = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(record.additivesConfirmed).toBe(true);
+    expect(record.allergensConfirmed).toBe(false);
+    expect(record.allergenEvidence).toBeUndefined();
   });
 });
 
@@ -131,7 +160,7 @@ describe('ingredientStepStatuses', () => {
   it('reports progress in plain words', () => {
     const statuses = ingredientStepStatuses(filledDraft());
     expect(statuses.about.done).toBe(true);
-    expect(statuses.nutrition.text).toBe('1 of 6 entered');
-    expect(statuses.allergens.text).toBe('None recorded');
+    expect(statuses.nutrition.text).toBe('1 of 7 entered');
+    expect(statuses.allergens.text).toBe('Still needed');
   });
 });

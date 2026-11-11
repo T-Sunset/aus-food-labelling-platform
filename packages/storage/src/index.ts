@@ -43,8 +43,19 @@ export interface IngredientRecord extends DraftRecordBase {
   };
   readonly compoundFormulationId?: string;
   readonly nutrientProfile?: IngredientNutrientProfile;
+  readonly energyPer100g?: {
+    readonly value: string;
+    readonly sourceId: string;
+    readonly sourceDate: string;
+  };
   readonly allergenEvidence?: readonly AllergenEvidenceSource[];
+  readonly allergensConfirmed?: boolean;
   readonly additiveSources?: readonly IngredientAdditiveSource[];
+  readonly additivesConfirmed?: boolean;
+  readonly coverageSpecification?: {
+    readonly reference: string;
+    readonly sourceDate: string;
+  };
 }
 
 export interface FormulationRecord extends DraftRecordBase {
@@ -55,15 +66,24 @@ export interface FormulationRecord extends DraftRecordBase {
 
 export interface ProductPackDetails {
   readonly servingSize?: string;
+  readonly servingUnit?: 'g' | 'mL';
   readonly servingsPerPack?: string;
   readonly netQuantity?: string;
   readonly netUnit?: 'g' | 'mL';
+  readonly nutritionFoodForm?: 'solid' | 'liquid';
+  readonly nutritionRecipeSignature?: string;
+  readonly nutritionDensity?: {
+    readonly gramsPerMillilitre: string;
+    readonly evidenceReference: string;
+    readonly sourceDate: string;
+  };
 }
 
 export interface ProductRecord extends DraftRecordBase {
   readonly recordType: 'product';
   readonly formulationId: string;
   readonly foodState?: FoodState;
+  readonly builderProductType?: 'caffeinatedBeverage' | 'infantFood' | 'other';
   readonly packDetails?: ProductPackDetails;
   readonly classificationProfile?: ProductClassificationProfile;
   readonly additiveNameInputs?: ProductAdditiveNameInputs;
@@ -684,12 +704,30 @@ function validatePackDetails(value: unknown): void {
   }
   for (const key of ['servingSize', 'servingsPerPack', 'netQuantity']) {
     const entry = value[key];
-    if (entry !== undefined && (typeof entry !== 'string' || !/^\d+(\.\d+)?$/.test(entry) || Number(entry) <= 0)) {
+    if (entry !== undefined && (typeof entry !== 'string' || !/^\d+(\.\d+)?$/.test(entry) || !Number.isFinite(Number(entry)) || Number(entry) <= 0)) {
       throw new RecordValidationError(`packDetails ${key} must be a positive decimal string when present`);
     }
   }
   if (value.netUnit !== undefined && value.netUnit !== 'g' && value.netUnit !== 'mL') {
     throw new RecordValidationError('packDetails netUnit must be g or mL');
+  }
+  if (value.servingUnit !== undefined && value.servingUnit !== 'g' && value.servingUnit !== 'mL') {
+    throw new RecordValidationError('packDetails servingUnit must be g or mL');
+  }
+  if (value.nutritionFoodForm !== undefined && value.nutritionFoodForm !== 'solid' && value.nutritionFoodForm !== 'liquid') {
+    throw new RecordValidationError('packDetails nutritionFoodForm must be solid or liquid');
+  }
+  if (value.nutritionRecipeSignature !== undefined && !isNonEmpty(value.nutritionRecipeSignature)) {
+    throw new RecordValidationError('packDetails nutritionRecipeSignature must be non-empty');
+  }
+  if (value.nutritionDensity !== undefined) {
+    const density = value.nutritionDensity;
+    if (!isRecord(density) || typeof density.gramsPerMillilitre !== 'string'
+      || !/^\d+(\.\d+)?$/.test(density.gramsPerMillilitre)
+      || !Number.isFinite(Number(density.gramsPerMillilitre)) || Number(density.gramsPerMillilitre) <= 0
+      || !isNonEmpty(density.evidenceReference) || !isIsoDate(density.sourceDate)) {
+      throw new RecordValidationError('packDetails nutritionDensity needs a positive value, reference and valid date');
+    }
   }
 }
 
@@ -795,11 +833,29 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
     ) {
       throw new RecordValidationError('Nutrient profile must match the ingredient id and contain values');
     }
+    if (record.energyPer100g !== undefined) {
+      const energy = record.energyPer100g;
+      if (!isRecord(energy) || typeof energy.value !== 'string' || !/^\d+(\.\d+)?$/.test(energy.value)
+        || !Number.isFinite(Number(energy.value)) || !isNonEmpty(energy.sourceId) || !isIsoDate(energy.sourceDate)) {
+        throw new RecordValidationError('energyPer100g needs a non-negative value, reference and valid date');
+      }
+    }
     if (record.allergenEvidence !== undefined && !Array.isArray(record.allergenEvidence)) {
       throw new RecordValidationError('allergenEvidence must be an array when present');
     }
+    if (record.allergensConfirmed !== undefined && typeof record.allergensConfirmed !== 'boolean') {
+      throw new RecordValidationError('allergensConfirmed must be a boolean');
+    }
     if (record.additiveSources !== undefined) {
       validateIngredientAdditiveSources(record.additiveSources, record.id);
+    }
+    if (record.additivesConfirmed !== undefined && typeof record.additivesConfirmed !== 'boolean') {
+      throw new RecordValidationError('additivesConfirmed must be a boolean');
+    }
+    if (record.coverageSpecification !== undefined
+      && (!isRecord(record.coverageSpecification) || !isNonEmpty(record.coverageSpecification.reference)
+        || !isIsoDate(record.coverageSpecification.sourceDate))) {
+      throw new RecordValidationError('coverageSpecification must include a reference and valid source date');
     }
   } else if (record.recordType === 'formulation') {
     if (!Array.isArray(record.lines)) {
@@ -837,6 +893,10 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
   }
   if (record.recordType === 'product' && record.packDetails !== undefined) {
     validatePackDetails(record.packDetails);
+  }
+  if (record.recordType === 'product' && record.builderProductType !== undefined
+    && !['caffeinatedBeverage', 'infantFood', 'other'].includes(record.builderProductType)) {
+    throw new RecordValidationError('builderProductType is unsupported');
   }
   if (record.recordType === 'product' && record.additiveNameInputs !== undefined) {
     validateAdditiveNameInputs(record.additiveNameInputs);

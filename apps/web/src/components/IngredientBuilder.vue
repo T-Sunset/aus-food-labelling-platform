@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, toRaw, watch } from 'vue';
 import type { FormulationRecord, IngredientRecord } from '@aus-food/storage';
 import {
   buildIngredientRecord,
@@ -38,6 +38,14 @@ watch(
   },
   { immediate: true, deep: true },
 );
+watch(
+  () => [draft.specificationReference, draft.specificationDate, ...draft.knownAllergens],
+  () => { draft.allergensConfirmed = false; },
+);
+watch(
+  () => [draft.specificationReference, draft.specificationDate, JSON.stringify(draft.additiveSources)],
+  () => { draft.additivesConfirmed = false; },
+);
 
 const statuses = computed(() => ingredientStepStatuses(draft));
 const steps = computed<BuilderStep[]>(() => [
@@ -64,7 +72,8 @@ function addAdditive(): void {
 function submit(): void {
   errorMessage.value = '';
   try {
-    const record = buildIngredientRecord(draft, props.record, props.makeId, new Date().toISOString());
+    const existing = props.record === undefined ? undefined : toRaw(props.record);
+    const record = buildIngredientRecord(draft, existing, props.makeId, new Date().toISOString());
     emit('save', record);
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'This ingredient could not be saved.';
@@ -201,6 +210,15 @@ function submit(): void {
           column. Only enter values shown there. Blank means "not supplied", never zero.
         </p>
         <div class="nutrient-grid">
+          <label class="field">
+            <span>Energy <small>kJ/100 g</small></span>
+            <input
+              v-model="draft.energyPer100g"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="Not supplied"
+            >
+          </label>
           <label
             v-for="nutrient in managedNutrients"
             :key="nutrient.key"
@@ -249,6 +267,15 @@ function submit(): void {
             placeholder="Comma separated"
           >
         </label>
+        <label class="check-item">
+          <input
+            v-model="draft.allergensConfirmed"
+            type="checkbox"
+          >
+          <span>I checked the supplier information for every allergen shown, including those in additives.
+            The ticked allergens are present and each unticked allergen is confirmed absent.
+            Do not tick this if any answer is unknown.</span>
+        </label>
       </fieldset>
 
       <fieldset
@@ -258,9 +285,17 @@ function submit(): void {
         <legend>Additive source records</legend>
         <p class="field-hint">
           Does the spec sheet list additives such as a preservative, colour, sweetener or thickener? If
-          not, skip this step. If so, add each one. Enter what the sheet says; we use it to draft the
+          not, confirm that below. If so, add each one. Enter what the sheet says; we use it to draft the
           ingredient list and to check amounts, but a consultant must confirm the final wording.
         </p>
+        <label class="check-item">
+          <input
+            v-model="draft.additivesConfirmed"
+            type="checkbox"
+          >
+          <span>The supplier confirms this ingredient contains no additives, or I have recorded every
+            additive the supplier confirms is present. Do not tick this if the information is incomplete.</span>
+        </label>
         <fieldset
           v-for="(source, index) in draft.additiveSources"
           :key="source.id"

@@ -46,11 +46,21 @@ describe('buildPackDetails', () => {
       expect(() => buildPackDetails({ ...filled(), servingSize: bad })).toThrow('positive numbers');
     }
   });
+
+  it('requires an explicit recipe signature and complete density evidence', () => {
+    const confirmed = { ...filled(), nutritionBasisConfirmed: true };
+    expect(() => buildPackDetails(confirmed)).toThrow('valid recipe');
+    expect(buildPackDetails(confirmed, 'recipe-snapshot')).toEqual({ nutritionRecipeSignature: 'recipe-snapshot' });
+    expect(() => buildPackDetails({ ...filled(), nutritionDensity: '1' })).toThrow(/Density needs/);
+    expect(buildPackDetails({
+      ...filled(), nutritionDensity: '1.2', nutritionDensityReference: 'Test report', nutritionDensityDate: '2026-01-01',
+    })).toEqual({ nutritionDensity: { gramsPerMillilitre: '1.2', evidenceReference: 'Test report', sourceDate: '2026-01-01' } });
+  });
 });
 
 describe('newProductRecord and draftFromProduct', () => {
   it('round-trips pack details', () => {
-    const draft = { ...filled(), servingsPerPack: '2', netQuantity: '500' };
+    const draft = { ...filled(), servingsPerPack: '2', netQuantity: '500', netUnit: 'g' as const };
     const record = newProductRecord(buildProductChanges(draft, ['f-1']), 'p-1', now);
     expect(record.packDetails).toEqual({ servingsPerPack: '2', netQuantity: '500', netUnit: 'g' });
     expect(draftFromProduct(record).servingsPerPack).toBe('2');
@@ -69,7 +79,9 @@ describe('productStepStatuses', () => {
   it('marks pack done only when all three amounts are present', () => {
     const draft = { ...filled(), servingSize: '250', servingsPerPack: '2' };
     expect(productStepStatuses(draft, undefined).pack.done).toBe(false);
-    expect(productStepStatuses({ ...draft, netQuantity: '500' }, undefined).pack.done).toBe(true);
+    expect(productStepStatuses({ ...draft, netQuantity: '500' }, undefined).pack.done).toBe(false);
+    expect(productStepStatuses({ ...draft, netQuantity: '500', servingUnit: 'mL' }, undefined).pack.done).toBe(false);
+    expect(productStepStatuses({ ...draft, netQuantity: '500', servingUnit: 'mL', netUnit: 'mL' }, undefined).pack.done).toBe(true);
   });
 
   it('treats saved additive and claim entries as answered', () => {

@@ -7,6 +7,7 @@ import {
 } from '@aus-food/rules/release-0.1.0-draft.json';
 import type {
   AdditivePermissionCatalogView,
+  AllergenVocabularyEntry,
   ClaimRuleView,
   PrescribedNameRuleView,
   RuleTraceMetadata,
@@ -15,11 +16,20 @@ import type {
 // Draft rule data shipped with the app. It is not reviewed and is never presented as an approved release.
 export const RULE_RELEASE_LABEL = 'Draft rule data 0.1.0-draft (not reviewed)';
 
-export const allergenChoices: readonly { id: string; label: string }[] = (
-  allergenVocabulary.entries as readonly { id: string; summaryName: string }[]
-).map((entry) => ({
+export const draftAllergenVocabulary: readonly AllergenVocabularyEntry[] =
+  allergenVocabulary.entries.map((entry) => ({
+    id: entry.id,
+    ingredientListName: entry.ingredientListName,
+    summaryName: entry.summaryName,
+    ...('evaluation' in entry && entry.evaluation === 'final-food-concentration'
+      ? { requiresFinalFoodEvaluation: true }
+      : {}),
+  }));
+
+export const allergenChoices: readonly { id: string; label: string }[] = draftAllergenVocabulary.map((entry) => ({
   id: entry.id,
-  label: entry.summaryName.charAt(0).toUpperCase() + entry.summaryName.slice(1),
+  label: entry.ingredientListName.charAt(0).toUpperCase() + entry.ingredientListName.slice(1)
+    + (entry.summaryName === entry.ingredientListName ? '' : ` (${entry.summaryName})`),
 }));
 
 export const permissionCatalog = additivePermissionCatalog as unknown as AdditivePermissionCatalogView;

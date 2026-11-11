@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import type { FormulationRecord, IngredientRecord, LocalFoodStore, ProductRecord } from '@aus-food/storage';
 import {
   buildProductChanges,
@@ -7,9 +7,11 @@ import {
   emptyProductDraft,
   foodStateOptions,
   newProductRecord,
+  nutritionRecipeSignature,
   productStepStatuses,
   type ProductChanges,
 } from '../product-form';
+import { makeLabelDraft } from '../label-draft';
 import AdditiveNameChecksPanel from './AdditiveNameChecksPanel.vue';
 import ClaimsPanel from './ClaimsPanel.vue';
 import ProductTypeStep from './ProductTypeStep.vue';
@@ -25,7 +27,7 @@ const props = defineProps<{
   makeId: (prefix: string) => string;
   refresh: () => Promise<void>;
 }>();
-const emit = defineEmits<{ cancel: []; go: [section: string] }>();
+const emit = defineEmits<{ cancel: []; go: [section: string]; created: [id: string] }>();
 
 const draft = reactive(props.record ? draftFromProduct(props.record) : emptyProductDraft());
 const savedId = ref(props.record?.id);
@@ -35,7 +37,35 @@ const message = ref('');
 
 const saved = computed(() => props.products.find((item) => item.id === savedId.value));
 const recipe = computed(() => props.formulations.find((item) => item.id === draft.formulationId));
-const statuses = computed(() => productStepStatuses(draft, saved.value));
+const nutritionRecipe = computed(() => {
+  if (!draft.formulationId) return { signature: '', error: '' };
+  try {
+    return { signature: nutritionRecipeSignature(draft.formulationId, props.formulations), error: '' };
+  } catch (error) {
+    return { signature: '', error: error instanceof Error ? error.message : 'The recipe could not be read.' };
+  }
+});
+const currentSignature = computed(() => nutritionRecipe.value.signature);
+if (props.record?.packDetails?.nutritionRecipeSignature !== currentSignature.value) {
+  draft.nutritionBasisConfirmed = false;
+}
+watch(currentSignature, () => { draft.nutritionBasisConfirmed = false; });
+const statuses = computed(() => {
+  const result = productStepStatuses(draft, saved.value);
+  const needsDensity = draft.nutritionFoodForm === 'liquid' || draft.servingUnit === 'mL';
+  const densityEntered = /^\d+(\.\d+)?$/.test(draft.nutritionDensity.trim())
+    && Number.isFinite(Number(draft.nutritionDensity)) && Number(draft.nutritionDensity) > 0
+    && draft.nutritionDensityReference.trim() !== '' && draft.nutritionDensityDate !== '';
+  const packComplete = result.pack.done && draft.nutritionFoodForm !== ''
+    && draft.nutritionBasisConfirmed && currentSignature.value !== ''
+    && (!needsDensity || densityEntered);
+  result.pack = { done: packComplete, text: packComplete ? 'Answered' : 'Still needed' };
+  if (saved.value && saved.value.formulationId === draft.formulationId) {
+    const complete = makeLabelDraft(saved.value, props.formulations, props.ingredients).additivesComplete;
+    result.additives = { done: complete, text: complete ? 'Information entered' : 'Still needed' };
+  }
+  return result;
+});
 const steps = computed<BuilderStep[]>(() => [
   { id: 'about', title: 'About it', status: statuses.value.about.text, done: statuses.value.about.done },
   { id: 'type', title: 'What is it?', status: statuses.value.type.text, done: statuses.value.type.done },
@@ -55,20 +85,24 @@ async function saveBasics(): Promise<boolean> {
   errorMessage.value = '';
   message.value = '';
   try {
+    let createdId: string | undefined;
     const changes: ProductChanges = buildProductChanges(
       draft,
       props.formulations.map((item) => item.id),
+      draft.nutritionBasisConfirmed ? currentSignature.value : undefined,
     );
     if (savedId.value === undefined) {
       const record = newProductRecord(changes, props.makeId('product'), new Date().toISOString());
       await props.store.products.create(record);
       savedId.value = record.id;
+      createdId = record.id;
     } else {
       // A cleared pack detail is sent as an explicit undefined so storage removes it.
       const edits: Record<string, unknown> = { ...changes };
       await props.store.products.update(savedId.value, edits);
     }
     await props.refresh();
+    if (createdId) emit('created', createdId);
     message.value = 'Saved on this device.';
     return true;
   } catch (error) {
@@ -194,12 +228,20 @@ function summaryLine(done: boolean, doneText: string, todoText: string): string 
           yet: we treat it as unknown, never as zero.
         </p>
         <label class="field">
-          <span>Serving size (g or mL)</span>
+          <span>Serving size</span>
           <input
             v-model="draft.servingSize"
             inputmode="decimal"
             placeholder="e.g. 250"
           >
+        </label>
+        <label class="field">
+          <span>Serving size unit</span>
+          <select v-model="draft.servingUnit">
+            <option value="">Choose a unit</option>
+            <option value="g">g</option>
+            <option value="mL">mL</option>
+          </select>
         </label>
         <label class="field">
           <span>Servings per pack</span>
@@ -220,10 +262,63 @@ function summaryLine(done: boolean, doneText: string, todoText: string): string 
         <label class="field">
           <span>Net contents unit</span>
           <select v-model="draft.netUnit">
+            <option value="">Choose a unit</option>
             <option value="g">g (solid foods)</option>
             <option value="mL">mL (liquids)</option>
           </select>
         </label>
+        <label class="field full">
+          <span>Is the food solid or liquid?</span>
+          <select v-model="draft.nutritionFoodForm">
+            <option value="">Choose one</option>
+            <option value="solid">Solid</option>
+            <option value="liquid">Liquid</option>
+          </select>
+        </label>
+        <label class="full">
+          <input
+            v-model="draft.nutritionBasisConfirmed"
+            type="checkbox"
+          >
+          I have checked that the recipe amounts and supplier nutrient values represent the food as sold,
+          with no change in mass or nutrient content during preparation or processing. If density is entered,
+          it applies to this recipe as sold.
+        </label>
+        <p class="field-hint full">
+          If that is not true or you are unsure, leave this unchecked. The draft panel cannot yet calculate
+          nutrition after processing or preparation.
+        </p>
+        <p
+          v-if="nutritionRecipe.error"
+          class="field-hint full"
+          role="alert"
+        >
+          Nutrition recipe needs attention: {{ nutritionRecipe.error }}
+        </p>
+        <template v-if="draft.servingUnit === 'mL' || draft.nutritionFoodForm === 'liquid'">
+          <p class="field-hint full">
+            For volume amounts, enter the final food's density and its evidence.
+          </p>
+          <label class="field">
+            <span>Final food density (g/mL)</span>
+            <input
+              v-model="draft.nutritionDensity"
+              inputmode="decimal"
+              placeholder="e.g. 1.02"
+            >
+          </label>
+          <label class="field">
+            <span>Density evidence reference</span>
+            <input v-model="draft.nutritionDensityReference">
+          </label>
+          <label class="field">
+            <span>Density evidence date</span>
+            <input
+              v-model="draft.nutritionDensityDate"
+              type="date"
+            >
+          </label>
+        </template>
         <div class="full">
           <AppButton
             type="button"

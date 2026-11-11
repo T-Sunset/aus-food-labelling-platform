@@ -49,7 +49,10 @@ export interface IngredientDraft {
   specificationReference: string;
   specificationDate: string;
   knownAllergens: string[];
+  allergensConfirmed: boolean;
+  additivesConfirmed: boolean;
   nutrients: Record<ManagedNutrient, string>;
+  energyPer100g: string;
   additiveSources: AdditiveSourceDraft[];
 }
 
@@ -87,7 +90,10 @@ export function emptyIngredientDraft(): IngredientDraft {
     specificationReference: '',
     specificationDate: '',
     knownAllergens: [],
+    allergensConfirmed: false,
+    additivesConfirmed: false,
     nutrients: { protein: '', fat: '', saturatedFat: '', carbohydrate: '', sugars: '', sodium: '' },
+    energyPer100g: '',
     additiveSources: [],
   };
 }
@@ -121,7 +127,16 @@ export function draftFromIngredient(record: IngredientRecord): IngredientDraft {
     supplierProductCode: record.specification?.supplierProductCode ?? '',
     specificationReference: record.specification?.reference ?? owned?.sourceId ?? '',
     specificationDate: record.specification?.sourceDate ?? owned?.sourceDate ?? '',
+    energyPer100g: record.energyPer100g?.value ?? '',
     knownAllergens: presentIds(owned?.assessments),
+    allergensConfirmed: record.allergensConfirmed === true
+      && record.coverageSpecification?.reference === record.specification?.reference
+      && record.coverageSpecification?.sourceDate === record.specification?.sourceDate
+      && record.coverageSpecification !== undefined,
+    additivesConfirmed: record.additivesConfirmed === true
+      && record.coverageSpecification?.reference === record.specification?.reference
+      && record.coverageSpecification?.sourceDate === record.specification?.sourceDate
+      && record.coverageSpecification !== undefined,
     additiveSources: (record.additiveSources ?? []).map((source) => {
       const evidence = source.sourceEvidence?.[0];
       const selection = source.declarationSelection;
@@ -344,7 +359,22 @@ export function buildIngredientRecord(
   if (hasSpecification && (!reference || !draft.specificationDate)) {
     throw new Error('Supplier specification details need both a reference and a date.');
   }
+  if ((draft.allergensConfirmed || draft.additivesConfirmed) && !reference) {
+    throw new Error('Add the supplier specification reference and date before confirming allergens or additives.');
+  }
   const nutrientProfile = buildNutrients(draft, existing, id);
+  const energyText = draft.energyPer100g.trim();
+  if (energyText && (!/^\d+(\.\d+)?$/.test(energyText) || !Number.isFinite(Number(energyText)))) {
+    throw new Error('Enter a non-negative number for energy, or leave it blank if not supplied.');
+  }
+  if (energyText && (!reference || !draft.specificationDate)) {
+    throw new Error('Add the supplier specification reference and date before entering energy.');
+  }
+  const energyPer100g = energyText
+    ? existing?.energyPer100g?.value === energyText
+      ? existing.energyPer100g
+      : { value: energyText, sourceId: reference, sourceDate: draft.specificationDate }
+    : undefined;
   const allergenEvidence = buildAllergenEvidence(draft, existing, id, makeId);
   const additiveSources = buildAdditiveSources(draft, existing, makeId);
 
@@ -367,8 +397,14 @@ export function buildIngredientRecord(
         }
       : {}),
     ...(nutrientProfile ? { nutrientProfile } : {}),
+    ...(energyPer100g ? { energyPer100g } : {}),
     ...(allergenEvidence ? { allergenEvidence } : {}),
     ...(additiveSources.length > 0 ? { additiveSources } : {}),
+    allergensConfirmed: draft.allergensConfirmed,
+    additivesConfirmed: draft.additivesConfirmed,
+    ...(draft.allergensConfirmed || draft.additivesConfirmed
+      ? { coverageSpecification: { reference, sourceDate: draft.specificationDate } }
+      : {}),
     tags: existing?.tags ?? [],
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
@@ -381,8 +417,12 @@ export const editableIngredientKeys = [
   'supplierName',
   'specification',
   'nutrientProfile',
+  'energyPer100g',
   'allergenEvidence',
+  'allergensConfirmed',
   'additiveSources',
+  'additivesConfirmed',
+  'coverageSpecification',
 ] as const;
 
 export interface StepStatus {
@@ -391,7 +431,9 @@ export interface StepStatus {
 }
 
 export function ingredientStepStatuses(draft: IngredientDraft): Record<'about' | 'spec' | 'nutrition' | 'allergens' | 'additives', StepStatus> {
-  const entered = managedNutrients.filter(({ key }) => draft.nutrients[key].trim() !== '').length;
+  const entered = managedNutrients.filter(({ key }) => draft.nutrients[key].trim() !== '').length
+    + (draft.energyPer100g.trim() ? 1 : 0);
+  const total = managedNutrients.length + 1;
   const aboutDone =
     draft.name.trim() !== '' && draft.kind !== '' && (draft.kind !== 'compound' || draft.compoundFormulationId !== '');
   const specDone = draft.specificationReference.trim() !== '' && draft.specificationDate !== '';
@@ -399,16 +441,16 @@ export function ingredientStepStatuses(draft: IngredientDraft): Record<'about' |
     about: { done: aboutDone, text: aboutDone ? 'Answered' : 'Still needed' },
     spec: { done: specDone, text: specDone ? 'Answered' : 'Still needed' },
     nutrition: {
-      done: entered === managedNutrients.length,
-      text: entered === managedNutrients.length ? 'All entered' : `${entered} of ${managedNutrients.length} entered`,
+      done: entered === total,
+      text: entered === total ? 'All entered' : `${entered} of ${total} entered`,
     },
     allergens: {
-      done: draft.knownAllergens.length > 0,
-      text: draft.knownAllergens.length > 0 ? `${draft.knownAllergens.length} listed` : 'None recorded',
+      done: draft.allergensConfirmed,
+      text: draft.allergensConfirmed ? 'Confirmed' : 'Still needed',
     },
     additives: {
-      done: draft.additiveSources.length > 0,
-      text: draft.additiveSources.length > 0 ? `${draft.additiveSources.length} listed` : 'None listed',
+      done: draft.additivesConfirmed,
+      text: draft.additivesConfirmed ? 'Confirmed' : 'Still needed',
     },
   };
 }

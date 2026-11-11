@@ -25,6 +25,10 @@ export interface LabelBlockInput {
   readonly title: string;
   readonly lines: readonly string[];
   readonly fontSizeMm: number;
+  readonly boldLines?: boolean;
+  readonly table?: {
+    readonly rows: readonly (readonly [string, string, string])[];
+  };
   readonly minimumFontSizeMm?: number;
   readonly minimumSizeStatus: 'approved' | 'review_required';
   readonly minimumSizeSource?: {
@@ -201,6 +205,11 @@ function validateInput(input: LabelLayoutInput): void {
     if (!Array.isArray(block.lines) || block.lines.some((line) => typeof line !== 'string')) {
       throw new RangeError(`Label block "${block.id}" lines must be a list of strings`);
     }
+    if (block.table !== undefined && (!Array.isArray(block.table.rows)
+      || block.table.rows.some((row) => !Array.isArray(row) || row.length !== 3
+        || row.some((cell) => typeof cell !== 'string')))) {
+      throw new RangeError(`Label block "${block.id}" table must contain rows of three strings`);
+    }
     assertPositiveFinite(block.fontSizeMm, `blocks.${block.id}.fontSizeMm`);
     if (block.minimumFontSizeMm !== undefined) {
       assertPositiveFinite(block.minimumFontSizeMm, `blocks.${block.id}.minimumFontSizeMm`);
@@ -275,7 +284,7 @@ export function layoutLabel(input: LabelLayoutInput): LabelLayoutResult {
   let cursorY = input.margins.topMm;
   const renderedBlocks = input.blocks.map((block) => {
     const lineHeight = block.fontSizeMm * lineHeightRatio;
-    const blockHeight = lineHeight * (block.lines.length + 1);
+    const blockHeight = lineHeight * (block.lines.length + 1 + (block.table?.rows.length ?? 0));
     const y = cursorY;
     if (y + blockHeight > contentBottom) {
       issues.push({
@@ -301,15 +310,34 @@ export function layoutLabel(input: LabelLayoutInput): LabelLayoutResult {
         });
       }
     });
+    const columnOffsets = [0, 0.48, 0.74];
+    const columnWidths = [0.46, 0.24, 0.26];
+    block.table?.rows.forEach((row, rowIndex) => {
+      row.forEach((cell, column) => {
+        if (estimatedLineWidthMm(cell, block.fontSizeMm) > contentWidth * (columnWidths[column] ?? 0)) {
+          issues.push({
+            code: 'LINE_OVERFLOW',
+            blockId: block.id,
+            lineIndex: block.lines.length + rowIndex,
+            message: `Table row ${rowIndex + 1} of "${block.title}" is estimated to exceed its column width. Rendered proof is still required.`,
+          });
+        }
+      });
+    });
     cursorY += blockHeight + gap;
     const title = `<text x="${formatMillimetres(input.margins.leftMm)}" y="${formatMillimetres(y + block.fontSizeMm)}" font-size="${formatMillimetres(block.fontSizeMm)}" font-weight="700">${escapeXml(block.title)}</text>`;
     const lines = block.lines
       .map((line, index) => {
         const lineY = y + block.fontSizeMm + lineHeight * (index + 1);
-        return `<text x="${formatMillimetres(input.margins.leftMm)}" y="${formatMillimetres(lineY)}" font-size="${formatMillimetres(block.fontSizeMm)}">${escapeXml(line)}</text>`;
+        return `<text x="${formatMillimetres(input.margins.leftMm)}" y="${formatMillimetres(lineY)}" font-size="${formatMillimetres(block.fontSizeMm)}"${block.boldLines ? ' font-weight="700"' : ''}>${escapeXml(line)}</text>`;
       })
       .join('');
-    return `<g data-block-id="${escapeXml(block.id)}" data-block-kind="${block.kind}">${title}${lines}</g>`;
+    const table = block.table?.rows.map((row, rowIndex) => row.map((cell, column) => {
+      const x = input.margins.leftMm + contentWidth * (columnOffsets[column] ?? 0);
+      const lineY = y + block.fontSizeMm + lineHeight * (block.lines.length + rowIndex + 1);
+      return `<text x="${formatMillimetres(x)}" y="${formatMillimetres(lineY)}" font-size="${formatMillimetres(block.fontSizeMm)}">${escapeXml(cell)}</text>`;
+    }).join('')).join('') ?? '';
+    return `<g data-block-id="${escapeXml(block.id)}" data-block-kind="${block.kind}">${title}${lines}${table}</g>`;
   });
 
   const svg = [

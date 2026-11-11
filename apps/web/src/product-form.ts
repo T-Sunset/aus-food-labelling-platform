@@ -1,4 +1,5 @@
-import type { ProductPackDetails, ProductRecord } from '@aus-food/storage';
+import { expandFormulation } from '@aus-food/engine';
+import type { FormulationRecord, ProductPackDetails, ProductRecord } from '@aus-food/storage';
 import { countAnswered, detectProductType } from './label-builder';
 
 export type ProductFoodState = NonNullable<ProductRecord['foodState']>;
@@ -8,9 +9,15 @@ export interface ProductDraft {
   formulationId: string;
   foodState: ProductFoodState | '';
   servingSize: string;
+  servingUnit: 'g' | 'mL' | '';
   servingsPerPack: string;
   netQuantity: string;
-  netUnit: 'g' | 'mL';
+  netUnit: 'g' | 'mL' | '';
+  nutritionFoodForm: 'solid' | 'liquid' | '';
+  nutritionBasisConfirmed: boolean;
+  nutritionDensity: string;
+  nutritionDensityReference: string;
+  nutritionDensityDate: string;
 }
 
 export const foodStateOptions: { value: ProductFoodState; label: string }[] = [
@@ -28,9 +35,15 @@ export function emptyProductDraft(): ProductDraft {
     formulationId: '',
     foodState: '',
     servingSize: '',
+    servingUnit: '',
     servingsPerPack: '',
     netQuantity: '',
-    netUnit: 'g',
+    netUnit: '',
+    nutritionFoodForm: '',
+    nutritionBasisConfirmed: false,
+    nutritionDensity: '',
+    nutritionDensityReference: '',
+    nutritionDensityDate: '',
   };
 }
 
@@ -41,26 +54,37 @@ export function draftFromProduct(record: ProductRecord): ProductDraft {
     formulationId: record.formulationId,
     foodState: record.foodState ?? '',
     servingSize: pack?.servingSize ?? '',
+    servingUnit: pack?.servingUnit ?? '',
     servingsPerPack: pack?.servingsPerPack ?? '',
     netQuantity: pack?.netQuantity ?? '',
-    netUnit: pack?.netUnit ?? 'g',
+    netUnit: pack?.netUnit ?? '',
+    nutritionFoodForm: pack?.nutritionFoodForm ?? '',
+    nutritionBasisConfirmed: Boolean(pack?.nutritionRecipeSignature),
+    nutritionDensity: pack?.nutritionDensity?.gramsPerMillilitre ?? '',
+    nutritionDensityReference: pack?.nutritionDensity?.evidenceReference ?? '',
+    nutritionDensityDate: pack?.nutritionDensity?.sourceDate ?? '',
   };
+}
+
+export function nutritionRecipeSignature(id: string, formulations: readonly FormulationRecord[]): string {
+  const expanded = expandFormulation(id, { value: '100', unit: 'g' }, formulations);
+  return JSON.stringify({ id, ingredients: expanded });
 }
 
 const positiveNumber = /^\d+(\.\d+)?$/;
 
 function isPositive(value: string): boolean {
-  return positiveNumber.test(value) && Number(value) > 0;
+  return positiveNumber.test(value) && Number.isFinite(Number(value)) && Number(value) > 0;
 }
 
 // Only the filled-in pack fields are kept; blank ones stay unknown, never zero.
-export function buildPackDetails(draft: ProductDraft): ProductPackDetails | undefined {
+export function buildPackDetails(draft: ProductDraft, signature?: string): ProductPackDetails | undefined {
   const entries: [string, string][] = [
     ['servingSize', draft.servingSize.trim()],
     ['servingsPerPack', draft.servingsPerPack.trim()],
     ['netQuantity', draft.netQuantity.trim()],
   ];
-  const pack: Record<string, string> = {};
+  const pack: Record<string, string | ProductPackDetails['nutritionDensity']> = {};
   for (const [key, value] of entries) {
     if (value === '') {
       continue;
@@ -70,8 +94,27 @@ export function buildPackDetails(draft: ProductDraft): ProductPackDetails | unde
     }
     pack[key] = value;
   }
-  if (draft.netQuantity.trim() !== '') {
+  if (draft.netUnit !== '') {
     pack.netUnit = draft.netUnit;
+  }
+  if (draft.servingUnit !== '') {
+    pack.servingUnit = draft.servingUnit;
+  }
+  if (draft.nutritionFoodForm !== '') {
+    pack.nutritionFoodForm = draft.nutritionFoodForm;
+  }
+  if (draft.nutritionBasisConfirmed) {
+    if (!signature) throw new Error('Save a valid recipe before confirming the nutrition basis.');
+    pack.nutritionRecipeSignature = signature;
+  }
+  const density = draft.nutritionDensity.trim();
+  const reference = draft.nutritionDensityReference.trim();
+  const date = draft.nutritionDensityDate;
+  if (density || reference || date) {
+    if (!isPositive(density) || !reference || !date) {
+      throw new Error('Density needs a positive value, evidence reference and date.');
+    }
+    pack.nutritionDensity = { gramsPerMillilitre: density, evidenceReference: reference, sourceDate: date };
   }
   return Object.keys(pack).length === 0 ? undefined : (pack as ProductPackDetails);
 }
@@ -87,6 +130,7 @@ export interface ProductChanges {
 export function buildProductChanges(
   draft: ProductDraft,
   recipeIds: readonly string[],
+  signature?: string,
 ): ProductChanges {
   const name = draft.name.trim();
   if (!name) {
@@ -102,7 +146,7 @@ export function buildProductChanges(
     name,
     formulationId: draft.formulationId,
     foodState: draft.foodState,
-    packDetails: buildPackDetails(draft),
+    packDetails: buildPackDetails(draft, signature),
   };
 }
 
@@ -137,13 +181,16 @@ export function productStepStatuses(
 ): Record<ProductStepId, ProductStepStatus> {
   const aboutDone = draft.name.trim() !== '' && draft.formulationId !== '' && draft.foodState !== '';
   const profile = saved?.classificationProfile;
-  const type = profile === undefined ? '' : detectProductType(profile);
+  const type = saved?.builderProductType ?? (profile === undefined ? '' : detectProductType(profile));
   let typeDone = false;
-  if (profile !== undefined && type !== '') {
+  if (type === 'other') {
+    typeDone = true;
+  } else if (profile !== undefined && type !== '') {
     const { answered, total } = countAnswered(profile, type);
-    typeDone = type === 'other' || answered === total;
+    typeDone = answered === total;
   }
-  const packDone = [draft.servingSize, draft.servingsPerPack, draft.netQuantity].every(isPositive);
+  const packDone = draft.servingUnit !== '' && draft.netUnit !== ''
+    && [draft.servingSize, draft.servingsPerPack, draft.netQuantity].every(isPositive);
   const additivesDone = saved?.additiveNameInputs !== undefined;
   const claimsDone = saved?.claims !== undefined;
   return {

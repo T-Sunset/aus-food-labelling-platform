@@ -40,7 +40,7 @@ watch(
   },
   { immediate: true },
 );
-productType.value = detectProductType(profile.value);
+productType.value = props.product.builderProductType ?? detectProductType(profile.value);
 
 const questions = computed(() => questionsFor(productType.value));
 const progress = computed(() => countAnswered(profile.value, productType.value));
@@ -52,9 +52,24 @@ const sourceChosen = computed(() => sourceKind.value !== '');
 
 function onTypeChange(event: Event): void {
   const target = event.currentTarget;
-  if (target instanceof HTMLSelectElement) {
-    productType.value = target.value as ProductType;
-  }
+  if (!(target instanceof HTMLSelectElement)) return;
+  const type = target.value;
+  if (type !== 'caffeinatedBeverage' && type !== 'infantFood' && type !== 'other') return;
+  const previous = productType.value;
+  productType.value = type;
+  pendingSaves += 1;
+  errorMessage.value = '';
+  saveChain = saveChain
+    .then(() => props.store.products.update(props.product.id, { builderProductType: type }))
+    .then(() => { message.value = 'Saved on this device.'; })
+    .catch((error: unknown) => {
+      if (productType.value === type) productType.value = previous;
+      errorMessage.value = error instanceof Error ? error.message : 'The product type could not be saved.';
+    })
+    .finally(() => {
+      pendingSaves -= 1;
+      if (pendingSaves === 0) emit('saved');
+    });
 }
 
 function onSourceChange(event: Event): void {

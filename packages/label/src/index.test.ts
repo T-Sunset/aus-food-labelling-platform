@@ -54,6 +54,32 @@ function input(overrides: Partial<LabelLayoutInput> = {}): LabelLayoutInput {
 }
 
 describe('layoutLabel', () => {
+  it('renders table cells in separate columns and checks column and vertical overflow', () => {
+    const nutrition = block({
+      kind: 'nutritionInformation', title: 'Nutrition', lines: ['Serving size: 50 g'],
+      table: { rows: [['Protein', '1 g', '2 g']] },
+    });
+    const result = layoutLabel(input({ blocks: [nutrition] }));
+    expect(result.svg).toMatch(/x="5"[^>]*>Protein<\/text>/);
+    expect(result.svg).toMatch(/x="48.2"[^>]*>1 g<\/text>/);
+    expect(result.svg).toMatch(/x="71.6"[^>]*>2 g<\/text>/);
+    const tooWide = block({ ...nutrition, table: { rows: [['Protein', 'a very long amount that will not fit', '2 g']] } });
+    expect(layoutLabel(input({ blocks: [tooWide] })).issues).toContainEqual(
+      expect.objectContaining({ code: 'LINE_OVERFLOW' }),
+    );
+    const tooTall = block({ ...nutrition, table: { rows: Array.from({ length: 60 }, () => ['Protein', '1 g', '2 g'] as const) } });
+    expect(layoutLabel(input({ blocks: [tooTall] })).issues).toContainEqual(
+      expect.objectContaining({ code: 'BLOCK_OVERFLOW' }),
+    );
+  });
+  it('can render allergen summary lines in bold without changing other blocks', () => {
+    const result = layoutLabel(input({
+      blocks: [block({ kind: 'allergenDeclaration', title: 'Allergens', lines: ['Contains: milk'], boldLines: true })],
+    }));
+    expect(result.svg).toMatch(/font-weight="700">Contains: milk<\/text>/);
+    expect(layoutLabel(input({ blocks: [block({ lines: ['Contains: milk'] })] })).svg)
+      .not.toMatch(/font-weight="700">Contains: milk<\/text>/);
+  });
   it('emits exact physical SVG dimensions and deterministic escaped text', () => {
     const data = input({
       blocks: [block({ title: 'Food & name', lines: ['Oats < 5% "sweetened"'] })],

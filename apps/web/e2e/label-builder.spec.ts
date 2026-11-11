@@ -56,12 +56,21 @@ test('a new product is built step by step, with pack details saved and edited', 
   await page.getByLabel('Food state *').selectOption('asSold');
   await page.getByRole('button', { name: 'Save and continue' }).click();
   await expect(page.getByLabel('What kind of product is this?')).toBeVisible();
+  await page.getByRole('button', { name: 'Labels', exact: true }).click();
+  await page.getByRole('button', { name: 'Products', exact: true }).click();
+  await expect(page.getByLabel('Product name *')).toHaveValue('Berry blast');
 
   await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Pack details' }).click();
-  await page.getByLabel('Serving size (g or mL)').fill('250');
+  await page.getByLabel('Serving size', { exact: true }).fill('250');
+  await page.getByLabel('Serving size unit').selectOption('mL');
   await page.getByLabel('Servings per pack').fill('2');
   await page.getByLabel('Net contents', { exact: true }).fill('500');
   await page.getByLabel('Net contents unit').selectOption('mL');
+  await page.getByLabel('Is the food solid or liquid?').selectOption('liquid');
+  await page.getByLabel(/I have checked that the recipe amounts/).check();
+  await page.getByLabel('Final food density (g/mL)').fill('1.1');
+  await page.getByLabel('Density evidence reference').fill('Density test');
+  await page.getByLabel('Density evidence date').fill('2026-01-01');
   await page.getByRole('button', { name: 'Save pack details' }).click();
   await expect(page.getByText('Saved on this device.')).toBeVisible();
   await expect(
@@ -69,7 +78,7 @@ test('a new product is built step by step, with pack details saved and edited', 
   ).toBeVisible();
 
   // A bad amount is explained in plain English and not saved.
-  await page.getByLabel('Serving size (g or mL)').fill('-5');
+  await page.getByLabel('Serving size', { exact: true }).fill('-5');
   await page.getByRole('button', { name: 'Save pack details' }).click();
   await expect(page.getByRole('alert')).toContainText('positive numbers');
 
@@ -78,6 +87,7 @@ test('a new product is built step by step, with pack details saved and edited', 
 
   // Pack details are still there when the product is reopened.
   await openProductStep(page, 'Berry blast', 'Pack details');
-  await expect(page.getByLabel('Serving size (g or mL)')).toHaveValue('250');
+  await expect(page.getByLabel('Serving size', { exact: true })).toHaveValue('250');
+  await expect(page.getByLabel('Serving size unit')).toHaveValue('mL');
   await expect(page.getByLabel('Net contents unit')).toHaveValue('mL');
 });
