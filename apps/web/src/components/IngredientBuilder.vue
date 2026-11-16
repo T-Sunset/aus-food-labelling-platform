@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, toRaw, watch } from 'vue';
+import { optionalNutrientIds, type OptionalNutrientId } from '@aus-food/domain';
 import type { FormulationRecord, IngredientRecord } from '@aus-food/storage';
 import {
   buildIngredientRecord,
@@ -8,6 +9,7 @@ import {
   emptyIngredientDraft,
   ingredientStepStatuses,
   managedNutrients,
+  optionalNutrientLabels,
   supplierFactTopics,
   supplierStatements,
 } from '../ingredient-form';
@@ -23,10 +25,51 @@ const emit = defineEmits<{ save: [record: IngredientRecord]; cancel: [] }>();
 
 const draft = reactive(props.record ? draftFromIngredient(props.record) : emptyIngredientDraft());
 const errorMessage = ref('');
-const volumeNutritionOpen = ref(false);
-function onVolumeNutritionToggle(event: Event): void {
-  volumeNutritionOpen.value = event.currentTarget instanceof HTMLDetailsElement && event.currentTarget.open;
+const hasMassNutrition = computed(() => Boolean(draft.energyPer100g.trim())
+  || managedNutrients.some(({ key }) => Boolean(draft.nutrients[key].trim()))
+  || draft.additionalNutrientsMass.some(({ value }) => Boolean(value.trim())));
+const hasVolumeNutrition = computed(() => Object.values(draft.nutritionPer100mL).some((value) => Boolean(value.trim()))
+  || draft.additionalNutrientsVolume.some(({ value }) => Boolean(value.trim())));
+const nutritionBasis = ref<'mass' | 'volume'>(hasVolumeNutrition.value && !hasMassNutrition.value ? 'volume' : 'mass');
+const selectedAdditionalNutrient = ref<OptionalNutrientId | ''>('');
+const additionalNutrients = computed(() => nutritionBasis.value === 'mass'
+  ? draft.additionalNutrientsMass : draft.additionalNutrientsVolume);
+const availableAdditionalNutrients = computed(() => optionalNutrientIds.filter(
+  (id) => !additionalNutrients.value.some((entry) => entry.key === id),
+));
+function addAdditionalNutrient(): void {
+  const key = selectedAdditionalNutrient.value;
+  if (!key || !availableAdditionalNutrients.value.includes(key)) return;
+  additionalNutrients.value.push({ key, value: '', unit: 'g' });
+  selectedAdditionalNutrient.value = '';
 }
+watch(nutritionBasis, () => { selectedAdditionalNutrient.value = ''; });
+const savedNutritionSources = computed(() => {
+  const entries = [
+    ...(props.record?.energyPer100g ? [{ label: 'Energy per 100 g', evidence: props.record.energyPer100g }] : []),
+    ...managedNutrients.flatMap(({ key, label }) => {
+      const evidence = props.record?.nutrientProfile?.values[key];
+      return evidence ? [{ label: `${label} per 100 g`, evidence }] : [];
+    }),
+    ...Object.entries(props.record?.nutritionPer100mL ?? {}).map(([key, evidence]) => ({
+      label: `${key} per 100 mL`, evidence,
+    })),
+    ...optionalNutrientIds.flatMap((key) => {
+      const mass = props.record?.nutrientProfile?.values[key];
+      const volume = props.record?.additionalNutritionPer100mL?.[key];
+      return [
+        ...(mass ? [{ label: `${optionalNutrientLabels[key]} per 100 g`, evidence: mass }] : []),
+        ...(volume ? [{ label: `${optionalNutrientLabels[key]} per 100 mL`, evidence: volume }] : []),
+      ];
+    }),
+  ];
+  return entries.map(({ label, evidence }) => ({
+    label,
+    source: evidence.sourceId,
+    date: evidence.sourceDate,
+    type: evidence.evidenceType ?? 'supplier',
+  }));
+});
 
 const choiceIds = new Set(allergenChoices.map((choice) => choice.id));
 const otherAllergens = ref(draft.knownAllergens.filter((id) => !choiceIds.has(id)).join(', '));
@@ -43,7 +86,8 @@ watch(
   { immediate: true, deep: true },
 );
 watch(
-  () => [draft.specificationReference, draft.specificationDate, ...draft.knownAllergens],
+  () => [draft.specificationReference, draft.specificationDate, draft.allergenSourceType,
+    draft.allergenSourceReference, draft.allergenSourceDate, ...draft.knownAllergens],
   () => { draft.allergensConfirmed = false; },
 );
 watch(
@@ -194,9 +238,8 @@ function submit(): void {
         <fieldset class="field-group">
           <legend>Source details</legend>
           <p class="field-hint">
-            You can save the ingredient without a source. The existing nutrition and allergen
-            fields currently require a dated supplier specification; support for other sources
-            will be added in the next nutrition and allergen step.
+            You can save the ingredient without a supplier specification. Nutrition and allergen
+            information can also use other dated sources in their respective sections.
           </p>
           <details>
             <summary>Earlier drink-specific information (optional)</summary>
@@ -388,8 +431,8 @@ function submit(): void {
           </details>
           <p class="field-hint">
             Where to find it: the document your supplier sent with this ingredient. Its number and date
-            let you, or a consultant, trace each figure back later. You need this before entering
-            nutrition or allergen details.
+            let you, or a consultant, trace information back later. A specification is still needed
+            for the supplier-specific questions and additive confirmation.
           </p>
           <div class="form-grid">
             <label class="field">
@@ -478,12 +521,76 @@ function submit(): void {
       <details class="ingredient-section">
         <summary>Nutrition</summary>
         <fieldset class="field-group">
-          <legend>Nutrient values, per 100 g</legend>
+          <legend>Nutrient values</legend>
           <p class="field-hint">
-            Where to find it: the "nutrition information" table on the spec sheet, in the per 100 g
-            column. Only enter values shown there. Blank means "not supplied", never zero.
+            Enter values on the same basis as the source. Blank means unknown, not zero.
+            Record where new or changed values came from. Existing values retain their original source.
           </p>
-          <div class="nutrient-grid">
+          <div class="form-grid">
+            <label class="field">
+              <span>Nutrition source type</span>
+              <select v-model="draft.nutritionSourceType">
+                <option value="">Use the supplier specification, if supplied</option>
+                <option value="supplier">Supplier</option>
+                <option value="productLabel">Product label</option>
+                <option value="database">Food composition database</option>
+                <option value="analysis">Analysis</option>
+                <option value="calculated">Calculated</option>
+                <option value="user">Own knowledge or other source</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Nutrition source reference</span>
+              <input
+                v-model="draft.nutritionSourceReference"
+                maxlength="120"
+                placeholder="Describe the source"
+              >
+            </label>
+            <label class="field">
+              <span>Nutrition source date</span>
+              <input
+                v-model="draft.nutritionSourceDate"
+                type="date"
+              >
+            </label>
+          </div>
+          <details v-if="savedNutritionSources.length">
+            <summary>Sources of saved nutrition values</summary>
+            <ul>
+              <li
+                v-for="entry in savedNutritionSources"
+                :key="entry.label"
+              >
+                {{ entry.label }}: {{ entry.type }}, {{ entry.source }}, {{ entry.date }}
+              </li>
+            </ul>
+          </details>
+          <label class="field">
+            <span>Nutrition values are per</span>
+            <select v-model="nutritionBasis">
+              <option value="mass">100 g</option>
+              <option value="volume">100 mL</option>
+            </select>
+          </label>
+          <p
+            v-if="hasMassNutrition && hasVolumeNutrition"
+            class="field-hint"
+          >
+            This ingredient has values saved for both bases. Switch between them to view each set;
+            they are not compared. Calculations prefer a per-100 g value when both are available.
+          </p>
+          <p
+            v-if="nutritionBasis === 'volume'"
+            class="field-hint"
+          >
+            Recipes currently use ingredient weights. To calculate using per-100 mL values,
+            enter the ingredient's density with its source below. No density is assumed.
+          </p>
+          <div
+            v-if="nutritionBasis === 'mass'"
+            class="nutrient-grid"
+          >
             <label class="field">
               <span>Energy <small>kJ/100 g</small></span>
               <input
@@ -507,51 +614,168 @@ function submit(): void {
               >
             </label>
           </div>
-          <details @toggle="onVolumeNutritionToggle">
-            <summary>Supplier values per 100 mL (if supplied)</summary>
+          <div
+            v-else
+            class="nutrient-grid"
+          >
+            <label class="field">
+              <span>Energy per 100 mL <small>kJ/100 mL</small></span>
+              <input
+                v-model="draft.nutritionPer100mL.energy"
+                inputmode="decimal"
+                autocomplete="off"
+                placeholder="Not supplied"
+              >
+            </label>
+            <label
+              v-for="nutrient in managedNutrients"
+              :key="nutrient.key"
+              class="field"
+            >
+              <span>{{ nutrient.label }} per 100 mL <small>{{ nutrient.unit.replace('/100g', '/100 mL') }}</small></span>
+              <input
+                v-model="draft.nutritionPer100mL[nutrient.key]"
+                inputmode="decimal"
+                autocomplete="off"
+                placeholder="Not supplied"
+              >
+            </label>
+          </div>
+          <fieldset class="field-group">
+            <legend>Other known nutrients</legend>
             <p class="field-hint">
-              Enter only values shown per 100 mL of the supplied ingredient. They are saved separately
-              and are not yet used in product nutrition calculations; no density is assumed.
+              Add any further values you know for this basis. This list is not yet a complete
+              nutrient catalogue. Entering a value does not automatically add it to the label.
+              These extra values are saved but are not yet used in product nutrition calculations.
             </p>
             <div
-              v-if="volumeNutritionOpen"
-              class="nutrient-grid"
+              v-for="(nutrient, index) in additionalNutrients"
+              :key="nutrient.key"
+              class="form-grid"
             >
               <label class="field">
-                <span>Energy per 100 mL <small>kJ/100 mL</small></span>
+                <span>{{ optionalNutrientLabels[nutrient.key] }} amount</span>
                 <input
-                  v-model="draft.nutritionPer100mL.energy"
+                  v-model="nutrient.value"
                   inputmode="decimal"
                   autocomplete="off"
-                  placeholder="Not supplied"
+                  placeholder="Unknown"
                 >
               </label>
-              <label
-                v-for="nutrient in managedNutrients"
-                :key="nutrient.key"
-                class="field"
+              <label class="field">
+                <span>{{ optionalNutrientLabels[nutrient.key] }} unit</span>
+                <select v-model="nutrient.unit">
+                  <option value="g">g per 100 {{ nutritionBasis === 'mass' ? 'g' : 'mL' }}</option>
+                  <option value="mg">mg per 100 {{ nutritionBasis === 'mass' ? 'g' : 'mL' }}</option>
+                </select>
+              </label>
+              <AppButton
+                type="button"
+                variant="outline"
+                size="sm"
+                :aria-label="`Remove ${optionalNutrientLabels[nutrient.key]} from ${nutritionBasis === 'mass' ? '100 g' : '100 mL'}`"
+                @click="additionalNutrients.splice(index, 1)"
               >
-                <span>{{ nutrient.label }} per 100 mL <small>{{ nutrient.unit.replace('/100g', '/100 mL') }}</small></span>
+                Remove {{ optionalNutrientLabels[nutrient.key] }}
+              </AppButton>
+            </div>
+            <label
+              v-if="availableAdditionalNutrients.length"
+              class="field"
+            >
+              <span>Choose another known nutrient</span>
+              <select v-model="selectedAdditionalNutrient">
+                <option value="">Select a nutrient</option>
+                <option
+                  v-for="key in availableAdditionalNutrients"
+                  :key="key"
+                  :value="key"
+                >
+                  {{ optionalNutrientLabels[key] }}
+                </option>
+              </select>
+            </label>
+            <AppButton
+              v-if="availableAdditionalNutrients.length"
+              type="button"
+              variant="outline"
+              size="sm"
+              :disabled="!selectedAdditionalNutrient"
+              @click="addAdditionalNutrient"
+            >
+              Add another known nutrient
+            </AppButton>
+          </fieldset>
+          <fieldset class="field-group">
+            <legend>Ingredient density (if known)</legend>
+            <p class="field-hint">
+              This is the density of this ingredient, not the finished food. It is needed when
+              converting per-100 mL nutrient values for a recipe measured by weight.
+            </p>
+            <div class="form-grid">
+              <label class="field">
+                <span>Density (g/mL)</span>
                 <input
-                  v-model="draft.nutritionPer100mL[nutrient.key]"
+                  v-model="draft.ingredientDensity"
                   inputmode="decimal"
-                  autocomplete="off"
-                  placeholder="Not supplied"
+                  placeholder="Unknown"
+                >
+              </label>
+              <label class="field">
+                <span>Density source reference</span>
+                <input
+                  v-model="draft.densityReference"
+                  maxlength="120"
+                >
+              </label>
+              <label class="field">
+                <span>Density source date</span>
+                <input
+                  v-model="draft.densityDate"
+                  type="date"
                 >
               </label>
             </div>
-          </details>
+          </fieldset>
         </fieldset>
       </details>
 
       <details class="ingredient-section">
         <summary>Allergens</summary>
         <fieldset class="field-group">
-          <legend>Allergens identified by supplier</legend>
+          <legend>Allergen information</legend>
           <p class="field-hint">
-            Tick any allergen the spec sheet says is in this ingredient. Ticking nothing means "not
-            recorded", not "allergen-free".
+            Tick known allergens in this ingredient. Ticking nothing without confirmation means
+            "not recorded", not "allergen-free". Provide the source when recording evidence.
           </p>
+          <div class="form-grid">
+            <label class="field">
+              <span>Allergen source type</span>
+              <select v-model="draft.allergenSourceType">
+                <option value="">Use the supplier specification, if supplied</option>
+                <option value="supplier">Supplier</option>
+                <option value="productLabel">Product label</option>
+                <option value="database">Food composition database</option>
+                <option value="analysis">Analysis</option>
+                <option value="calculated">Calculated</option>
+                <option value="user">Own knowledge or other source</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Allergen source reference</span>
+              <input
+                v-model="draft.allergenSourceReference"
+                maxlength="120"
+              >
+            </label>
+            <label class="field">
+              <span>Allergen source date</span>
+              <input
+                v-model="draft.allergenSourceDate"
+                type="date"
+              >
+            </label>
+          </div>
           <div class="check-grid">
             <label
               v-for="choice in allergenChoices"
@@ -580,9 +804,8 @@ function submit(): void {
               v-model="draft.allergensConfirmed"
               type="checkbox"
             >
-            <span>I checked the supplier information for every allergen shown, including those in additives.
-              The ticked allergens are present and each unticked allergen is confirmed absent.
-              Do not tick this if any answer is unknown.</span>
+            <span>I confirm that ticked allergens are present and unticked allergens are absent.
+              Do not confirm if any answer is unknown, including allergens in additives.</span>
           </label>
         </fieldset>
       </details>

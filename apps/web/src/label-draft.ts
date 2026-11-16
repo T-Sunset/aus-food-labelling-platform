@@ -3,8 +3,8 @@ import { expandFormulation, formatAdditiveDeclarationCandidate, orderIngredientD
 import type { FormulationRecord, IngredientRecord, ProductRecord } from '@aus-food/storage';
 import { draftFromProduct, productStepStatuses } from './product-form';
 import { draftAllergenVocabulary } from './rule-data';
-import { managedNutrients } from './ingredient-form';
-import { makeNipDraft, type NipDraft } from './nip-draft';
+import { currentAllergenCoverage, managedNutrients } from './ingredient-form';
+import { ingredientNutrientPer100g, makeNipDraft, type NipDraft } from './nip-draft';
 
 export interface LabelDraft {
   readonly missing: readonly string[];
@@ -45,17 +45,17 @@ export function makeLabelDraft(
   function collectIngredient(record: IngredientRecord): void {
     if (checked.has(record.id)) return;
     checked.add(record.id);
-    if (!record.specification) missing.add(`${record.name}: supplier specification reference and date`);
     const coverageCurrent = record.specification !== undefined && record.coverageSpecification !== undefined
       && record.coverageSpecification.reference === record.specification.reference
       && record.coverageSpecification.sourceDate === record.specification.sourceDate;
-    if (!record.allergensConfirmed || !coverageCurrent) missing.add(`${record.name}: confirm the allergen information`);
+    const allergenCoverage = currentAllergenCoverage(record);
+    if (!allergenCoverage) missing.add(`${record.name}: confirm the allergen information`);
     if (!record.additivesConfirmed || !coverageCurrent) {
       additivesComplete = false;
       missing.add(`${record.name}: confirm the additive information`);
     }
     if (managedNutrients.some(({ key }) => {
-      const value = record.nutrientProfile?.values[key];
+      const value = ingredientNutrientPer100g(record, key);
       if (!value || typeof value.value !== 'string' || !/^\d+(\.\d+)?$/.test(value.value)
         || !Number.isFinite(Number(value.value)) || !['g/100g', 'mg/100g'].includes(value.unit)
         || typeof value.sourceId !== 'string' || !value.sourceId.trim()
@@ -74,13 +74,13 @@ export function makeLabelDraft(
         missing.add(`${record.name}: resolve allergen evidence for ${id}`);
       }
     }
-    if (record.allergensConfirmed && coverageCurrent && record.specification) {
+    if (allergenCoverage) {
       evidence.push({
         id: `ingredient:${record.id}`,
         subjectId: record.id,
         kind: 'ingredient',
-        sourceId: record.specification.reference,
-        sourceDate: record.specification.sourceDate,
+        sourceId: allergenCoverage.sourceId,
+        sourceDate: allergenCoverage.sourceDate,
         sourcePath: [record.id],
         assessments: Object.fromEntries(draftAllergenVocabulary.map(({ id }) =>
           [id, assessments[id] ?? 'absent'])),

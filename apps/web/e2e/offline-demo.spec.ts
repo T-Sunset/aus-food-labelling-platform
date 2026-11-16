@@ -28,11 +28,11 @@ test('loads the illustrative workflow and exports a review report while offline'
     await openIngredientSection(page, 'Nutrition');
     await page.getByLabel('Energy').fill('100');
     for (const nutrient of ['Protein', 'Fat, total', 'Saturated fat', 'Carbohydrate', 'Sugars', 'Sodium']) {
-      await page.getByLabel(nutrient).fill('1');
+      await page.getByRole('textbox', { name: nutrient }).fill('1');
     }
     await openIngredientSection(page, 'Allergens');
     if (name === 'Illustrative base') await page.getByLabel('Milk', { exact: true }).check();
-    await page.getByLabel(/I checked the supplier information for every allergen shown/).check();
+    await page.getByLabel(/I confirm that ticked allergens are present/).check();
     await openIngredientSection(page, 'Additives and other ingredients');
     await page.getByLabel(/The supplier confirms this ingredient contains no additives/).check();
     await page.getByRole('button', { name: 'Save ingredient draft' }).click();

@@ -783,13 +783,22 @@ export type NutrientId =
   | 'dTagatose'
   | 'xylitol';
 
+export const optionalNutrientIds = [
+  'availableCarbohydrate', 'unavailableCarbohydrate', 'dietaryFibre', 'organicAcids',
+  'alcohol', 'polyols', 'erythritol', 'glycerol', 'dAllulose', 'isomalt', 'lactitol',
+  'maltitol', 'mannitol', 'polydextrose', 'sorbitol', 'dTagatose', 'xylitol',
+] as const satisfies readonly NutrientId[];
+export type OptionalNutrientId = (typeof optionalNutrientIds)[number];
+
 export type NutrientUnit = 'g/100g' | 'mg/100g';
 
 export type NutrientEvidenceType =
   | 'supplier'
   | 'analysis'
   | 'database'
-  | 'calculated';
+  | 'calculated'
+  | 'productLabel'
+  | 'user';
 
 export interface NutrientEvidence {
   readonly value: string;
@@ -1072,6 +1081,7 @@ export interface AllergenEvidenceSource {
   readonly kind: AllergenSourceKind;
   readonly sourceId: string;
   readonly sourceDate: string;
+  readonly sourceType?: NutrientEvidenceType;
   readonly sourcePath: readonly string[];
   readonly assessments: Readonly<Record<string, AllergenEvidenceStatus>>;
 }

@@ -677,6 +677,93 @@ describe('schema migrations and recovery points', () => {
 });
 
 describe('versioned workspace backups', () => {
+  it.each(['none', 'passphrase'] as const)('preserves extra per-volume nutrients in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const item: IngredientRecord = {
+      ...ingredient,
+      additionalNutritionPer100mL: {
+        dietaryFibre: { value: '0', unit: 'mg/100mL', sourceId: 'Database', sourceDate: '2026-01-01', evidenceType: 'database' },
+      },
+    };
+    await source.ingredients.create(item);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
+    expect((await target.ingredients.get(item.id))?.additionalNutritionPer100mL).toEqual(item.additionalNutritionPer100mL);
+  });
+  it('rejects invalid extra per-volume nutrients without a common nutrient profile', async () => {
+    const store = await openTestStore();
+    await expect(store.ingredients.create({
+      ...ingredient,
+      additionalNutritionPer100mL: {
+        dietaryFibre: { value: '-1', unit: 'g/100mL', sourceId: 'Database', sourceDate: '2026-01-01', evidenceType: 'database' },
+      },
+    })).rejects.toThrow(/Additional per-100 mL nutrition/);
+  });
+  it('rejects extra per-volume nutrients disguised as a version 1 backup', async () => {
+    const source = await openTestStore();
+    await source.ingredients.create({
+      ...ingredient,
+      additionalNutritionPer100mL: {
+        dietaryFibre: { value: '1', unit: 'g/100mL', sourceId: 'Database', sourceDate: '2026-01-01', evidenceType: 'database' },
+      },
+    });
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    envelope.formatVersion = 1;
+    envelope.payload.formatVersion = 1;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(envelope.payload)));
+    envelope.sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const target = await openTestStore();
+    await expect(target.restoreBackup(JSON.stringify(envelope))).rejects.toThrow(/Version 1 backups cannot contain version 2 ingredient evidence/);
+    expect(await target.ingredients.list()).toEqual([]);
+  });
+  it.each(['none', 'passphrase'] as const)('preserves general sources and ingredient density in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const item: IngredientRecord = {
+      ...ingredient,
+      nutritionEntrySource: { sourceType: 'database', sourceId: 'Database', sourceDate: '2026-01-01' },
+      ingredientDensity: { gramsPerMillilitre: '1.25', evidenceReference: 'Measurement', sourceDate: '2026-01-01' },
+      allergenEvidence: [{
+        id: 'allergen', kind: 'ingredient', subjectId: ingredient.id, sourcePath: [ingredient.id],
+        sourceType: 'productLabel', sourceId: 'Label', sourceDate: '2026-01-01', assessments: { wheat: 'present' },
+      }],
+      allergensConfirmed: true,
+      allergenCoverage: { sourceType: 'productLabel', sourceId: 'Label', sourceDate: '2026-01-01', assessments: { wheat: 'present' } },
+    };
+    await source.ingredients.create(item);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
+    expect(await target.ingredients.get(item.id)).toEqual(item);
+  });
+  it('rejects invalid ingredient density', async () => {
+    const store = await openTestStore();
+    await expect(store.ingredients.create({
+      ...ingredient,
+      ingredientDensity: { gramsPerMillilitre: '0', evidenceReference: 'Measurement', sourceDate: '2026-01-01' },
+    })).rejects.toThrow(/Ingredient density/);
+    await expect(store.ingredients.create({
+      ...ingredient,
+      nutritionEntrySource: { sourceType: 'database', sourceId: 'Database', sourceDate: '2026-02-31' },
+    })).rejects.toThrow(/Nutrition source/);
+  });
+  it('rejects general source data disguised as a version 1 backup', async () => {
+    const source = await openTestStore();
+    await source.ingredients.create({
+      ...ingredient,
+      nutritionEntrySource: { sourceType: 'database', sourceId: 'Database', sourceDate: '2026-01-01' },
+    });
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    envelope.formatVersion = 1;
+    envelope.payload.formatVersion = 1;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(envelope.payload)));
+    envelope.sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const target = await openTestStore();
+    await expect(target.restoreBackup(JSON.stringify(envelope))).rejects.toThrow(/Version 1 backups cannot contain version 2 ingredient evidence/);
+    expect(await target.ingredients.list()).toEqual([]);
+  });
   it('preserves additional statements when an earlier-style editor updates the known supplier facts', async () => {
     const store = await openTestStore();
     const statement = { status: 'absent' as const, specification: { reference: 'SPEC', sourceDate: '2026-01-01' } };

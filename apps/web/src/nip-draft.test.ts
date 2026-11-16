@@ -71,13 +71,53 @@ describe('draft nutrition information', () => {
     const { energyPer100g: energy, ...noEnergy } = ingredients[0]!;
     expect(energy).toBeDefined();
     const missing = makeNipDraft(product, recipes, [noEnergy, ingredients[1]!]);
-    expect(missing.missing.join(' ')).toContain('supplier energy');
+    expect(missing.missing.join(' ')).toContain('energy per 100 g');
     expect(missing.rows[0]?.serving).toBe('Not available');
     const invalid = { ...ingredients[0]!, nutrientProfile: { ingredientId: 'A', values: {} } };
     expect(makeNipDraft(product, recipes, [invalid, ingredients[1]!]).rows[1]?.serving).toBe('Not available');
     const prepared = makeNipDraft({ ...product, foodState: 'asPrepared' }, recipes, ingredients);
     expect(prepared.missing.join(' ')).toContain('only supported for food as sold');
     expect(prepared.rows.every((row) => row.serving === 'Not available')).toBe(true);
+  });
+
+  it('does not interpret per-100 mL ingredient values as per-100 g', () => {
+    const { nutrientProfile, energyPer100g, ...volumeOnly } = ingredients[0]!;
+    expect(nutrientProfile).toBeDefined();
+    expect(energyPer100g).toBeDefined();
+    const source = { sourceId: 'label', sourceDate: '2026-01-01' };
+    const result = makeNipDraft(product, recipes, [{
+      ...volumeOnly,
+      nutritionPer100mL: {
+        energy: { value: '500', ...source },
+        protein: { value: '20', ...source },
+      },
+    }, ingredients[1]!]);
+    expect(result.rows[0]?.unitQuantity).toBe('Not available');
+    expect(result.rows[1]?.unitQuantity).toBe('Not available');
+    expect(result.missing.join(' ')).toContain('nutrition information');
+  });
+
+  it('uses a sourced ingredient density to calculate volume-based nutrition in a mass recipe', () => {
+    const { nutrientProfile, energyPer100g, ...volumeOnly } = ingredients[0]!;
+    expect(nutrientProfile).toBeDefined();
+    expect(energyPer100g).toBeDefined();
+    const source = { sourceId: 'Product label', sourceDate: '2026-01-01' };
+    const liquid = {
+      ...volumeOnly,
+      ingredientDensity: { gramsPerMillilitre: '1.25', evidenceReference: 'Measurement', sourceDate: '2026-01-01' },
+      nutritionPer100mL: {
+        energy: { value: '500', ...source }, protein: { value: '20', ...source },
+        fat: { value: '0', ...source }, saturatedFat: { value: '0', ...source },
+        carbohydrate: { value: '0', ...source }, sugars: { value: '0', ...source },
+        sodium: { value: '1.25', ...source },
+      },
+    };
+    const result = makeNipDraft(product, recipes, [liquid, ingredients[1]!]);
+    expect(result.missing).toEqual([]);
+    expect(result.rows[0]?.unitQuantity).toBe('175 kJ');
+    expect(result.rows[1]?.unitQuantity).toBe('7.0 g');
+    expect(makeNipDraft(product, recipes, [{ ...liquid, ingredientDensity: { ...liquid.ingredientDensity, gramsPerMillilitre: '0' } }, ingredients[1]!]).rows[1]?.unitQuantity).toBe('Not available');
+    expect(makeNipDraft(product, recipes, [{ ...liquid, ...ingredients[0] }, ingredients[1]!]).rows[1]?.unitQuantity).toBe('8.0 g');
   });
 
   it('invalidates the food-basis confirmation when the recipe changes and flags claims', () => {

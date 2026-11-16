@@ -1,4 +1,5 @@
 import type { CaffeineStatement, IngredientRecord, SupplierFactKind, SupplierFactStatement } from '@aus-food/storage';
+import { optionalNutrientIds, type NutrientEvidenceType, type OptionalNutrientId } from '@aus-food/domain';
 
 type AdditiveSource = NonNullable<IngredientRecord['additiveSources']>[number];
 type Concentration = NonNullable<AdditiveSource['concentration']>;
@@ -60,6 +61,32 @@ export const managedNutrients = [
 ] as const;
 export type ManagedNutrient = (typeof managedNutrients)[number]['key'];
 
+export const optionalNutrientLabels: Readonly<Record<OptionalNutrientId, string>> = {
+  availableCarbohydrate: 'Available carbohydrate',
+  unavailableCarbohydrate: 'Unavailable carbohydrate',
+  dietaryFibre: 'Dietary fibre',
+  organicAcids: 'Organic acids',
+  alcohol: 'Alcohol',
+  polyols: 'Polyols (total)',
+  erythritol: 'Erythritol',
+  glycerol: 'Glycerol',
+  dAllulose: 'D-allulose',
+  isomalt: 'Isomalt',
+  lactitol: 'Lactitol',
+  maltitol: 'Maltitol',
+  mannitol: 'Mannitol',
+  polydextrose: 'Polydextrose',
+  sorbitol: 'Sorbitol',
+  dTagatose: 'D-tagatose',
+  xylitol: 'Xylitol',
+};
+
+export interface OptionalNutrientDraft {
+  key: OptionalNutrientId;
+  value: string;
+  unit: 'g' | 'mg';
+}
+
 export interface AdditiveSourceDraft {
   id: string;
   additiveName: string;
@@ -93,10 +120,21 @@ export interface IngredientDraft {
   specificationDate: string;
   knownAllergens: string[];
   allergensConfirmed: boolean;
+  allergenSourceType: NutrientEvidenceType | '';
+  allergenSourceReference: string;
+  allergenSourceDate: string;
   additivesConfirmed: boolean;
   nutrients: Record<ManagedNutrient, string>;
+  additionalNutrientsMass: OptionalNutrientDraft[];
+  additionalNutrientsVolume: OptionalNutrientDraft[];
   nutritionPer100mL: Record<ManagedNutrient | 'energy', string>;
   energyPer100g: string;
+  nutritionSourceType: NutrientEvidenceType | '';
+  nutritionSourceReference: string;
+  nutritionSourceDate: string;
+  ingredientDensity: string;
+  densityReference: string;
+  densityDate: string;
   caffeineStatus: '' | 'present' | 'absent' | 'conflicting';
   caffeineAmount: string;
   caffeineUnit: '' | 'g/100g' | 'mg/100g' | 'mg/100mL';
@@ -145,10 +183,21 @@ export function emptyIngredientDraft(): IngredientDraft {
     specificationDate: '',
     knownAllergens: [],
     allergensConfirmed: false,
+    allergenSourceType: '',
+    allergenSourceReference: '',
+    allergenSourceDate: '',
     additivesConfirmed: false,
     nutrients: { protein: '', fat: '', saturatedFat: '', carbohydrate: '', sugars: '', sodium: '' },
+    additionalNutrientsMass: [],
+    additionalNutrientsVolume: [],
     nutritionPer100mL: { energy: '', protein: '', fat: '', saturatedFat: '', carbohydrate: '', sugars: '', sodium: '' },
     energyPer100g: '',
+    nutritionSourceType: '',
+    nutritionSourceReference: '',
+    nutritionSourceDate: '',
+    ingredientDensity: '',
+    densityReference: '',
+    densityDate: '',
     caffeineStatus: '',
     caffeineAmount: '',
     caffeineUnit: '',
@@ -176,6 +225,26 @@ function ownedAllergenEvidence(record: IngredientRecord): AllergenEvidence | und
   );
 }
 
+export function currentAllergenCoverage(record: IngredientRecord): { sourceId: string; sourceDate: string } | undefined {
+  if (!record.allergensConfirmed) return undefined;
+  const coverage = record.allergenCoverage;
+  if (coverage) {
+    const owned = ownedAllergenEvidence(record);
+    if (!owned || owned.sourceId !== coverage.sourceId || owned.sourceDate !== coverage.sourceDate
+      || owned.sourceType !== coverage.sourceType) return undefined;
+    const assessments = Object.entries(coverage.assessments);
+    if (assessments.length !== Object.keys(owned.assessments).length
+      || assessments.some(([key, status]) => owned.assessments[key] !== status)) return undefined;
+    return coverage;
+  }
+  if (record.specification && record.coverageSpecification
+    && record.specification.reference === record.coverageSpecification.reference
+    && record.specification.sourceDate === record.coverageSpecification.sourceDate) {
+    return { sourceId: record.specification.reference, sourceDate: record.specification.sourceDate };
+  }
+  return undefined;
+}
+
 export function draftFromIngredient(record: IngredientRecord): IngredientDraft {
   const draft = emptyIngredientDraft();
   for (const { key } of supplierFactTopics) {
@@ -188,7 +257,16 @@ export function draftFromIngredient(record: IngredientRecord): IngredientDraft {
     draft.nutritionPer100mL[key] = record.nutritionPer100mL?.[key]?.value ?? '';
   }
   draft.nutritionPer100mL.energy = record.nutritionPer100mL?.energy?.value ?? '';
+  for (const key of optionalNutrientIds) {
+    const mass = values[key];
+    if (mass) draft.additionalNutrientsMass.push({ key, value: mass.value, unit: mass.unit === 'mg/100g' ? 'mg' : 'g' });
+    const volume = record.additionalNutritionPer100mL?.[key];
+    if (volume) draft.additionalNutrientsVolume.push({ key, value: volume.value, unit: volume.unit === 'mg/100mL' ? 'mg' : 'g' });
+  }
   const owned = ownedAllergenEvidence(record);
+  const nutritionSource = Object.values(record.nutrientProfile?.values ?? {})[0]
+    ?? record.energyPer100g ?? Object.values(record.nutritionPer100mL ?? {})[0]
+    ?? Object.values(record.additionalNutritionPer100mL ?? {})[0];
   return {
     ...draft,
     name: record.name,
@@ -196,9 +274,15 @@ export function draftFromIngredient(record: IngredientRecord): IngredientDraft {
     compoundFormulationId: record.compoundFormulationId ?? '',
     supplierName: record.supplierName ?? '',
     supplierProductCode: record.specification?.supplierProductCode ?? '',
-    specificationReference: record.specification?.reference ?? owned?.sourceId ?? '',
-    specificationDate: record.specification?.sourceDate ?? owned?.sourceDate ?? '',
+    specificationReference: record.specification?.reference ?? (owned?.sourceType ? '' : owned?.sourceId ?? ''),
+    specificationDate: record.specification?.sourceDate ?? (owned?.sourceType ? '' : owned?.sourceDate ?? ''),
     energyPer100g: record.energyPer100g?.value ?? '',
+    nutritionSourceType: record.nutritionEntrySource?.sourceType ?? (nutritionSource ? nutritionSource.evidenceType ?? 'supplier' : ''),
+    nutritionSourceReference: record.nutritionEntrySource?.sourceId ?? nutritionSource?.sourceId ?? '',
+    nutritionSourceDate: record.nutritionEntrySource?.sourceDate ?? nutritionSource?.sourceDate ?? '',
+    ingredientDensity: record.ingredientDensity?.gramsPerMillilitre ?? '',
+    densityReference: record.ingredientDensity?.evidenceReference ?? '',
+    densityDate: record.ingredientDensity?.sourceDate ?? '',
     caffeineStatus: record.caffeineEvidence?.status ?? '',
     caffeineAmount: record.caffeineEvidence?.amount ?? '',
     caffeineUnit: record.caffeineEvidence?.unit ?? '',
@@ -214,10 +298,10 @@ export function draftFromIngredient(record: IngredientRecord): IngredientDraft {
         : [emptyCaffeineStatement(), emptyCaffeineStatement()],
     ingredientIdentity: record.ingredientIdentity?.code ?? '',
     knownAllergens: presentIds(owned?.assessments),
-    allergensConfirmed: record.allergensConfirmed === true
-      && record.coverageSpecification?.reference === record.specification?.reference
-      && record.coverageSpecification?.sourceDate === record.specification?.sourceDate
-      && record.coverageSpecification !== undefined,
+    allergensConfirmed: currentAllergenCoverage(record) !== undefined,
+    allergenSourceType: record.allergenCoverage?.sourceType ?? owned?.sourceType ?? '',
+    allergenSourceReference: record.allergenCoverage?.sourceId ?? (owned?.sourceType ? owned.sourceId : ''),
+    allergenSourceDate: record.allergenCoverage?.sourceDate ?? (owned?.sourceType ? owned.sourceDate : ''),
     additivesConfirmed: record.additivesConfirmed === true
       && record.coverageSpecification?.reference === record.specification?.reference
       && record.coverageSpecification?.sourceDate === record.specification?.sourceDate
@@ -251,16 +335,34 @@ export function draftFromIngredient(record: IngredientRecord): IngredientDraft {
   };
 }
 
+function nutrientSource(draft: IngredientDraft): { reference: string; date: string; type: NutrientEvidenceType } | undefined {
+  const reference = draft.nutritionSourceReference.trim();
+  if (reference || draft.nutritionSourceDate || draft.nutritionSourceType) {
+    if (!reference || !draft.nutritionSourceDate || !draft.nutritionSourceType) {
+      throw new Error('Choose a nutrition source type and provide its reference and date.');
+    }
+    const date = new Date(`${draft.nutritionSourceDate}T00:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.nutritionSourceDate)
+      || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== draft.nutritionSourceDate) {
+      throw new Error('Enter a valid nutrition source date.');
+    }
+    return { reference, date: draft.nutritionSourceDate, type: draft.nutritionSourceType };
+  }
+  if (draft.specificationReference.trim() && draft.specificationDate) {
+    return { reference: draft.specificationReference.trim(), date: draft.specificationDate, type: 'supplier' };
+  }
+  return undefined;
+}
+
 function buildNutrients(
   draft: IngredientDraft,
   existing: IngredientRecord | undefined,
   id: string,
 ): IngredientRecord['nutrientProfile'] {
-  const reference = draft.specificationReference.trim();
+  const source = nutrientSource(draft);
   const previous: NutrientValues = existing?.nutrientProfile?.values ?? {};
-  // Values this form does not edit (for example fibre) are carried over untouched.
   const values: NutrientValues = {};
-  const managedKeys = new Set<string>(managedNutrients.map((nutrient) => nutrient.key));
+  const managedKeys = new Set<string>([...managedNutrients.map((nutrient) => nutrient.key), ...optionalNutrientIds]);
   for (const [key, evidence] of Object.entries(previous)) {
     if (!managedKeys.has(key)) {
       Object.assign(values, { [key]: evidence });
@@ -277,20 +379,39 @@ function buildNutrients(
       Object.assign(values, { [key]: before });
       continue;
     }
-    if (!reference || !draft.specificationDate) {
+    if (!source) {
       throw new Error(
-        'Add the supplier specification reference and date before entering nutrient values.',
+        'Add a nutrition source type, reference and date before entering nutrient values.',
       );
     }
     Object.assign(values, {
       [key]: {
         value: text,
         unit,
-        sourceId: reference,
-        sourceDate: draft.specificationDate,
-        evidenceType: 'supplier',
+        sourceId: source.reference,
+        sourceDate: source.date,
+        evidenceType: source.type,
       },
     });
+  }
+  const seen = new Set<OptionalNutrientId>();
+  for (const item of draft.additionalNutrientsMass) {
+    if (!optionalNutrientIds.includes(item.key) || seen.has(item.key)) throw new Error('Choose each additional nutrient only once per basis.');
+    if (item.unit !== 'g' && item.unit !== 'mg') throw new Error('Choose g or mg for the additional nutrient.');
+    seen.add(item.key);
+    const text = item.value.trim();
+    if (!text) continue;
+    if (!/^\d+(\.\d+)?$/.test(text) || !Number.isFinite(Number(text))) {
+      throw new Error(`Enter a non-negative number for ${optionalNutrientLabels[item.key]}, or leave it blank.`);
+    }
+    const unit = item.unit === 'mg' ? 'mg/100g' : 'g/100g';
+    const before = previous[item.key];
+    if (before && before.value === text && before.unit === unit) {
+      Object.assign(values, { [item.key]: before });
+    } else {
+      if (!source) throw new Error('Add a nutrition source type, reference and date before entering nutrient values.');
+      Object.assign(values, { [item.key]: { value: text, unit, sourceId: source.reference, sourceDate: source.date, evidenceType: source.type } });
+    }
   }
   return Object.keys(values).length === 0 ? undefined : { ingredientId: id, values };
 }
@@ -301,15 +422,14 @@ function buildAllergenEvidence(
   id: string,
   makeId: (prefix: string) => string,
 ): IngredientRecord['allergenEvidence'] {
-  const others = (existing?.allergenEvidence ?? []).filter(
-    (entry) => !(entry.kind === 'ingredient' && entry.subjectId === id),
-  );
   const owned = existing === undefined ? undefined : ownedAllergenEvidence(existing);
+  const others = (existing?.allergenEvidence ?? []).filter((entry) => entry !== owned);
   const ticked = [...new Set(draft.knownAllergens.map((item) => item.trim().toLowerCase()).filter(Boolean))];
   const kept = Object.entries(owned?.assessments ?? {}).filter(([, status]) => status !== 'present');
-  if (ticked.length > 0 && (!draft.specificationReference.trim() || !draft.specificationDate)) {
+  const source = allergenSource(draft);
+  if ((ticked.length > 0 || draft.allergensConfirmed) && !source) {
     throw new Error(
-      'Add the supplier specification reference and date before recording allergen evidence.',
+      'Add a source type, reference and date before recording or confirming allergen evidence.',
     );
   }
   const assessments = {
@@ -317,29 +437,55 @@ function buildAllergenEvidence(
     ...Object.fromEntries(ticked.map((allergen) => [allergen, 'present'])),
   };
   const next: AllergenEvidence[] = [...others];
-  if (Object.keys(assessments).length > 0) {
+  if (Object.keys(assessments).length > 0 || draft.allergenSourceType) {
     const sameAssessments = owned !== undefined
       && Object.keys(assessments).length === Object.keys(owned.assessments).length
       && Object.entries(assessments).every(([key, status]) => owned.assessments[key] === status);
-    if (sameAssessments) {
+    if (sameAssessments && (!draft.allergenSourceType
+      || (owned.sourceId === source?.reference && owned.sourceDate === source.date
+        && owned.sourceType === draft.allergenSourceType))) {
       next.unshift(owned);
       return next;
     }
     if (owned && kept.length > 0
-      && (owned.sourceId !== draft.specificationReference.trim() || owned.sourceDate !== draft.specificationDate)) {
+      && (owned.sourceId !== source?.reference || owned.sourceDate !== source?.date)) {
       throw new Error('The saved allergen assessments belong to an earlier source. They cannot be combined with changed assessments from this specification yet; retain the earlier evidence and supplier documents.');
     }
+    const changedSource = Boolean(owned && draft.allergenSourceType
+      && (owned.sourceId !== source?.reference || owned.sourceDate !== source?.date
+        || owned.sourceType !== draft.allergenSourceType));
+    if (changedSource && owned) next.push(owned);
     next.unshift({
-      id: owned?.id ?? makeId('allergen-evidence'),
+      id: changedSource ? makeId('allergen-evidence') : owned?.id ?? makeId('allergen-evidence'),
       subjectId: id,
       kind: 'ingredient',
-      sourceId: draft.specificationReference.trim() || owned?.sourceId || '',
-      sourceDate: draft.specificationDate || owned?.sourceDate || '',
+      sourceId: source?.reference || owned?.sourceId || '',
+      sourceDate: source?.date || owned?.sourceDate || '',
+      ...(draft.allergenSourceType ? { sourceType: draft.allergenSourceType } : {}),
       sourcePath: [id],
       assessments,
     } as AllergenEvidence);
   }
+
   return next.length === 0 ? undefined : next;
+}
+
+function allergenSource(draft: IngredientDraft): { reference: string; date: string; type: NutrientEvidenceType } | undefined {
+  if (draft.allergenSourceType || draft.allergenSourceReference.trim() || draft.allergenSourceDate) {
+    if (!draft.allergenSourceType || !draft.allergenSourceReference.trim() || !draft.allergenSourceDate) {
+      throw new Error('Choose an allergen source type and provide its reference and date.');
+    }
+    const date = new Date(`${draft.allergenSourceDate}T00:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.allergenSourceDate)
+      || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== draft.allergenSourceDate) {
+      throw new Error('Enter a valid allergen source date.');
+    }
+    return { reference: draft.allergenSourceReference.trim(), date: draft.allergenSourceDate, type: draft.allergenSourceType };
+  }
+  if (draft.specificationReference.trim() && draft.specificationDate) {
+    return { reference: draft.specificationReference.trim(), date: draft.specificationDate, type: 'supplier' };
+  }
+  return undefined;
 }
 
 function buildAdditiveSources(
@@ -455,23 +601,29 @@ export function buildIngredientRecord(
   if (hasSpecification && (!reference || !draft.specificationDate)) {
     throw new Error('Supplier specification details need both a reference and a date.');
   }
-  if ((draft.allergensConfirmed || draft.additivesConfirmed) && !reference) {
+  if (draft.additivesConfirmed && !reference) {
     throw new Error('Add the supplier specification reference and date before confirming allergens or additives.');
   }
   const nutrientProfile = buildNutrients(draft, existing, id);
+  const source = nutrientSource(draft);
   const energyText = draft.energyPer100g.trim();
   if (energyText && (!/^\d+(\.\d+)?$/.test(energyText) || !Number.isFinite(Number(energyText)))) {
     throw new Error('Enter a non-negative number for energy, or leave it blank if not supplied.');
   }
-  if (energyText && (!reference || !draft.specificationDate)) {
-    throw new Error('Add the supplier specification reference and date before entering energy.');
+  if (energyText && !source) {
+    throw new Error('Add a nutrition source type, reference and date before entering energy.');
   }
   const energyPer100g = energyText
     ? existing?.energyPer100g?.value === energyText
       ? existing.energyPer100g
-      : { value: energyText, sourceId: reference, sourceDate: draft.specificationDate }
+      : source ? { value: energyText, sourceId: source.reference, sourceDate: source.date, ...(source.type !== 'supplier' ? { evidenceType: source.type } : {}) } : undefined
     : undefined;
   const allergenEvidence = buildAllergenEvidence(draft, existing, id, makeId);
+  const allergenSourceDetails = allergenSource(draft);
+  const allergenOwned = allergenEvidence?.find((entry) => entry.kind === 'ingredient' && entry.subjectId === id);
+  const allergenCoverage = draft.allergensConfirmed && draft.allergenSourceType && allergenSourceDetails && allergenOwned
+    ? { sourceType: allergenSourceDetails.type, sourceId: allergenSourceDetails.reference, sourceDate: allergenSourceDetails.date, assessments: allergenOwned.assessments }
+    : undefined;
   const additiveSources = buildAdditiveSources(draft, existing, makeId);
   const nutritionPer100mL: NonNullable<IngredientRecord['nutritionPer100mL']> = {};
   for (const key of ['energy', ...managedNutrients.map((nutrient) => nutrient.key)] as const) {
@@ -484,10 +636,43 @@ export function buildIngredientRecord(
     if (before?.value === text) {
       Object.assign(nutritionPer100mL, { [key]: before });
     } else {
-      if (!reference || !draft.specificationDate) throw new Error('Add the specification reference and date before entering nutrition.');
-      Object.assign(nutritionPer100mL, { [key]: { value: text, sourceId: reference, sourceDate: draft.specificationDate } });
+      if (!source) throw new Error('Add a nutrition source type, reference and date before entering nutrition.');
+      Object.assign(nutritionPer100mL, { [key]: { value: text, sourceId: source.reference, sourceDate: source.date, ...(source.type !== 'supplier' ? { evidenceType: source.type } : {}) } });
     }
   }
+  const additionalNutritionPer100mL: NonNullable<IngredientRecord['additionalNutritionPer100mL']> = {};
+    const seenVolume = new Set<OptionalNutrientId>();
+    for (const item of draft.additionalNutrientsVolume) {
+      if (!optionalNutrientIds.includes(item.key) || seenVolume.has(item.key)) throw new Error('Choose each additional nutrient only once per basis.');
+      if (item.unit !== 'g' && item.unit !== 'mg') throw new Error('Choose g or mg for the additional nutrient.');
+      seenVolume.add(item.key);
+      const text = item.value.trim();
+      if (!text) continue;
+      if (!/^\d+(\.\d+)?$/.test(text) || !Number.isFinite(Number(text))) {
+        throw new Error(`Enter a non-negative number for ${optionalNutrientLabels[item.key]}, or leave it blank.`);
+      }
+      const unit = item.unit === 'mg' ? 'mg/100mL' : 'g/100mL';
+      const before = existing?.additionalNutritionPer100mL?.[item.key];
+      if (before && before.value === text && before.unit === unit) {
+        Object.assign(additionalNutritionPer100mL, { [item.key]: before });
+      } else {
+        if (!source) throw new Error('Add a nutrition source type, reference and date before entering nutrient values.');
+        Object.assign(additionalNutritionPer100mL, {
+          [item.key]: { value: text, unit, sourceId: source.reference, sourceDate: source.date, evidenceType: source.type },
+        });
+      }
+    }
+  const densityValue = draft.ingredientDensity.trim();
+  const densityReference = draft.densityReference.trim();
+  if (densityValue || densityReference || draft.densityDate) {
+    if (!/^\d+(\.\d+)?$/.test(densityValue) || !Number.isFinite(Number(densityValue))
+      || Number(densityValue) <= 0 || !densityReference || !draft.densityDate) {
+      throw new Error('Ingredient density needs a positive value, source reference and date.');
+    }
+  }
+  const ingredientDensity = densityValue
+    ? { gramsPerMillilitre: densityValue, evidenceReference: densityReference, sourceDate: draft.densityDate }
+    : undefined;
   const previousCaffeine = existing?.caffeineEvidence;
   if (previousCaffeine?.statements && draft.caffeineStatus !== 'conflicting') {
     throw new Error('The conflicting caffeine statements cannot yet be removed here. Keep both statements and retain the supplier documents.');
@@ -646,17 +831,23 @@ export function buildIngredientRecord(
         }
       : {}),
     ...(nutrientProfile ? { nutrientProfile } : {}),
+    ...(draft.nutritionSourceType && source
+      ? { nutritionEntrySource: { sourceType: source.type, sourceId: source.reference, sourceDate: source.date } }
+      : {}),
     ...(energyPer100g ? { energyPer100g } : {}),
+    ...(ingredientDensity ? { ingredientDensity } : {}),
     ...(allergenEvidence ? { allergenEvidence } : {}),
+    ...(allergenCoverage ? { allergenCoverage } : {}),
     ...(additiveSources.length > 0 ? { additiveSources } : {}),
     ...(caffeineEvidence ? { caffeineEvidence } : {}),
     ...(ingredientIdentity ? { ingredientIdentity } : {}),
     ...(Object.keys(standardSupplierFacts).length ? { supplierFacts: standardSupplierFacts } : {}),
     ...(otherSchedule28 ? { otherSchedule28Statements: otherSchedule28 } : {}),
     ...(Object.keys(nutritionPer100mL).length ? { nutritionPer100mL } : {}),
+    ...(Object.keys(additionalNutritionPer100mL).length ? { additionalNutritionPer100mL } : {}),
     allergensConfirmed: draft.allergensConfirmed,
     additivesConfirmed: draft.additivesConfirmed,
-    ...(draft.allergensConfirmed || draft.additivesConfirmed
+    ...(draft.additivesConfirmed || (draft.allergensConfirmed && !draft.allergenSourceType)
       ? { coverageSpecification: { reference, sourceDate: draft.specificationDate } }
       : {}),
     tags: existing?.tags ?? [],
@@ -671,8 +862,11 @@ export const editableIngredientKeys = [
   'supplierName',
   'specification',
   'nutrientProfile',
+  'nutritionEntrySource',
   'energyPer100g',
+  'ingredientDensity',
   'allergenEvidence',
+  'allergenCoverage',
   'allergensConfirmed',
   'additiveSources',
   'additivesConfirmed',
@@ -682,6 +876,7 @@ export const editableIngredientKeys = [
   'supplierFacts',
   'otherSchedule28Statements',
   'nutritionPer100mL',
+  'additionalNutritionPer100mL',
 ] as const;
 
 export interface StepStatus {
@@ -690,8 +885,19 @@ export interface StepStatus {
 }
 
 export function ingredientStepStatuses(draft: IngredientDraft): Record<'about' | 'spec' | 'nutrition' | 'allergens' | 'additives', StepStatus> {
-  const entered = managedNutrients.filter(({ key }) => draft.nutrients[key].trim() !== '').length
+  const massEntered = managedNutrients.filter(({ key }) => draft.nutrients[key].trim() !== '').length
     + (draft.energyPer100g.trim() ? 1 : 0);
+  const volumeEntered = Object.values(draft.nutritionPer100mL).filter((value) => value.trim() !== '').length;
+  const densityNumber = Number(draft.ingredientDensity);
+  const densityDate = new Date(`${draft.densityDate}T00:00:00Z`);
+  const densityReady = /^\d+(\.\d+)?$/.test(draft.ingredientDensity) && Number.isFinite(densityNumber)
+    && densityNumber > 0 && Boolean(draft.densityReference.trim())
+    && /^\d{4}-\d{2}-\d{2}$/.test(draft.densityDate) && Number.isFinite(densityDate.getTime())
+    && densityDate.toISOString().slice(0, 10) === draft.densityDate;
+  const entered = densityReady
+    ? managedNutrients.filter(({ key }) => draft.nutrients[key].trim() || draft.nutritionPer100mL[key].trim()).length
+      + (draft.energyPer100g.trim() || draft.nutritionPer100mL.energy.trim() ? 1 : 0)
+    : massEntered;
   const total = managedNutrients.length + 1;
   const aboutDone =
     draft.name.trim() !== '' && draft.kind !== '' && (draft.kind !== 'compound' || draft.compoundFormulationId !== '');
@@ -701,7 +907,11 @@ export function ingredientStepStatuses(draft: IngredientDraft): Record<'about' |
     spec: { done: specDone, text: specDone ? 'Answered' : 'Still needed' },
     nutrition: {
       done: entered === total,
-      text: entered === total ? 'All entered' : `${entered} of ${total} entered`,
+      text: entered === total
+        ? 'All entered for calculation'
+        : volumeEntered > 0 && entered === 0
+          ? `${volumeEntered} of ${total} entered per 100 mL; calculations require sourced ingredient density`
+          : `${entered} of ${total} entered per 100 g`,
     },
     allergens: {
       done: draft.allergensConfirmed,

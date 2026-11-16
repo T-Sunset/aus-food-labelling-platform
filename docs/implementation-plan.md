@@ -2,7 +2,8 @@
 
 **Status:** Living plan; the 2026-11-16 priority reset and I1-I9
 ingredient/formulation track are approved. I1's direction is agreed in
-principle; I2 ingredient-data research and approach are approved and I3 is complete.
+principle; I2 ingredient-data research and approach are approved, I3 is complete
+and I4 is complete.
 Earlier plans and their progress are retained as history.
 **Audience:** engineers and AI agents implementing the product.
 **Related documents:** `AGENTS.md` (always-on agent rules), `docs/requirements.md` (the contract), `docs/reviewer-questions.md` (questions for the human regulatory reviewer).
@@ -48,7 +49,7 @@ supported. The drink remains a contrasting test case.
 | I1 | Direction agreed | Single-page ingredient entry with expandable sections, inline compound-component entry and a recipe screen with ingredients and amounts together. Detailed interactions and preservation checks continue in later steps. |
 | I2 | Approved | Research and agree general ingredient data, nutrition, allergen and additive identity/evidence; distinguish common, optional and conditional information. Bounded source review and the agreed approach are recorded below. |
 | I3 | Complete | Basic ingredient creation/editing uses a single expandable page and general names, without mandatory drink-specific questions. Existing specialised evidence remains accessible under source details; storage and backup formats are unchanged. Tested basic drafts and existing specialised evidence, including backup/restore (ING-001, DATA-003, DATA-005). |
-| I4 | Pending | Improve nutrient and allergen entry, units, bases and evidence; retain unknown rather than invent values or conversions. |
+| I4 | Complete | Nutrient and allergen entry accepts general sources; common and additional supported nutrient values can be entered on either basis with explicit units and dated evidence. Unknowns remain unknown, and volume calculations require sourced ingredient density (ING-002, ING-003, DATA-003, DATA-005, DATA-006). Catalogue expansion and optional-nutrient product calculations remain future work. |
 | I5 | Pending | Support an additive as an ingredient and record additive information within another ingredient without duplicate entry; additive permission coverage expands separately. |
 | I6 | Pending | Guide entry of complete and partial compound ingredients and supplier composition without requiring users to understand internal links. |
 | I7 | Pending | Rebuild recipe/formulation entry, quantities, nested recipes and relevant process/yield details; preserve cycle protection. |
@@ -70,10 +71,9 @@ workflow; complete component-list coverage does not imply known proportions.
 The owner agreed this general direction; detailed interactions remain open.
 This is not approval to discard evidence or assume a specific migration.
 
-I3 is a layout and basic-entry step, not the finished ingredient workflow.
-The existing nutrition and allergen inputs still require a dated supplier
-specification and record supplier evidence. General source entry and the
-additional-nutrient control remain I4 work. Direct additives and inline
+I3 was a layout and basic-entry step, not the finished ingredient workflow.
+I4 subsequently added general sources and the additional-nutrient control.
+Direct additives and inline
 compound composition remain I5 and I6 work; compound records currently
 still require a separately saved formulation.
 
@@ -90,6 +90,37 @@ questions too specific for their present location and form; reconsider their
 placement and presentation rather than treating them as permanent. Preserve
 existing evidence and access to it while deciding how to replace those
 controls (DATA-005).
+
+I4 progress: the nutrition section has one visible basis at a time; switching
+bases preserves both existing sets. Nutrition and allergen sources can be
+entered independently of supplier specifications, with a source type, dated
+reference and saved evidence (ING-001, ING-002, ING-003, DATA-005). The
+mass-based recipe calculator can use a per-100 mL ingredient value when
+that ingredient has a positive, dated, sourced density; otherwise the value
+is unavailable rather than converted using a guessed or finished-food density
+(CALC-010, DATA-003, DATA-006). If both bases have a value for the same
+nutrient, the calculator currently prefers the per-100 g value; it does not
+compare or reconcile the two. The allergen confirmation wording is shorter,
+and the ingredient editor uses the available desktop width.
+
+I4's optional-nutrient control supports the existing domain identifiers in
+g or mg per 100 g or 100 mL. It is not a complete catalogue of vitamins or
+minerals. Optional values are saved with their individual source and are not
+automatically added to labels or included in product nutrition calculations;
+calculation propagation and catalogue expansion remain future work (I8).
+Current-format backups are tested, but compatibility with an actual earlier
+v2 app remains unverified; see ADR 011. Additive confirmation still needs a
+supplier specification and is I5 work. The owner expects the existing
+specialised questions to be reconsidered later; preserve their evidence
+without treating the current presentation as permanent.
+
+Bounded I4 research by the Australian Food Requirements Analyst, 2026-11-16:
+[Schedule 11 S11-2](https://www.legislation.gov.au/F2015L00481/2024-10-29/2024-10-29/text/original/epub/OEBPS/document_1/document_1.html)
+uses g/100 g for named energy-calculation components, but does not prescribe
+a universal ingredient-entry unit. The aggregate polyols identifier has no
+verified complete membership in that review, and unavailable carbohydrate
+has context-dependent scope; avoid assuming the aggregate equals a sum of
+listed substances. A complete vitamin/mineral catalogue was not researched.
 
 ### I2 - Ingredient information: research and agreed approach
 

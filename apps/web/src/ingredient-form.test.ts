@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { IngredientRecord } from '@aus-food/storage';
 import {
   buildIngredientRecord,
+  currentAllergenCoverage,
   draftFromIngredient,
   emptyAdditiveSourceDraft,
   emptyIngredientDraft,
@@ -23,6 +24,55 @@ function filledDraft() {
 }
 
 describe('buildIngredientRecord', () => {
+  it('round-trips optional nutrients in both bases and retains their original sources', () => {
+    const draft = emptyIngredientDraft();
+    draft.name = 'Example';
+    draft.kind = 'atomic';
+    draft.nutritionSourceType = 'database';
+    draft.nutritionSourceReference = 'Database';
+    draft.nutritionSourceDate = '2026-01-01';
+    draft.additionalNutrientsMass.push({ key: 'dietaryFibre', value: '0', unit: 'g' });
+    draft.additionalNutrientsVolume.push({ key: 'dietaryFibre', value: '250', unit: 'mg' });
+    const first = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(first.nutrientProfile?.values.dietaryFibre).toMatchObject({
+      value: '0', unit: 'g/100g', sourceId: 'Database', evidenceType: 'database',
+    });
+    expect(first.additionalNutritionPer100mL?.dietaryFibre).toMatchObject({
+      value: '250', unit: 'mg/100mL', sourceId: 'Database', evidenceType: 'database',
+    });
+    const edit = draftFromIngredient(first);
+    edit.nutritionSourceReference = 'New source';
+    expect(buildIngredientRecord(edit, first, makeId, now).additionalNutritionPer100mL).toEqual(first.additionalNutritionPer100mL);
+    expect(buildIngredientRecord(edit, first, makeId, now).nutrientProfile).toEqual(first.nutrientProfile);
+    edit.additionalNutrientsMass[0]!.unit = 'mg';
+    expect(buildIngredientRecord(edit, first, makeId, now).nutrientProfile?.values.dietaryFibre)
+      .toMatchObject({ unit: 'mg/100g', sourceId: 'New source' });
+    edit.additionalNutrientsMass = [];
+    edit.additionalNutrientsVolume = [];
+    const removed = buildIngredientRecord(edit, first, makeId, now);
+    expect(removed.nutrientProfile).toBeUndefined();
+    expect(removed.additionalNutritionPer100mL).toBeUndefined();
+  });
+
+  it('rejects invalid and duplicate optional values while leaving blanks unknown', () => {
+    const draft = emptyIngredientDraft();
+    draft.name = 'Example';
+    draft.kind = 'atomic';
+    draft.additionalNutrientsMass.push({ key: 'dietaryFibre', value: '', unit: 'g' });
+    expect(buildIngredientRecord(draft, undefined, makeId, now).nutrientProfile).toBeUndefined();
+    draft.additionalNutrientsMass[0]!.value = '-1';
+    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/non-negative/);
+    draft.additionalNutrientsMass[0]!.value = '0';
+    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/nutrition source/);
+    draft.additionalNutrientsMass.push({ key: 'dietaryFibre', value: '', unit: 'g' });
+    draft.nutritionSourceType = 'database';
+    draft.nutritionSourceReference = 'Database';
+    draft.nutritionSourceDate = '2026-01-01';
+    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/only once/);
+    draft.additionalNutrientsMass = [];
+    draft.additionalNutrientsVolume.push({ key: 'alcohol', value: 'abc', unit: 'g' });
+    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/non-negative/);
+  });
   it('records only supplier-stated facts and keeps dated disagreements', () => {
     const draft = filledDraft();
     expect(buildIngredientRecord(draft, undefined, makeId, now).supplierFacts).toBeUndefined();
@@ -173,6 +223,52 @@ describe('buildIngredientRecord', () => {
     });
   });
 
+    it('records non-supplier nutrition sources and keeps unchanged evidence on edit', () => {
+      const draft = emptyIngredientDraft();
+      draft.name = 'Flour';
+      draft.kind = 'atomic';
+      draft.nutritionSourceType = 'database';
+      draft.nutritionSourceReference = 'Food database entry';
+      draft.nutritionSourceDate = '2026-01-01';
+      draft.nutrients.protein = '12';
+      draft.energyPer100g = '1400';
+      const record = buildIngredientRecord(draft, undefined, makeId, now);
+      expect(record.specification).toBeUndefined();
+      expect(record.nutrientProfile?.values.protein).toMatchObject({ evidenceType: 'database', sourceId: 'Food database entry' });
+      expect(record.energyPer100g).toMatchObject({ evidenceType: 'database', sourceId: 'Food database entry' });
+      const edit = draftFromIngredient(record);
+      edit.nutritionSourceReference = 'Another entry';
+      edit.nutrients.fat = '2';
+      const updated = buildIngredientRecord(edit, record, makeId, now);
+      expect(updated.nutrientProfile?.values.protein).toEqual(record.nutrientProfile?.values.protein);
+      expect(updated.nutrientProfile?.values.fat?.sourceId).toBe('Another entry');
+      edit.nutritionSourceDate = '2026-02-31';
+      expect(() => buildIngredientRecord(edit, record, makeId, now)).toThrow(/valid nutrition source date/);
+    });
+
+    it('records allergen coverage with a non-supplier source and detects stale coverage', () => {
+      const draft = emptyIngredientDraft();
+      draft.name = 'Flour';
+      draft.kind = 'atomic';
+      draft.allergenSourceType = 'productLabel';
+      draft.allergenSourceReference = 'Ingredient label';
+      draft.allergenSourceDate = '2026-01-01';
+      draft.knownAllergens = ['wheat'];
+      draft.allergensConfirmed = true;
+      const record = buildIngredientRecord(draft, undefined, makeId, now);
+      expect(record.specification).toBeUndefined();
+      expect(currentAllergenCoverage(record)).toMatchObject({ sourceId: 'Ingredient label' });
+      const edit = draftFromIngredient(record);
+      expect(edit.specificationReference).toBe('');
+      expect(edit.allergensConfirmed).toBe(true);
+      expect(buildIngredientRecord(edit, record, makeId, now).allergenCoverage).toEqual(record.allergenCoverage);
+      const stale = { ...record, allergenEvidence: [{ ...record.allergenEvidence![0]!, assessments: { milk: 'present' as const } }] };
+      expect(currentAllergenCoverage(stale)).toBeUndefined();
+      edit.allergensConfirmed = false;
+      const unconfirmed = buildIngredientRecord(edit, record, makeId, now);
+      expect(currentAllergenCoverage(unconfirmed)).toBeUndefined();
+      expect(draftFromIngredient(unconfirmed).allergenSourceType).toBe('productLabel');
+    });
   it('requires a specification before nutrient values', () => {
     const draft = filledDraft();
     draft.specificationReference = '';
@@ -214,7 +310,7 @@ describe('buildIngredientRecord', () => {
     draft.name = 'Water';
     draft.kind = 'atomic';
     draft.allergensConfirmed = true;
-    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/specification reference and date/);
+    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/source type, reference and date/);
     draft.allergensConfirmed = false;
     draft.additivesConfirmed = true;
     expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/specification reference and date/);
@@ -311,7 +407,15 @@ describe('ingredientStepStatuses', () => {
   it('reports progress in plain words', () => {
     const statuses = ingredientStepStatuses(filledDraft());
     expect(statuses.about.done).toBe(true);
-    expect(statuses.nutrition.text).toBe('1 of 7 entered');
+    expect(statuses.nutrition.text).toBe('1 of 7 entered per 100 g');
     expect(statuses.allergens.text).toBe('Still needed');
+  });
+
+  it('does not mark volume-only values as ready for calculation', () => {
+    const draft = emptyIngredientDraft();
+    draft.nutritionPer100mL.energy = '0';
+    const status = ingredientStepStatuses(draft).nutrition;
+    expect(status.done).toBe(false);
+    expect(status.text).toContain('require sourced ingredient density');
   });
 });

@@ -41,3 +41,14 @@ additive change therefore does not require another workspace copy. Future
 changes must assess and test their own old-reader behaviour rather than assume
 all additions are safe. Continue to use the current build to view the new
 evidence; do not treat workspace isolation as a general downgrade guarantee.
+
+## I4 compatibility status
+
+I4 adds general-source, ingredient-density and optional per-volume nutrient fields and expands nutrient
+source types. Current-format backup round trips are tested, but an actual
+earlier v2 application has not been tested with these additions. The earlier
+application may not display or understand the new evidence, and its edits
+cannot be assumed to preserve its meaning. Do not edit an I4 workspace or
+restore its backup with an earlier app until downgrade compatibility has
+been established. Keep a current-format backup; this caveat does not claim
+that a backup version alone protects an older application.

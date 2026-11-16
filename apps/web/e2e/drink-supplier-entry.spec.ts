@@ -57,10 +57,10 @@ async function enterSupplier(page: Page, supplier: Supplier): Promise<void> {
       ['Energy', supplier.energy], ['Protein', '0'], ['Fat, total', '0'], ['Saturated fat', '0'],
       ['Carbohydrate', supplier.sugars], ['Sugars', supplier.sugars], ['Sodium', '0'],
     ]) {
-      await page.getByLabel(label!, { exact: false }).fill(value!);
+      await page.getByRole('textbox', { name: label!, exact: false }).fill(value!);
     }
     await step(page, 'Allergens');
-    await page.getByLabel(/I checked the supplier information for every allergen shown/).check();
+    await page.getByLabel(/I confirm that ticked allergens are present/).check();
   }
   await step(page, 'Additives');
   if (supplier.additive) {
@@ -189,7 +189,7 @@ test('enters the fictional drink supplier information and restores both backup t
         await step(restoredPage, 'Nutrition');
         await expect(restoredPage.getByLabel('Energy', { exact: false })).toHaveValue('3.7');
         await step(restoredPage, 'Allergens');
-        await expect(restoredPage.getByLabel(/I checked the supplier information for every allergen shown/)).toBeChecked();
+        await expect(restoredPage.getByLabel(/I confirm that ticked allergens are present/)).toBeChecked();
         await restoredPage.getByRole('button', { name: 'Formulations', exact: true }).click();
         await restoredPage.getByRole('button', { name: 'Edit formulation Citrus composition' }).click();
         await expect(restoredPage.getByLabel('What is this formulation?')).toHaveValue('complete');

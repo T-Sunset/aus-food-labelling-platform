@@ -75,6 +75,23 @@ describe('draft label and live readiness', () => {
     expect(changed.missing.join(' ')).toMatch(/confirm the additive information/);
   });
 
+  it('uses confirmed allergen evidence from a product label without claiming additive coverage', () => {
+    const draft = emptyIngredientDraft();
+    draft.name = 'Flour';
+    draft.kind = 'atomic';
+    draft.allergenSourceType = 'productLabel';
+    draft.allergenSourceReference = 'Pack label';
+    draft.allergenSourceDate = '2026-01-01';
+    draft.knownAllergens = ['milk'];
+    draft.allergensConfirmed = true;
+    const flour = buildIngredientRecord(draft, undefined, (prefix) => prefix === 'ingredient' ? 'Flour' : 'flour-evidence', now);
+    const result = makeLabelDraft(product, [recipe], [ingredient('Sugar'), flour]);
+    expect(result.allergens).toContain('milk');
+    expect(result.missing).not.toContain('Flour: confirm the allergen information');
+    expect(result.missing).toContain('Flour: confirm the additive information');
+    expect(result.missing).toContain('Flour: nutrition information');
+  });
+
   it('keeps final-food allergen conditions as a specific review warning', () => {
     const result = makeLabelDraft(product, [recipe], [ingredient('Sugar', ['sulphites']), ingredient('Flour')]);
     expect(result.allergens).not.toContain('sulphites');

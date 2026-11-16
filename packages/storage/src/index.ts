@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import { optionalNutrientIds } from '@aus-food/domain';
 import type {
   AdditiveConcentrationBasis,
   AdditiveConcentrationUnit,
@@ -57,13 +58,30 @@ export interface IngredientRecord extends DraftRecordBase {
   };
   readonly compoundFormulationId?: string;
   readonly nutrientProfile?: IngredientNutrientProfile;
+  readonly nutritionEntrySource?: {
+    readonly sourceType: import('@aus-food/domain').NutrientEvidenceType;
+    readonly sourceId: string;
+    readonly sourceDate: string;
+  };
   readonly energyPer100g?: {
     readonly value: string;
     readonly sourceId: string;
     readonly sourceDate: string;
+    readonly evidenceType?: import('@aus-food/domain').NutrientEvidenceType;
+  };
+  readonly ingredientDensity?: {
+    readonly gramsPerMillilitre: string;
+    readonly evidenceReference: string;
+    readonly sourceDate: string;
   };
   readonly allergenEvidence?: readonly AllergenEvidenceSource[];
   readonly allergensConfirmed?: boolean;
+  readonly allergenCoverage?: {
+    readonly sourceType: import('@aus-food/domain').NutrientEvidenceType;
+    readonly sourceId: string;
+    readonly sourceDate: string;
+    readonly assessments: Readonly<Record<string, AllergenEvidenceStatus>>;
+  };
   readonly additiveSources?: readonly IngredientAdditiveSource[];
   readonly additivesConfirmed?: boolean;
   readonly coverageSpecification?: {
@@ -77,7 +95,17 @@ export interface IngredientRecord extends DraftRecordBase {
   };
   readonly nutritionPer100mL?: Partial<Record<
     'energy' | 'protein' | 'fat' | 'saturatedFat' | 'carbohydrate' | 'sugars' | 'sodium',
-    { readonly value: string; readonly sourceId: string; readonly sourceDate: string }
+    { readonly value: string; readonly sourceId: string; readonly sourceDate: string; readonly evidenceType?: import('@aus-food/domain').NutrientEvidenceType }
+  >>;
+  readonly additionalNutritionPer100mL?: Partial<Record<
+    import('@aus-food/domain').OptionalNutrientId,
+    {
+      readonly value: string;
+      readonly unit: 'g/100mL' | 'mg/100mL';
+      readonly sourceId: string;
+      readonly sourceDate: string;
+      readonly evidenceType: import('@aus-food/domain').NutrientEvidenceType;
+    }
   >>;
   readonly caffeineEvidence?: {
     readonly status: 'present' | 'absent' | 'conflicting';
@@ -889,11 +917,39 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
         throw new RecordValidationError('energyPer100g needs a non-negative value, reference and valid date');
       }
     }
+    if (record.nutritionEntrySource !== undefined) {
+      const source = record.nutritionEntrySource;
+      if (!isRecord(source)
+        || !['supplier', 'analysis', 'database', 'calculated', 'productLabel', 'user'].includes(String(source.sourceType))
+        || !isNonEmpty(source.sourceId) || !isIsoDate(source.sourceDate)) {
+        throw new RecordValidationError('Nutrition source needs a source type, reference and valid date');
+      }
+    }
+    if (record.ingredientDensity !== undefined) {
+      const density = record.ingredientDensity;
+      if (!isRecord(density) || typeof density.gramsPerMillilitre !== 'string'
+        || !/^\d+(\.\d+)?$/.test(density.gramsPerMillilitre)
+        || !Number.isFinite(Number(density.gramsPerMillilitre)) || Number(density.gramsPerMillilitre) <= 0
+        || !isNonEmpty(density.evidenceReference) || !isIsoDate(density.sourceDate)) {
+        throw new RecordValidationError('Ingredient density needs a positive g/mL value, reference and valid date');
+      }
+    }
     if (record.allergenEvidence !== undefined && !Array.isArray(record.allergenEvidence)) {
       throw new RecordValidationError('allergenEvidence must be an array when present');
     }
     if (record.allergensConfirmed !== undefined && typeof record.allergensConfirmed !== 'boolean') {
       throw new RecordValidationError('allergensConfirmed must be a boolean');
+    }
+    if (record.allergenCoverage !== undefined) {
+      const coverage = record.allergenCoverage;
+      if (!isRecord(coverage)
+        || !['supplier', 'analysis', 'database', 'calculated', 'productLabel', 'user'].includes(String(coverage.sourceType))
+        || !isNonEmpty(coverage.sourceId) || !isIsoDate(coverage.sourceDate)
+        || !isRecord(coverage.assessments)
+        || Object.values(coverage.assessments).some((status) =>
+          !['present', 'absent', 'unknown', 'exemption_review', 'conflict'].includes(String(status)))) {
+        throw new RecordValidationError('Allergen coverage needs a source type, dated reference and valid assessments');
+      }
     }
     if (record.additiveSources !== undefined) {
       validateIngredientAdditiveSources(record.additiveSources, record.id);
@@ -964,6 +1020,18 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
         || !isRecord(value) || typeof value.value !== 'string' || !/^\d+(\.\d+)?$/.test(value.value)
         || !Number.isFinite(Number(value.value)) || !isNonEmpty(value.sourceId) || !isIsoDate(value.sourceDate))) {
         throw new RecordValidationError('Per-100 mL nutrition needs non-negative values and dated sources');
+      }
+    }
+    if (record.additionalNutritionPer100mL !== undefined) {
+      const ids: readonly string[] = optionalNutrientIds;
+      if (!isRecord(record.additionalNutritionPer100mL)
+        || Object.entries(record.additionalNutritionPer100mL).some(([key, evidence]) =>
+          !ids.includes(key) || !isRecord(evidence) || typeof evidence.value !== 'string'
+          || !/^\d+(\.\d+)?$/.test(evidence.value) || !Number.isFinite(Number(evidence.value))
+          || !['g/100mL', 'mg/100mL'].includes(String(evidence.unit))
+          || !isNonEmpty(evidence.sourceId) || !isIsoDate(evidence.sourceDate)
+          || !['supplier', 'analysis', 'database', 'calculated', 'productLabel', 'user'].includes(String(evidence.evidenceType)))) {
+        throw new RecordValidationError('Additional per-100 mL nutrition needs supported nutrients, units and dated sources');
       }
     }
     if (record.supplierFacts !== undefined) {
@@ -1820,11 +1888,24 @@ function validateBackupPayload(value: unknown): asserts value is WorkspaceBackup
   }
 
   const ingredients = payload.ingredients as IngredientRecord[];
+  const hasNewIngredientData = (item: Record<string, unknown>): boolean => {
+    const profile = isRecord(item.nutrientProfile) && isRecord(item.nutrientProfile.values) ? item.nutrientProfile.values : {};
+    return item.caffeineEvidence !== undefined || item.ingredientIdentity !== undefined
+      || item.nutritionPer100mL !== undefined || item.supplierFacts !== undefined
+      || item.otherSchedule28Statements !== undefined || item.ingredientDensity !== undefined
+      || item.allergenCoverage !== undefined || item.nutritionEntrySource !== undefined
+      || item.additionalNutritionPer100mL !== undefined
+      || (isRecord(item.energyPer100g) && item.energyPer100g.evidenceType !== undefined)
+      || Object.values(profile).some((value) => isRecord(value)
+        && (value.evidenceType === 'user' || value.evidenceType === 'productLabel'))
+      || (Array.isArray(item.allergenEvidence) && item.allergenEvidence.some((value: unknown) =>
+        isRecord(value) && value.sourceType !== undefined));
+  };
   if (payload.formatVersion === 1 && (ingredients.some((item) =>
-    isRecord(item) && (item.caffeineEvidence !== undefined || item.ingredientIdentity !== undefined || item.nutritionPer100mL !== undefined || item.supplierFacts !== undefined || item.otherSchedule28Statements !== undefined))
+    isRecord(item) && hasNewIngredientData(item))
     || (payload.approvedVersions as unknown[]).some((item) => isRecord(item)
       && isRecord(item.snapshot) && item.snapshot.recordType === 'ingredient'
-      && (item.snapshot.caffeineEvidence !== undefined || item.snapshot.ingredientIdentity !== undefined || item.snapshot.nutritionPer100mL !== undefined || item.snapshot.supplierFacts !== undefined || item.snapshot.otherSchedule28Statements !== undefined)))) {
+      && hasNewIngredientData(item.snapshot)))) {
     throw new BackupFormatError('Version 1 backups cannot contain version 2 ingredient evidence');
   }
   const formulations = payload.formulations as FormulationRecord[];

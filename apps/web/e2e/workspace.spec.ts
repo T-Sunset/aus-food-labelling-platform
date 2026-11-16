@@ -172,6 +172,104 @@ test('saves and edits a basic ingredient without a specification or drink questi
   await expect(page.getByText('Specification not supplied')).toBeVisible();
 });
 
+test('keeps a volume-only nutrition basis when reopening an ingredient', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
+  await page.getByRole('button', { name: 'Add ingredient' }).click();
+  const editor = page.locator('form.editor-panel');
+  const grid = page.locator('.ingredient-content-grid');
+  const editorBox = await editor.boundingBox();
+  const gridBox = await grid.boundingBox();
+  expect(editorBox).not.toBeNull();
+  expect(gridBox).not.toBeNull();
+  expect(editorBox!.width).toBeGreaterThan(gridBox!.width - 2);
+  await page.getByLabel('Ingredient name *').fill('Juice');
+  await page.getByLabel('Ingredient type').selectOption('atomic');
+  await openIngredientSection(page, 'Source details');
+  await page.getByLabel('Specification reference').fill('Juice information');
+  await page.getByLabel('Specification date').fill('2026-01-01');
+  await openIngredientSection(page, 'Nutrition');
+  await page.getByLabel('Nutrition values are per').selectOption('volume');
+  await expect(page.getByText(/To calculate using per-100 mL values/)).toBeVisible();
+  await page.getByLabel('Energy per 100 mL').fill('150');
+  await page.getByLabel('Density (g/mL)').fill('1.2');
+  await page.getByLabel('Density source reference').fill('Measured');
+  await page.getByLabel('Density source date').fill('2026-01-01');
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await page.getByRole('button', { name: 'Edit ingredient Juice' }).click();
+  await openIngredientSection(page, 'Nutrition');
+  await expect(page.getByLabel('Nutrition values are per')).toHaveValue('volume');
+  await expect(page.getByLabel('Energy per 100 mL')).toHaveValue('150');
+  await expect(page.getByLabel('Density (g/mL)')).toHaveValue('1.2');
+  await page.getByLabel('Nutrition values are per').selectOption('mass');
+  await expect(page.getByLabel('Energy', { exact: false })).toHaveValue('');
+  await page.getByLabel('Nutrition values are per').selectOption('volume');
+  await expect(page.getByLabel('Energy per 100 mL')).toHaveValue('150');
+});
+
+test('records nutrition and allergen information from general sources', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
+  await page.getByRole('button', { name: 'Add ingredient' }).click();
+  await page.getByLabel('Ingredient name *').fill('Flour');
+  await page.getByLabel('Ingredient type').selectOption('atomic');
+  await openIngredientSection(page, 'Nutrition');
+  await page.getByLabel('Nutrition source type').selectOption('database');
+  await page.getByLabel('Nutrition source reference').fill('Food database');
+  await page.getByLabel('Nutrition source date').fill('2026-01-01');
+  await page.getByLabel('Protein').fill('12');
+  await openIngredientSection(page, 'Allergens');
+  await page.getByLabel('Allergen source type').selectOption('productLabel');
+  await page.getByLabel('Allergen source reference').fill('Package label');
+  await page.getByLabel('Allergen source date').fill('2026-01-01');
+  await page.getByLabel('Wheat', { exact: true }).check();
+  await page.getByLabel(/I confirm that ticked allergens are present/).check();
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Ingredient draft saved locally.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit ingredient Flour' }).click();
+  await openIngredientSection(page, 'Nutrition');
+  await expect(page.getByLabel('Nutrition source type')).toHaveValue('database');
+  await expect(page.getByLabel('Protein')).toHaveValue('12');
+  await openIngredientSection(page, 'Allergens');
+  await expect(page.getByLabel('Allergen source type')).toHaveValue('productLabel');
+  await expect(page.getByLabel(/I confirm that ticked allergens are present/)).toBeChecked();
+});
+
+test('adds and edits additional nutrients separately for each basis', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
+  await page.getByRole('button', { name: 'Add ingredient' }).click();
+  await page.getByLabel('Ingredient name *').fill('Flour');
+  await page.getByLabel('Ingredient type').selectOption('atomic');
+  await openIngredientSection(page, 'Nutrition');
+  await page.getByLabel('Nutrition source type').selectOption('database');
+  await page.getByLabel('Nutrition source reference').fill('Food database');
+  await page.getByLabel('Nutrition source date').fill('2026-01-01');
+  await page.getByLabel('Choose another known nutrient').selectOption('dietaryFibre');
+  await page.getByRole('button', { name: 'Add another known nutrient' }).click();
+  await page.getByLabel('Dietary fibre amount').fill('0');
+  await page.getByLabel('Nutrition values are per').selectOption('volume');
+  await page.getByLabel('Choose another known nutrient').selectOption('dietaryFibre');
+  await page.getByRole('button', { name: 'Add another known nutrient' }).click();
+  await page.getByLabel('Dietary fibre amount').fill('250');
+  await page.getByLabel('Dietary fibre unit').selectOption('mg');
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await page.getByRole('button', { name: 'Edit ingredient Flour' }).click();
+  await openIngredientSection(page, 'Nutrition');
+  await expect(page.getByLabel('Dietary fibre amount')).toHaveValue('0');
+  await page.getByLabel('Nutrition values are per').selectOption('volume');
+  await expect(page.getByLabel('Dietary fibre amount')).toHaveValue('250');
+  await expect(page.getByLabel('Dietary fibre unit')).toHaveValue('mg');
+  await page.getByRole('button', { name: 'Remove Dietary fibre from 100 mL' }).click();
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await page.getByRole('button', { name: 'Edit ingredient Flour' }).click();
+  await openIngredientSection(page, 'Nutrition');
+  await expect(page.getByLabel('Dietary fibre amount')).toHaveValue('0');
+  await page.getByLabel('Nutrition values are per').selectOption('volume');
+  await expect(page.getByLabel('Dietary fibre amount')).toHaveCount(0);
+});
+
 test('creates local ingredients, formulations and products with keyboard-accessible controls', async ({
   page,
 }) => {
@@ -196,7 +294,7 @@ test('creates local ingredients, formulations and products with keyboard-accessi
   await page.getByLabel('Caffeine amount unit').selectOption('mg/100g');
   await goToStep(page, 'Nutrition');
   await page.getByLabel('Protein').fill('13.2');
-  await page.getByText('Supplier values per 100 mL (if supplied)').click();
+  await page.getByLabel('Nutrition values are per').selectOption('volume');
   await page.getByLabel('Energy per 100 mL').fill('0');
   await page.getByLabel('Sodium per 100 mL').fill('5.1');
   await goToStep(page, 'Allergens');
@@ -237,9 +335,13 @@ test('creates local ingredients, formulations and products with keyboard-accessi
   await expect(page.getByLabel('Caffeine amount unit')).toHaveValue('mg/100g');
   await expect(page.getByLabel('Ingredient identity from the specification')).toHaveValue('unrecognised');
   await goToStep(page, 'Nutrition');
-  await page.getByText('Supplier values per 100 mL (if supplied)').click();
+  await expect(page.getByLabel('Protein')).toHaveValue('13.2');
+  await page.getByLabel('Nutrition values are per').selectOption('volume');
   await expect(page.getByLabel('Energy per 100 mL')).toHaveValue('0');
   await expect(page.getByLabel('Sodium per 100 mL')).toHaveValue('5.1');
+  await expect(page.getByText('This ingredient has values saved for both bases.', { exact: false })).toBeVisible();
+  await page.getByLabel('Nutrition values are per').selectOption('mass');
+  await expect(page.getByLabel('Protein')).toHaveValue('13.2');
   await goToStep(page, 'Spec sheet');
   await page.getByLabel('Specification date').fill('2026-11-10');
   await expect(page.getByText('The saved identity belongs to an earlier specification until reconfirmed.')).toBeVisible();

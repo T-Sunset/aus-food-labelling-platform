@@ -867,7 +867,7 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
               <span class="record-count">{{ records.ingredients }} saved</span>
             </div>
 
-            <div class="content-grid">
+            <div class="ingredient-content-grid">
               <IngredientBuilder
                 v-if="ingredientEditor !== undefined"
                 :key="ingredientEditor === 'new' ? 'new' : ingredientEditor.id"
@@ -940,7 +940,7 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                       <small v-else>Specification not supplied</small>
                       <small v-if="record.nutrientProfile">Nutrient values recorded</small>
                       <small v-else>Nutrient values not supplied</small>
-                      <small v-if="record.allergenEvidence">Supplier allergen evidence recorded</small>
+                      <small v-if="record.allergenEvidence">Allergen evidence recorded</small>
                       <small v-else>Allergen evidence not supplied</small>
                       <details v-if="record.additiveSources?.length">
                         <summary>
@@ -1900,6 +1900,12 @@ select:focus-visible {
 .content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.85fr);
+  gap: 17px;
+  align-items: start;
+}
+.ingredient-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 17px;
   align-items: start;
 }
