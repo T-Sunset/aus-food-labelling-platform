@@ -27,4 +27,17 @@ test('workspace screens have no WCAG 2.1 A/AA automated accessibility violations
       `${section}: ${results.violations.map((violation) => `${violation.id}: ${violation.help}`).join('; ')}`,
     ).toEqual([]);
   }
+
+  await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
+  await page.getByRole('button', { name: 'Add ingredient' }).click();
+  for (const title of ['Source details', 'Nutrition', 'Allergens', 'Additives and other ingredients', 'Review']) {
+    await page.locator('details.ingredient-section > summary').filter({ hasText: title }).click();
+  }
+  const ingredientResults = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  expect(
+    ingredientResults.violations,
+    `Ingredient editor: ${ingredientResults.violations.map((violation) => `${violation.id}: ${violation.help}`).join('; ')}`,
+  ).toEqual([]);
 });

@@ -1,8 +1,176 @@
 import { expect, test } from '@playwright/test';
+import { openIngredientSection } from './helpers';
 
 async function goToStep(page: import('@playwright/test').Page, title: string): Promise<void> {
-  await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: title }).click();
+  if (await page.locator('details.ingredient-section').count()) {
+    const section = title === 'Spec sheet' ? 'Source details' : title === 'Additives' ? 'Additives and other ingredients' : title === 'Review and save' ? 'Review' : title;
+    await openIngredientSection(page, section);
+    if (title === 'Spec sheet') {
+      const legacy = page.getByText('Earlier drink-specific information (optional)');
+      if (!(await legacy.locator('..').evaluate((element) => (element as HTMLDetailsElement).open))) await legacy.click();
+    }
+  } else {
+    await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: title }).click();
+  }
 }
+
+test('copies a previous workspace only after confirmation and preserves the original', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const harness = await import('/e2e/previous-workspace-harness.ts');
+    await harness.createPreviousWorkspace();
+  });
+  await page.reload();
+  await expect(page.getByText('A previous local workspace is available.')).toBeVisible();
+  page.once('dialog', (dialog) => void dialog.dismiss());
+  await page.getByRole('button', { name: 'Copy previous workspace' }).click();
+  await expect(page.getByText('A previous local workspace is available.')).toBeVisible();
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.getByRole('button', { name: 'Copy previous workspace' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Previous workspace copied' })).toBeVisible();
+  await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
+  await expect(page.getByText('Previous cocoa', { exact: true })).toBeVisible();
+  expect(await page.evaluate(async () => {
+    const harness = await import('/e2e/previous-workspace-harness.ts');
+    return harness.previousIngredientName();
+  })).toBe('Previous cocoa');
+});
+
+test('retains and flags conflicting statements about other added substances', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
+  await page.getByRole('button', { name: 'Add ingredient' }).click();
+  await page.getByLabel('Ingredient name *').fill('Supplier ingredient');
+  await page.getByLabel('Ingredient type').selectOption('atomic');
+  await goToStep(page, 'Spec sheet');
+  await page.getByLabel('Specification reference').fill('SUPPLIER-SPEC');
+  await page.getByLabel('Specification date').fill('2026-11-01');
+  await page.getByText('Other information stated by this supplier (optional)').click();
+  await page.getByLabel('Other added Schedule 28 substances in this supplied ingredient').selectOption('absent');
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await page.getByRole('button', { name: 'Edit ingredient Supplier ingredient' }).click();
+  await goToStep(page, 'Spec sheet');
+  await page.getByLabel('Specification date').fill('2026-11-02');
+  await page.getByText('Other information stated by this supplier (optional)').click();
+  const topic = page.getByLabel('Other added Schedule 28 substances in this supplied ingredient').locator('..').locator('..');
+  await expect(topic.getByText(/saved statement is from an earlier specification/)).toBeVisible();
+  await topic.getByRole('combobox').selectOption('present');
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await page.getByRole('button', { name: 'Edit ingredient Supplier ingredient' }).click();
+  await goToStep(page, 'Spec sheet');
+  await page.getByText('Other information stated by this supplier (optional)').click();
+  await expect(topic.getByText(/Supplier statements disagree/)).toBeVisible();
+  await expect(topic.getByText('Absent: SUPPLIER-SPEC, 2026-11-01')).toBeVisible();
+  await expect(topic.getByText('Present: SUPPLIER-SPEC, 2026-11-02')).toBeVisible();
+});
+
+test('retains both caffeine sources and allows a compound ingredient in a recipe', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
+  await page.getByRole('button', { name: 'Add ingredient' }).click();
+  await page.getByLabel('Ingredient name *').fill('Blend water');
+  await page.getByLabel('Ingredient type').selectOption('atomic');
+  await goToStep(page, 'Spec sheet');
+  await page.getByLabel('Specification reference').fill('WATER-1');
+  await page.getByLabel('Specification date').fill('2026-11-01');
+  await page.getByLabel('What does this specification say about caffeine?').selectOption('present');
+  await page.getByLabel('Caffeine amount in the supplied ingredient').fill('10');
+  await page.getByLabel('Caffeine amount unit').selectOption('mg/100mL');
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await page.getByRole('button', { name: 'Edit ingredient Blend water' }).click();
+  await goToStep(page, 'Spec sheet');
+  await page.getByLabel('What does this specification say about caffeine?').selectOption('conflicting');
+  await expect(page.getByLabel('Statement 1: source reference')).toHaveValue('WATER-1');
+  await page.getByLabel('Statement 2: caffeine').selectOption('absent');
+  await page.getByLabel('Statement 2: source reference').fill('WATER-2');
+  await page.getByLabel('Statement 2: source date').fill('2026-11-02');
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await page.getByRole('button', { name: 'Edit ingredient Blend water' }).click();
+  await goToStep(page, 'Spec sheet');
+  await expect(page.getByLabel('Statement 1: amount')).toHaveValue('10');
+  await expect(page.getByLabel('Statement 2: source reference')).toHaveValue('WATER-2');
+  await expect(page.getByLabel('Statement 1: amount')).toBeDisabled();
+  await page.getByLabel('Decision about the caffeine information').selectOption('statement2');
+  await page.getByLabel('Why was this decision made?').fill('Supplier confirmed the second statement.');
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await page.getByRole('button', { name: 'Edit ingredient Blend water' }).click();
+  await goToStep(page, 'Spec sheet');
+  await expect(page.getByText('Use statement 2: Supplier confirmed the second statement.', { exact: false })).toBeVisible();
+  await expect(page.getByText(/selected statement is not yet used in product calculations/)).toBeVisible();
+  await page.getByText('Other information stated by this supplier (optional)').click();
+  await page.getByLabel('Fruit juice in this supplied ingredient').selectOption('absent');
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await page.getByRole('button', { name: 'Edit ingredient Blend water' }).click();
+  await goToStep(page, 'Spec sheet');
+  await page.getByLabel('Specification date').fill('2026-11-02');
+  await page.getByText('Other information stated by this supplier (optional)').click();
+  await expect(page.getByText(/saved statement is from an earlier specification/)).toBeVisible();
+  await page.getByLabel('Fruit juice in this supplied ingredient').selectOption('present');
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await page.getByRole('button', { name: 'Edit ingredient Blend water' }).click();
+  await goToStep(page, 'Spec sheet');
+  await page.getByText('Other information stated by this supplier (optional)').click();
+  await expect(page.getByText(/Supplier statements disagree/)).toBeVisible();
+  await expect(page.getByText('Absent: WATER-1, 2026-11-01')).toBeVisible();
+  await expect(page.getByText('Present: WATER-1, 2026-11-02')).toBeVisible();
+  await page.getByRole('button', { name: 'Back to ingredient list' }).click();
+
+  await page.getByRole('button', { name: 'Formulations', exact: true }).click();
+  await page.getByRole('button', { name: 'Add formulation' }).click();
+  await page.getByLabel('Formulation name *').fill('Blend composition');
+  await page.getByLabel('What is this formulation?').selectOption('partial');
+  await page.getByLabel('Composition evidence reference').fill('FLAVOUR-SPEC');
+  await page.getByLabel('Composition evidence date').fill('2026-11-01');
+  await goToStep(page, 'Ingredients');
+  await page.getByRole('button', { name: 'Add line' }).click();
+  await page.getByLabel('Line 1 record').selectOption({ label: 'Blend water' });
+  await page.getByRole('button', { name: 'Save formulation draft' }).click();
+  await expect(page.getByText('Supplier composition: partial — proportions not calculated')).toBeVisible();
+  await page.getByRole('button', { name: 'Expand' }).click();
+  await expect(page.getByText(/partial; its proportions cannot be calculated/)).toBeVisible();
+  await page.getByRole('button', { name: 'Edit formulation Blend composition' }).click();
+  await goToStep(page, 'Ingredients');
+  await expect(page.getByLabel('Line 1 quantity')).toHaveValue('');
+  await page.getByLabel('Line 1 quantity').fill('100');
+  await goToStep(page, 'Name');
+  await page.getByLabel('What is this formulation?').selectOption('complete');
+  await page.getByRole('button', { name: 'Save formulation draft' }).click();
+  await expect(page.getByText('Supplier composition: complete')).toBeVisible();
+  await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
+  await page.getByRole('button', { name: 'Add ingredient' }).click();
+  await page.getByLabel('Ingredient name *').fill('Flavour blend');
+  await page.getByLabel('Ingredient type').selectOption('compound');
+  await page.getByLabel('Composition formulation *').selectOption({ label: 'Blend composition' });
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await page.getByRole('button', { name: 'Formulations', exact: true }).click();
+  await page.getByRole('button', { name: 'Add formulation' }).click();
+  await page.getByLabel('Formulation name *').fill('Drink');
+  await goToStep(page, 'Ingredients');
+  await page.getByRole('button', { name: 'Add line' }).click();
+  await page.getByLabel('Line 1 record').selectOption({ label: 'Flavour blend' });
+  await page.getByLabel('Line 1 quantity').fill('5');
+  await page.getByRole('button', { name: 'Save formulation draft' }).click();
+  await expect(page.getByText('Drink', { exact: true })).toBeVisible();
+});
+
+test('saves and edits a basic ingredient without a specification or drink questions', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
+  await page.getByRole('button', { name: 'Add ingredient' }).click();
+  await expect(page.getByLabel('Ingredient identity from the specification')).not.toBeVisible();
+  await expect(page.getByLabel('What does this specification say about caffeine?')).not.toBeVisible();
+  await page.getByLabel('Ingredient name *').fill('Flour');
+  await page.getByLabel('Ingredient type').selectOption('atomic');
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await expect(page.getByText('Flour', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit ingredient Flour' }).click();
+  await expect(page.getByLabel('Ingredient name *')).toHaveValue('Flour');
+  await expect(page.getByLabel('What does this specification say about caffeine?')).not.toBeVisible();
+  await page.getByLabel('Ingredient name *').fill('Plain flour');
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
+  await expect(page.getByText('Plain flour', { exact: true })).toBeVisible();
+  await expect(page.getByText('Specification not supplied')).toBeVisible();
+});
 
 test('creates local ingredients, formulations and products with keyboard-accessible controls', async ({
   page,
@@ -22,8 +190,15 @@ test('creates local ingredients, formulations and products with keyboard-accessi
   await goToStep(page, 'Spec sheet');
   await page.getByLabel('Specification reference').fill('SPEC-100');
   await page.getByLabel('Specification date').fill('2026-11-09');
+  await page.getByLabel('Ingredient identity from the specification').selectOption('unrecognised');
+  await page.getByLabel('What does this specification say about caffeine?').selectOption('present');
+  await page.getByLabel('Caffeine amount in the supplied ingredient').fill('5');
+  await page.getByLabel('Caffeine amount unit').selectOption('mg/100g');
   await goToStep(page, 'Nutrition');
   await page.getByLabel('Protein').fill('13.2');
+  await page.getByText('Supplier values per 100 mL (if supplied)').click();
+  await page.getByLabel('Energy per 100 mL').fill('0');
+  await page.getByLabel('Sodium per 100 mL').fill('5.1');
   await goToStep(page, 'Allergens');
   await page.getByLabel('Wheat').check();
   await goToStep(page, 'Additives');
@@ -55,6 +230,22 @@ test('creates local ingredients, formulations and products with keyboard-accessi
   ).toBeVisible();
   await expect(page.getByText('Rolled oats', { exact: true })).toBeVisible();
   await expect(page.getByText('Spec SPEC-100 · 2026-11-09')).toBeVisible();
+  await page.getByRole('button', { name: 'Edit ingredient Rolled oats' }).click();
+  await goToStep(page, 'Spec sheet');
+  await expect(page.getByLabel('What does this specification say about caffeine?')).toHaveValue('present');
+  await expect(page.getByLabel('Caffeine amount in the supplied ingredient')).toHaveValue('5');
+  await expect(page.getByLabel('Caffeine amount unit')).toHaveValue('mg/100g');
+  await expect(page.getByLabel('Ingredient identity from the specification')).toHaveValue('unrecognised');
+  await goToStep(page, 'Nutrition');
+  await page.getByText('Supplier values per 100 mL (if supplied)').click();
+  await expect(page.getByLabel('Energy per 100 mL')).toHaveValue('0');
+  await expect(page.getByLabel('Sodium per 100 mL')).toHaveValue('5.1');
+  await goToStep(page, 'Spec sheet');
+  await page.getByLabel('Specification date').fill('2026-11-10');
+  await expect(page.getByText('The saved identity belongs to an earlier specification until reconfirmed.')).toBeVisible();
+  await page.getByLabel('I checked this caffeine information against the current specification.').check();
+  await page.getByLabel('I checked this identity against the current specification.').check();
+  await page.getByRole('button', { name: 'Save ingredient draft' }).click();
   await page.getByText(/2 additive source records/).click();
   await expect(page.getByText('Example preservative · Carried over')).toBeVisible();
   await expect(page.getByText(
@@ -119,7 +310,7 @@ test('creates local ingredients, formulations and products with keyboard-accessi
   await expect(page.getByRole('heading', { name: 'Review & trace' })).toBeVisible();
   await expect(page.getByText('No active regulatory release is installed')).toBeVisible();
   await expect(page.getByText('REVIEW REQUIRED', { exact: true })).toBeVisible();
-  await expect(page.getByText('SPEC-100 · 2026-11-09', { exact: true })).toBeVisible();
+  await expect(page.getByText('SPEC-100 · 2026-11-10', { exact: true })).toBeVisible();
   await expect(page.getByText(/wheat: present/)).toBeVisible();
 
   await page.getByRole('button', { name: 'Backup & restore' }).click();

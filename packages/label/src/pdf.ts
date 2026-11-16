@@ -246,12 +246,12 @@ async function stableFileId(layoutSvg: string, metadata: LabelPdfMetadata): Prom
 function writeReportPage(
   pdf: JsPDF,
   metadata: LabelPdfMetadata,
-  report: LabelPdfReport,
+  report?: LabelPdfReport,
 ): void {
-  pdf.addPage([reportWidthMm, reportHeightMm], 'portrait');
+  if (report !== undefined) pdf.addPage([reportWidthMm, reportHeightMm], 'portrait');
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(16);
-  pdf.text('Label export report', 15, 20);
+  pdf.text(report === undefined ? 'Review report' : 'Label export report', 15, 20);
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(10);
 
@@ -259,13 +259,17 @@ function writeReportPage(
     `Product version: ${metadata.productVersion}`,
     `Rule release: ${metadata.ruleRelease}`,
     `Exported at: ${metadata.exportedAt}`,
-    `Label dimensions: ${report.labelWidthMm} x ${report.labelHeightMm} mm`,
-    `Layout status: ${report.layoutStatus.replaceAll('_', ' ').toUpperCase()}`,
-    `Font embedding: ${report.fontEmbeddingStatus.replaceAll('_', ' ').toUpperCase()}`,
-    '',
-    ...report.issues.map((issue) => `${issue.code}: ${issue.message}`),
-    '',
-    report.nonCertificationStatement,
+    ...(report === undefined
+      ? ['No label layout is included in this report.', '', 'This report assists review and does not certify legal compliance.']
+      : [
+          `Label dimensions: ${report.labelWidthMm} x ${report.labelHeightMm} mm`,
+          `Layout status: ${report.layoutStatus.replaceAll('_', ' ').toUpperCase()}`,
+          `Font embedding: ${report.fontEmbeddingStatus.replaceAll('_', ' ').toUpperCase()}`,
+          '',
+          ...report.issues.map((issue) => `${issue.code}: ${issue.message}`),
+          '',
+          report.nonCertificationStatement,
+        ]),
     ...(metadata.consultantNotes?.length ? [
       '',
       'Notes for your consultant',
@@ -286,6 +290,29 @@ function writeReportPage(
       cursorY += 6;
     }
   }
+}
+
+export async function createConsultantReportPdf(metadata: LabelPdfMetadata): Promise<Uint8Array> {
+  assertMetadata(metadata);
+  const { jsPDF } = await preloadLabelPdfRenderer();
+  const pdf = new jsPDF({
+    unit: 'mm',
+    format: [reportWidthMm, reportHeightMm],
+    orientation: 'portrait',
+    compress: false,
+    precision: 16,
+    putOnlyUsedFonts: true,
+    floatPrecision: 16,
+  });
+  pdf.setProperties({
+    title: 'Food label review report',
+    subject: `Product version ${metadata.productVersion}; rule release ${metadata.ruleRelease}`,
+    creator: '@aus-food/label',
+  });
+  pdf.setCreationDate(pdfDate(metadata.exportedAt));
+  pdf.setFileId(await stableFileId('consultant-report', metadata));
+  writeReportPage(pdf, metadata);
+  return new Uint8Array(pdf.output('arraybuffer'));
 }
 
 export async function createLabelPdf(

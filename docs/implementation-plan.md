@@ -1,20 +1,216 @@
 # Implementation plan - Australian Food Labelling Platform
 
-**Status:** APPROVED 2026-11-05. Living document: update section 12 (progress) and section 15 (change log) as work proceeds.
+**Status:** Living plan; the 2026-11-16 priority reset and I1-I9
+ingredient/formulation track are approved. I1's direction is agreed in
+principle; I2 ingredient-data research and approach are approved and I3 is complete.
+Earlier plans and their progress are retained as history.
 **Audience:** engineers and AI agents implementing the product.
 **Related documents:** `AGENTS.md` (always-on agent rules), `docs/requirements.md` (the contract), `docs/reviewer-questions.md` (questions for the human regulatory reviewer).
 
-**2026-11-11 planning update:** The Victorian caffeinated-drink demo sequence
-in section 7 is the proposed next workstream. Its sequence takes precedence
-over older next-step ordering once approved; it does not itself change locked
-decisions, authorize code changes or mark previous release gates complete.
-Earlier phase descriptions and change-log entries record the policy and
-status at the time; see the demo sequence for the proposed direction.
+**2026-11-16 product reset:** The product owner approved general-purpose
+ingredient and formulation foundations as the next priority, using an everyday
+baked good and the existing caffeinated drink as contrasting examples. The
+drink-specific D0-D11 sequence in section 7 is paused, not a current work
+order. The owner approved the I1-I9 ingredient/formulation track; the I1
+screen details remain subject to design and implementation. Past trackers and decisions are historical except where
+explicitly retained; the current export and result safeguards still apply.
+
+## Current direction and proposed next turns
+
+The goal is a guided Australian food-labelling workflow: ingredients and
+supplier evidence feed formulations; a formulation and product-specific facts
+feed a product; supported rules and calculations generate pack copy and a
+label preview/export. The user sees actionable missing or unsupported items.
+The eventual product should expand to many food types, but no first release
+can claim universal rule coverage. Prioritise common use cases, identify
+unsupported cases explicitly and extend coverage deliberately.
+
+Fictional reference cases will exercise the same workflow: several simple
+cakes and cookies, plus the existing
+[drink scenario](./drink-demo-scenario.md). Both are tests, not templates
+for all users. Ask only for information that matters to the ingredient or
+product and cannot reliably be derived. A known ingredient or documented
+component can establish presence where supported; a missing entry or
+incomplete composition cannot establish absence (DATA-003, FORM-005).
+Specific additive and substance checks require the right identity, context,
+amount and source; names or numbers alone do not prove legal permission.
+
+### Approved ingredient and formulation track
+
+The owner approved this sequence on 2026-11-16. Each step is intended for one
+turn but may need splitting. I1's general direction is agreed; detailed
+interactions remain open. The approved goal is a flexible foundation
+for most simple cakes and cookies, not a claim that every baked good is
+supported. The drink remains a contrasting test case.
+
+| Turn | Status | Scope and exit check |
+| --- | --- | --- |
+| I1 | Direction agreed | Single-page ingredient entry with expandable sections, inline compound-component entry and a recipe screen with ingredients and amounts together. Detailed interactions and preservation checks continue in later steps. |
+| I2 | Approved | Research and agree general ingredient data, nutrition, allergen and additive identity/evidence; distinguish common, optional and conditional information. Bounded source review and the agreed approach are recorded below. |
+| I3 | Complete | Basic ingredient creation/editing uses a single expandable page and general names, without mandatory drink-specific questions. Existing specialised evidence remains accessible under source details; storage and backup formats are unchanged. Tested basic drafts and existing specialised evidence, including backup/restore (ING-001, DATA-003, DATA-005). |
+| I4 | Pending | Improve nutrient and allergen entry, units, bases and evidence; retain unknown rather than invent values or conversions. |
+| I5 | Pending | Support an additive as an ingredient and record additive information within another ingredient without duplicate entry; additive permission coverage expands separately. |
+| I6 | Pending | Guide entry of complete and partial compound ingredients and supplier composition without requiring users to understand internal links. |
+| I7 | Pending | Rebuild recipe/formulation entry, quantities, nested recipes and relevant process/yield details; preserve cycle protection. |
+| I8 | Pending | Carry supported nutrient, allergen and additive evidence through formulations, with source paths, missing/conflicting data and no double counting. |
+| I9 | Pending | Exercise multiple fictional cakes, cookies and the drink, including incomplete evidence and a direct additive; test accessibility, edits, backup/restore and regressions. |
+
+I1 discussion: the owner chose a single ingredient page with expandable
+sections over a step-by-step wizard. Proposed sections are basics, contents,
+nutrition and allergens, with additive identity and supplier details shown
+where relevant. A recipe builder should show ingredients and amounts together
+and allow an ingredient to be added without losing the recipe in progress.
+Ingredient data is not limited to supplier specifications: users can enter
+known values manually from a supplier, a product label, a food-composition
+database or another source. Capture the source and basis where relevant; do
+not imply automatic database integration or that a user-supplied value has
+been independently verified. Recipe amounts and ingredient nutrient bases are
+distinct inputs. Enter known compound components within the ingredient
+workflow; complete component-list coverage does not imply known proportions.
+The owner agreed this general direction; detailed interactions remain open.
+This is not approval to discard evidence or assume a specific migration.
+
+I3 is a layout and basic-entry step, not the finished ingredient workflow.
+The existing nutrition and allergen inputs still require a dated supplier
+specification and record supplier evidence. General source entry and the
+additional-nutrient control remain I4 work. Direct additives and inline
+compound composition remain I5 and I6 work; compound records currently
+still require a separately saved formulation.
+
+I4 owner feedback: use one coherent nutrition-entry area for known values,
+regardless of their source, rather than separating "nutrient" and "supplier"
+values. Make the basis clear; preserve existing per-100 g and per-100 mL
+values and do not silently convert, discard or imply calculations use a
+basis they do not yet support (ING-002, DATA-003, DATA-006). Simplify the
+allergen confirmation wording so it clearly confirms ticked allergens are
+present and unticked allergens are absent; retain the ability to leave
+unknowns unconfirmed (ING-003, DATA-003). Make better use of desktop width.
+The owner considers the earlier drink-specific and other supplier-information
+questions too specific for their present location and form; reconsider their
+placement and presentation rather than treating them as permanent. Preserve
+existing evidence and access to it while deciding how to replace those
+controls (DATA-005).
+
+### I2 - Ingredient information: research and agreed approach
+
+Source review checked on 2026-11-16 by the Australian Food Requirements
+Analyst; it is bounded to ingredient, nutrition, allergen and additive
+foundations. It does not assess any actual product or establish public-release
+approval. The following entries are **agreed product inputs**, not a claim
+that legislation requires every ingredient record to contain every field.
+Users can save incomplete drafts; identify an information gap when a supported
+calculation or applicable label requirement actually needs it.
+
+| Information | Proposed entry and scope | Why it matters |
+| --- | --- | --- |
+| Name and identity | Common/working name first; declaration name or confirmed structured identity when applicable. Search suggestions are optional, not a closed list. Keep uncertain matches unresolved. | Identify recipe ingredients and support declarations without silently equating a name with legal identity (ING-001, DATA-002). |
+| Source | Record where a fact came from when known: supplier, product label, manually entered database value, analysis or the user's own recipe/knowledge. Support reference, date and basis as relevant; no supplier document is universally required to save a draft. | Information can be traced and assessed for suitability; source and confidence are not automatically verified (DATA-001, DATA-005). |
+| Nutrition | Offer energy, protein, total fat, saturated fat, carbohydrate, sugars and sodium as common entries, on an explicitly stated per-100 g or per-100 mL basis. Values can be absent, zero or unknown distinctly. | These are the usual finished-food panel values where applicable, not a universal legal requirement to input every ingredient value. Other methods or valid finished-food information may be used where supported (ING-002, CALC-010). |
+| Further nutrition | After the common entries, offer an "Add other known nutrient" control so users can select and enter additional supported nutrients or biologically active substances without displaying a long list by default. Preserve value, unit, basis and source; expand the catalogue as supported. Do not assume the initial list is exhaustive or automatically put optional entries on a label. | Applicable claims and provisions can require additional declared information; simply entering data is not a permission or substantiation for a claim. |
+| Allergens | Record known presence, explicit sufficiently scoped absence, unknown and conflicting evidence; preserve source and relevant components. Cross-contact information remains distinct. | Required declarations can arise from ingredients, components, additives and processing aids, subject to the applicable rules and exemptions (ING-003, DATA-003). |
+| Components | Enter known component names, amounts or order where known, and separately record whether the list and the quantities are complete. Permit an unknown amount. | Ingredient-list order alone is not a quantitative recipe; a complete list is not proof of complete proportions. Partial composition must not be scaled as complete (FR-003, FORM-005). |
+| Additives and other roles | Support a substance used directly as an ingredient and a substance recorded inside another ingredient, with name/number when known, purpose and amount/basis if available. Preserve source, path and evidence without duplicating a single contribution. | Declaration, permission, and quantitative checks are separate. A number alone does not establish permission; role and use context matter (ING-004, DATA-001). |
+| Physical state and other attributes | Record state and density where supported and needed; keep origin, GM, irradiation and other attributes conditional on relevance and supported scope. | Processing and conversions can change the finished-food result; do not assume density or represent unsupported checks as cleared (DATA-006). |
+
+**Nutrition example:** Enter flour's sourced values per 100 g once; add 200 g
+of that flour in a recipe. A supported calculation can use those values and
+the recipe amount for the flour's contribution, without asking again. The
+finished-food values also depend on processing and yield, so the flour
+contribution alone is not a completed NIP. A database-derived or
+supplier-provided value is not a laboratory measurement of the finished food.
+
+**Verified source anchors** (recheck the relevant effective compilation and
+transitions before implementing rules):
+
+- [Standard 1.2.8](https://www.legislation.gov.au/F2015L00395/latest), sections
+  1.2.8-4 and -6, and
+  [Schedule 12](https://www.legislation.gov.au/F2015L00482/latest): panel
+  content, bases and additional claim-linked information, subject to
+  applicability and exceptions.
+- [Standard 1.1.1](https://www.legislation.gov.au/F2015L00383/latest),
+  section 1.1.1-2(2)-(3), and
+  [Schedule 11](https://www.legislation.gov.au/F2015L00481/latest): averaging
+  methods and relevant calculations. Source values need to be representative;
+  no single supplier or laboratory method is mandated for every ingredient.
+- [Standard 1.2.4](https://www.legislation.gov.au/F2015L00392/latest),
+  sections 1.2.4-3 to -5 and -7, and
+  [Schedules 7](https://www.legislation.gov.au/F2015L00477/latest) and
+  [8](https://www.legislation.gov.au/F2015L00478/latest): ingredient and
+  compound declarations and additive naming; exceptions and context matter.
+- [Standard 1.2.3](https://www.legislation.gov.au/F2015L00397/latest) and
+  [Schedule 9](https://www.legislation.gov.au/F2015L00479/latest): allergen
+  declarations and exemptions, including relevant component and processing
+  aid sources.
+- [Standard 1.3.1](https://www.legislation.gov.au/F2015L00396/latest),
+  [Schedule 15](https://www.legislation.gov.au/F2015L00439/latest) and
+  [Standard 1.3.3](https://www.legislation.gov.au/F2015L00402/latest):
+  additive permissions and processing-aid distinctions. These do not make
+  additive identification equivalent to permission.
+
+**Not verified by this review:** a complete nutrient or additive catalogue,
+the exact permission and limits for particular baked-good ingredients, all
+product-classification and packaging exemptions, or caffeine-specific
+applicability. Later implementation must map the relevant sources and
+exceptions; a dated source check does not guarantee future currency.
+
+Keep the current result and export safeguards. Existing evidence and approved
+snapshots must not be silently discarded or rewritten. Each step includes
+appropriate tests and may require an explicit compatibility decision; no new
+workspace copy is assumed necessary. Relevant requirements include FR-002 to
+FR-005, DATA-003 and DATA-006, FORM-004 and VER-002.
+
+### Earlier broader sequence
+
+The I1-I9 track above replaces the ingredient/formulation portion of the
+following proposed sequence. Later product, pack and label steps remain
+provisional and should be revisited after I9.
+
+**Earlier proposed sequence:** each row is intended to fit one turn; split if research,
+implementation or verification makes it too large. User approval of the
+sequence or an individual step is required before executing it. No step
+assumes a new regulatory conclusion without primary-source verification.
+
+| Turn | Scope | Exit check |
+| --- | --- | --- |
+| G0 | Agree the sequence and the first baked-good example; identify decisions that can wait until their relevant steps. | Owner agrees the examples and next step; existing data and release safeguards remain in place. |
+| G1 | Define fictional baked-good inputs, expected outputs and uncertainty/negative cases; retain the drink as a contrasting case. | Independent fixture expectations, sources to verify and explicit missing facts are documented without claiming the app supports them. |
+| G2 | Inventory existing ingredient, formulation, rule, UI and storage capabilities against both examples; identify reusable work and misleading demo-specific screens. | A concise keep/change/defer map identifies migration and backup risks; no user data is removed. |
+| G3 | Bounded primary-source research for general nutrient, additive, allergen and ingredient data needed by the first cases. Distinguish nutrition fields, permitted declarations and additive identity from permission rules. | Australian Food Requirements Analyst records sources, effective dates, supported scope and unresolved questions; no claim that one exhaustive nutrient list or number alone grants permission. |
+| G4 | Design the general ingredient and supplier-evidence model and plain-English journey: single and compound ingredients, names/identity, composition, nutrient basis, allergens, additives and optional relevant substances. | Examples cover present, documented absent, unknown, conflict, partial composition and multiple sources without product-specific universal questions; compatibility and preservation plan agreed. |
+| G5 | Implement and test the agreed general ingredient entry and evidence storage in a bounded slice, reusing existing data where safe. | Common ingredients can be entered without a fixed example-only identity list; source, units, unknown and existing data survive editing and backup/restore. Do not silently drop old evidence. |
+| G6 | Implement compound-ingredient entry and nested formulation flow with clear guidance and evidence coverage. | The two examples' supported structures and partial/unknown variants work without double-counting or cycles; edit/import/restore protections remain. |
+| G7 | Connect formulation-derived identities, amounts, nutrition, allergens and additive/substance evidence where reliably supported. | Tests cover direct and nested paths, duplicate sources, missing amounts, conflicts and stale data; no unsupported absence or guessed conversion. |
+| G8 | Design and implement guided product and pack entry, using derived facts first and asking only for genuinely independent or missing information. | Both examples show relevant questions and actionable gaps; no re-entry of an established recipe fact and no unsupported applicability conclusion. |
+| G9 | Implement source-mapped common label content and pack copy, including nutrition, ingredient/allergen content and applicable general pack information in bounded increments. | Each supported output has traceable inputs, explicit unsupported sections and tests for both examples and incomplete inputs. Specialist rules expand separately. |
+| G10 | Decide incomplete-draft export behaviour with the owner, then build consistent preview, pack copy and PDF around the agreed policy. | Preview/export agreement, visible gaps, layout/overflow and exact-size tests; no silent mandatory omissions or certification claim. Until changed, ADR-009 export policy remains in force. |
+| G11 | Run both complete guided journeys and negative cases; improve plain-English actions, accessibility and documentation for a portfolio demo. | Reproducible fictional examples, documented current limitations, backup/restore and regression tests; results do not imply public-release approval. |
+| G12 | Expand general regulatory and food coverage in source-verified increments, including additive permissions and prescribed names, infant foods, claims and other applicable domains. | Each increment states its supported categories, exceptions, sources, tests and unresolved cases; unsupported is not treated as clear. |
+
+This sequence is a proposal, not a declaration that all common foods will be
+covered by G11. Claims remain a public-MVP commitment under D1. Revisit precise
+release scope with the owner rather than assuming specialist work is cancelled.
+
+### Documentation navigation
+
+- [Requirements](./requirements.md): product and traceability contract; the
+  2026-11-16 scope note governs older conflicting release lists.
+- [Reviewer questions](./reviewer-questions.md): existing answers and open
+  questions; verify factual legal questions in primary sources first.
+- [Regulatory research](./mvp-regulatory-research.md) and
+  [NIP research](./nip-display-research.md): source evidence and limitations.
+- [Drink scenario](./drink-demo-scenario.md) and
+  [data flow](./drink-demo-data-flow.md): retained example and historical design,
+  not the general ingredient UX specification.
+- [Decision records](./adr/): accepted decisions, including safeguards still
+  in effect; [historical usability design](./history/usability-design.md) and
+  [worked examples](./history/worked-examples-scenarios.md) record earlier work.
+- Phase 2 and claims gate records remain for reviewer traceability, not as a
+  statement that those catalogs are approved.
 
 ## 1. How to use this document
 
 1. Read `AGENTS.md`, then this plan, then the sections of `docs/requirements.md` referenced by your task.
-2. Work on the current phase only (section 12 shows it). Later-phase research and review-only groundwork may proceed only where this plan explicitly permits it; do not activate gated regulatory results early.
+2. Follow the approved current step in the current-direction section; section 12 records earlier progress. Activate only explicitly permitted, eligible local-demo checks under ADR-009; other reviewer and release gates remain in force.
 3. Anything not verified against a primary source is tagged `TO BE VERIFIED` or `TO BE RESEARCHED`. Never remove a tag without recording the source and date.
 4. Record each technology or design decision as an ADR in `docs/adr/` (created in P0-2).
 5. Tick the progress tracker when a step meets its exit criteria. Ask the user before any destructive action (deleting the archive, force pushes, rewriting history).
@@ -29,15 +225,14 @@ Target: a presentable, offline-capable MVP vertical slice that can later grow in
 
 | ID  | Decision                                                                                                                                                                                                                                                                                                             | Date       |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| D1  | The public MVP includes core labelling, additive limits and prescribed-name support focused on the same two initial product cohorts: formulated caffeinated beverages and foods for infants. Exact legal classifications and supported rules require reviewer verification; unsupported or unmapped cases remain review-only. Claims follow the core and additive/name groundwork and are required before public MVP launch. HSR, GM, irradiation, origin and other deferred domains remain later scope. | 2026-11-09 |
+| D1  | Prioritise general-purpose ingredient, formulation and core labelling foundations for common Australian foods, tested with a baked good and a caffeinated drink. The long-term aim is broad food coverage, expanded in verified increments; no universal first-release coverage is implied. Additive permissions and prescribed names, including infant-food and drink-specific cases, remain planned; claims remain required before public MVP launch. Exact release coverage and ordering beyond the foundation are to be agreed. Reviewer verification remains a public-release gate; selected local-demo checks follow ADR-009 and unsupported cases remain unresolved. | 2026-11-16 |
 | D2  | Same repository. Legacy `frontend/` is moved to `archive/legacy-frontend/` (history preserved) in P0-1 and deleted later with user approval. New code lives in `apps/` and `packages/`.                                                                                                                              | 2026-11-05 |
 | D3  | MVP is local-only: no backend and no login. Authentication and entitlements are added in Phase 4; seams are built in Phase 1 (section 9).                                                                                                                                                                            | 2026-11-05 |
 | D4  | UI uses Tailwind CSS v4 with shadcn-vue (accessible primitives, components owned in-repo). No Bootstrap.                                                                                                                                                                                                             | 2026-11-05 |
 | D5  | A human food-regulatory reviewer is engaged at defined touchpoints (section 10).                                                                                                                                                                                                                                     | 2026-11-05 |
 | D6  | Monetisation details (plans, trial length, pricing) are deferred and are not an MVP concern.                                                                                                                                                                                                                         | 2026-11-05 |
-| D8  | An off-by-default, per-session illustrative preview may show what a draft rule would conclude if its reviewer gates were approved. It never lifts missing facts, never changes the official result and is never saved or printed. See ADR-006. | 2026-11-10 |
-| D7  | Initial nutrient inputs are supplier-provided values with evidence; defer an external food-composition database until its release, licence, evidence labelling and update policy are decided.                                                                                                                        | 2026-11-09 |
-
+| D8  | Selected, eligible local-demo checks show source-verified provisional outcomes normally under ADR-009; they are distinct from reviewer-approved results. The ADR-006 opt-in illustrative policy remains for other existing checks until deliberately changed. Neither policy fills missing facts or confers approval. | 2026-11-11 |
+| D7  | Users may manually enter nutrient values from an appropriate source, including a supplier, product label, laboratory result or food-composition database, recording source and basis. Defer automatic external database integration until release, licence, provenance and update policy are decided. | 2026-11-16 |
 ## 4. Non-negotiable constraints
 
 These come from `docs/requirements.md` and apply to every phase.
@@ -255,9 +450,9 @@ After C8: worked example products (turns W1-W7 below), a sports supplements slic
 | W4 | [x] Caffeinated beverage, good and problem variants. | Seen in additives, names, claims, label and PDF, toggle off and on. |
 | W5 | [x] Food for infants, good and problem variants. | Includes the PROHIBITED_CONTEXT path. |
 | W6 | [x] In-app worked-examples guide and an end-to-end test of statuses, preview behaviour and accessibility. | Full suite green. |
-| W7 | [x] Review checkpoint with the user; UI and usability discussion before any layout change. | User feedback recorded. Feedback: guide non-expert users step by step, show only relevant fields, explain better, replace blanket REVIEW REQUIRED with a clearer checklist, and produce real label content (ingredient declaration, allergens, mock NIP). Direction: new usability track U1-U8 in docs/usability-design.md; sports supplements postponed until it is done. |
+| W7 | [x] Review checkpoint with the user; UI and usability discussion before any layout change. | User feedback recorded. Feedback: guide non-expert users step by step, show only relevant fields, explain better, replace blanket REVIEW REQUIRED with a clearer checklist, and produce real label content (ingredient declaration, allergens, mock NIP). Direction: new usability track U1-U8 in docs/history/usability-design.md; sports supplements postponed until it is done. |
 
-**Usability track (design approved 2026-11-10; see docs/usability-design.md).** Each turn needs user approval.
+**Usability track (design approved 2026-11-10; see docs/history/usability-design.md).** Each turn needs user approval.
 
 | Turn | Status | Scope |
 |---|---|---|
@@ -271,7 +466,7 @@ After C8: worked example products (turns W1-W7 below), a sports supplements slic
 | U8 | [x] | Mock base NIP in the Labels page and draft PDF, using the NPC rounding conventions in docs/nip-display-research.md section 12 (3 significant figures, half to even; round-down remark still unverified). Unsupported food states and claim-driven rows remain explicit export blockers, not completed regulatory coverage. |
 | U9 | [x] | Three-way checklist wording, separate paginated consultant notes in the PDF, accessibility and plain-language pass. Official and illustrative results remain distinct; no regulatory acceptance implied. |
 
-### Proposed next workstream - Victorian drink end-to-end demo
+### Paused workstream - Victorian drink end-to-end demo (historical)
 
 **Purpose.** Enable a small business unfamiliar with the Code to create a
 representative, locally generated label and PDF from a realistic recipe and
@@ -313,21 +508,19 @@ regressions but do not replace this new scenario.
   has already been researched. Other state/territory markets are out of this
   demo, not removed from the longer-term product scope.
 
-**Policy decision before implementation.** The product owner has selected
-normally visible, clearly provisional source-verified results for the local
-demo instead of requiring an illustrative opt-in. This conflicts with D1/D8,
-ADR-006 and earlier gate descriptions. D0 proposes the precise replacement
-policy and an ADR; obtain explicit approval before changing those locked
-decisions or implementing different behaviour. Until then, existing D1/D8,
-official results and export restrictions remain in force. Any approved change
-must distinguish provisional from reviewer-validated results, use versioned
-source/provision/effective-date metadata and complete applicable inputs,
-retain TRACE-015's restriction on deterministic FAIL below Provision mapping
-confidence, and never bypass missing facts, ambiguity, unsupported cases or
-release and approval controls. Do not mark draft rules as reviewer-approved.
-Specify separately what may appear in the screen, draft label, PDF and
-explanation report; never let provisional results imply certification.
-Reviewer touchpoints, immutable versions and public-release gates remain.
+**Accepted local-demo policy.** ADR-009 and updated D1/D8 permit normally
+visible, useful source-verified provisional results for selected eligible
+checks; other existing checks retain ADR-006 safeguards. Provisional and
+reviewer-validated outcomes remain distinct, with versioned source and input
+traces. Missing, ambiguous and unsupported cases are not bypassed, and
+TRACE-015 remains in force. Block label-PDF export for unresolved required
+content; explicit lot/date production placeholders are allowed only when the
+required type is known. The separate explanation report remains exportable.
+The incomplete-export safeguard and independent review-report export are
+implemented. A narrowly scoped caffeine evaluator and an unresolved result
+are present, but the ingredient-to-concentration and classification evidence
+needed for real provisional results is not yet connected. Reviewer
+touchpoints, immutable versions and public-release gates remain.
 
 **Scope and sequencing.** These are intended as separate user-approved turns;
 split a turn further if research, implementation or validation proves too
@@ -344,10 +537,10 @@ general-purpose origin engine.
 
 | Turn | Scope and dependencies | Exit check |
 | ---- | ---------------------- | ---------- |
-| D0 | [ ] Define the scenario and acceptance contract; identify the actual user journey, proposed supplier specs, product purpose, sources, rule applicability, output inventory and unresolved matters. Primary-source research is bounded to this product, Victoria and its label; include Code changes and transitions, origin, trade measurement and Victorian can/container obligations as applicable. Produce a proposed ADR for the local-demo result policy and request approval before changing D1/D8. | A fully specified fictional happy path and negative/boundary variants with independently calculated expected values exist; each required output is sourced, conditional or explicitly unverified. Exact policy, exports, limitations and reviewer/public-release gates are agreed before D1/D8 or app behaviour changes. |
-| D1 | [ ] Inventory current workflow against D0; design structured identities, substance/nutrition/allergen evidence and data flow for this slice. Map existing records, migrations and backup/restore; distinguish direct ingredients, supplier blends and nested recipes. | A field-to-result map identifies existing capabilities, gaps, one source of truth, unknown/conflict states and downstream dependencies. Migration and compatibility strategy preserves existing data and approved snapshots; user approves any material design choice. |
-| D2 | [ ] Implement the agreed provisional-demo result policy for the selected, source-verified checks only, after D0 approval. Keep the unreviewed and approved states distinguishable and use the same rule and trace machinery. | Screen and export behaviour match the approved ADR; tests cover applicable/inapplicable, draft/approved, missing/conflicting facts, unsupported mappings, low-confidence FAIL and prevention of accidental promotion or public-release claims. Existing unrelated checks retain their intended behaviour. |
-| D3 | [ ] Improve ingredient and supplier-specification entry for the scenario, including structured identity, caffeine and relevant blend components, nutrient basis and allergen/additive evidence. Reuse current records and terminology where possible. | A non-expert can enter the fictional specs once; unit/storage/migration and browser tests cover known, absent-with-evidence, unknown, conflict, unrecognised identity and round-trip persistence. No nutrient or component is invented. |
+| D0 | [x] Define the scenario and acceptance contract; identify the user journey, fictional supplier specs, product purpose, sources, rule applicability, output inventory and unresolved matters. Bounded primary-source research covers the drink, Victoria, Code transitions, origin, trade measurement and the container scheme. | Completed 2026-11-11: `docs/drink-demo-scenario.md` records fictional happy-path facts, independent calculations, boundary/negative cases, supported and unverified outputs, and implementation follow-ups. ADR-009 records the approved results and export policy. This is planning, not reviewer acceptance or authorization for later implementation. |
+| D1 | [x] Inventory current workflow against D0; design structured identities, substance/nutrition/allergen evidence and data flow for this slice. Map existing records, migrations and backup/restore; distinguish direct ingredients, supplier blends and nested recipes. | Completed 2026-11-11: `docs/drink-demo-data-flow.md` maps current and proposed flows, unknown/conflicting facts, migrations, backup and the existing approved-history dependency gap. Product owner approved the compound-ingredient and snapshot direction in ADR-010; no application behaviour changed. |
+| D2 | [ ] Implement the agreed provisional-demo result policy for the selected, source-verified checks only, after D0 and separate user authorization. Keep the unreviewed and approved states distinguishable and use the same rule and trace machinery. | In progress: a separate review report is exportable even for incomplete products; label-PDF export is blocked for all current layouts while required content is unassessed. With product-owner approval, a narrow caffeine concentration evaluator was brought forward from D6. It tests provisional results on evidence-backed fixtures and displays the same unresolved check on screen and in the report; it does not yet calculate a total or establish all classification facts from real product records. D3-D6 must supply those facts without duplicate entry, including every caffeine source, process/yield and conflicting evidence; until then no real product receives a provisional range result. Existing draft checks remain gated. D2 remains open until the approved screen/export policy and real evidence integration are complete, including tests for supported/unsupported and approved/unapproved paths. |
+| D3 | [ ] Improve ingredient and supplier-specification entry for the scenario, including structured identity, caffeine and relevant blend components, nutrient basis and allergen/additive evidence. Reuse current records and terminology where possible. | In progress: ingredient drafts record explicit identities, sourced caffeine presence, absence or two conflicting statements, and separate per-100 mL nutrition; unknown stays blank. Optional dated supplier statements also record fruit juice, added vitamins, added taurine and other added Schedule 28 substances; disagreements and earlier statements are retained. The last statement excludes caffeine, vitamins and taurine and does not establish absence of naturally occurring substances; none of these statements replaces a quantified ingredient list. Users can record a decision and explanation about conflicting caffeine statements, retaining both statements and prior decisions; calculations do not yet apply it. Compound ingredients can be selected in recipes, and linked supplier compositions record sourced complete or partial coverage, including components with unknown amounts. Partial compositions cannot be scaled; legacy compositions are not automatically treated as supplier-confirmed complete. Backup v2 preserves these fields; v1 remains importable. A browser test enters the fictional drink's ingredient and blend records and restores both backup types; remaining scenario evidence, including naturally occurring substance coverage and full D3 acceptance, still needs verification. These supplier statements, caffeine and volume nutrition are not yet propagated into product calculations. D3 stays open. |
 | D4 | [ ] Propagate identity, allergens, additives and substance amounts through direct and nested formulation paths, with evidence and duplicate-source safeguards. | Tests verify direct/nested paths, multiple sources, proportions, absent versus unknown, missing blend details and no double counting; edits refresh dependent draft results without changing approved snapshots. |
 | D5 | [ ] Make batch yield, finished volume, relevant mass/volume conversions and nutrition inputs practical for the drink; use explicit density/evidence when conversion needs it. Integrate with the existing NIP calculation. | Independent fixtures verify per-100 mL and per-serving results, batch scaling, density and yield, boundary rounding and missing data; no assumed density or silent nutrient zero. Supplier-provided and calculated bases are distinguished. |
 | D6 | [ ] Guide product classification using recipe-derived facts plus only genuinely product-specific purpose/presentation facts. Implement source-mapped caffeine concentration and drink-specific declaration/advisory checks, including listed substances only where supported. | Tests cover applicable/non-applicable and uncertain classification, all caffeine sources, threshold boundaries, units, serving versus pack size, missing yield/evidence and transition/effective-date cases. Outputs and source traces are provisional under D2 policy. |
@@ -380,6 +573,11 @@ Scope: security review, accessibility audit, full regulatory and legal review of
 Scope: optional encrypted cloud backup and sync, collaboration, supplier spreadsheet import, multi-panel layouts and barcodes, integrations, New Zealand profile, AI-assisted entry and explanations (draft only, never an originating regulatory conclusion).
 
 ## 8. MVP rule scope
+
+**Historical scope table:** The 2026-11-16 D1 decision and current-direction
+section take precedence over this earlier cohort and release ordering. The
+table remains as a record of source mapping and open gates, not a promise that
+the current product supports those cases.
 
 | Rule family                                                                 | MVP behaviour                                                                                                      | Requirements ref | Mapping status                            |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------- | ----------------------------------------- |
@@ -475,8 +673,9 @@ This table does not verify Standard 1.2.7/1.2.10, additive permissions, prescrib
 
 **Current position:** Phase 1 reviewer-ready engineering baseline and Phase 2,
 Phase 3 and usability groundwork are recorded below and in section 7. The
-proposed next workstream is the Victorian drink demo, D0-D11 in section 7;
-the sequence and its locked-policy change require approval before activation.
+current workstream is the Victorian drink demo, D0-D11 in section 7. D0 and
+D1 are complete for planning; the local-demo policy and data-flow design are
+approved but not implemented. D2 is next, subject to separate authorization.
 Historical phase and release gates remain open unless explicitly superseded.
 
 Repository preparation (2026-11-05)
@@ -771,15 +970,15 @@ Phase 1 manual demo: complete the flow offline; restore an encrypted backup on a
 - 2026-11-10: Completed Phase 3 Turn C7: added a workspace Claims section (product facts, claim entry with the person's own classification and confirmation, supported-rule link, figure and dated evidence). Results show a status as text, the condition checklist, rule and source, what is not yet verified, and the non-certification statement, separate from additive and name results. Storage gained per-claim nutrientAmount and evidence and a product claimFacts record, both validated. The illustrative preview toggle is per session, off on every load, not saved, labelled ILLUSTRATIVE ONLY and absent from the label and PDF; it only lifts reviewer gates and never missing facts. End-to-end and accessibility tests added. The preview toggle is not yet on the Additives & names page.
 - 2026-11-10: Completed Phase 3 Turn C8: added the claims gate test (source and version checks, fixtures for every shipped rule, review-only paths, a property test that draft data never gives PASS or FAIL, and reviewer-record checks) and docs/phase3-claims-gate-record.md with reviewer verification tables, the unsupported-claims list and a blank sign-off. Claims track C1-C8 is engineering-complete; no reviewer sign-off is recorded and no deterministic claim result is enabled.
 - 2026-11-10: Completed Worked-examples Turn W1: the illustrative-preview toggle is now on the Additives & names page as well as Claims, sharing one per-session setting (off on load, not saved, absent from the label and PDF) through shared toggle and note components. Permission and infant 'sweetened' results show an ILLUSTRATIVE ONLY note when on; the official status is unchanged and prescribed-name candidates have no preview. Unit and end-to-end tests added; accessibility sweep passes.
-- 2026-11-10: Completed Worked-examples Turn W2: drafted docs/worked-examples-scenarios.md (four invented products, a good and a problem variant for caffeinated beverages and infant food, with expected official and preview results). Document only; awaiting user approval before W3.
+- 2026-11-10: Completed Worked-examples Turn W2: drafted docs/history/worked-examples-scenarios.md (four invented products, a good and a problem variant for caffeinated beverages and infant food, with expected official and preview results). Document only; awaiting user approval before W3.
 - 2026-11-10: Completed Worked-examples Turn W3: added the worked-examples mechanism (apps/web/src/worked-examples.ts). 'Load worked examples' adds tagged records by fixed id, never overwrites an existing id and rolls back on failure; 'Remove worked examples' deletes only records tagged worked-example after a confirmation, and keeps any the person's own work uses or that have an approved version. The example set is empty until W4/W5, so the panel stays hidden until products exist. Unit tests use an in-memory store; the existing demo and its tests are unchanged.
 - 2026-11-10: Completed Worked-examples Turn W4: added the caffeinated beverage worked examples (Example Citrus Boost, good; Example Citrus Boost Max, problem) with invented ingredients, additive concentrations, claims and facts, all tagged worked-example. Tests lock the expected official REVIEW REQUIRED and preview outcomes; an end-to-end test loads them, checks the preview and accessibility, and removes them. Found and fixed a defect: limits printed with a space (for example '3 000') made the permission preview crash; they are now read as plain numbers, with a regression test. Recorded two findings for the user in the scenario sheet: the conversion basis for benzoate, sorbate, sulphite and steviol limits cannot be entered yet (previews blocked), and an uncoded added-caffeine source blocks every additive check on a product.
 - 2026-11-10: Completed Worked-examples Turn W5 and two user-approved changes. (1) Calculation basis: added an optional calculatedAs to the additive concentration (domain, storage validation, ingredient form field 'Figure already converted to'). The person converts the figure and names the substance; the engine passes it on only when every contributing source states the same basis and never converts. (2) Added caffeine: a source with the addedCaffeine declaration route is now treated as an identified, different substance in the additive concentration calculation and is not listed as uncoded; caffeine's own Standard 2.6.4 limits are still not checked. P1 now includes added caffeine and sodium benzoate (211, as benzoic acid). W5: added Example Apple and Oat Puree (good) and Example Honey and Oat Puree (problem), covering carrageenan over limit, sweetened-word blocked by unconfirmed sugars basis, PROHIBITED_CONTEXT on Low fat, unconfirmed classification on Low sodium and the sterilised-honey candidate. Tests and e2e updated; scenario sheet corrected to match.
 - 2026-11-10: Completed Worked-examples Turn W6: added an in-app 'Guide to the worked examples' (shown on the Overview once examples are loaded) describing each of the four products and what to look for. The end-to-end test now also opens the label layout for the beverage and infant examples, exports a PDF draft for one, and runs the accessibility check with the guide visible.
-- 2026-11-10: Completed Worked-examples Turn W7 (review checkpoint). The user's feedback is that the Additives & names and Claims pages are confusing and wordy, the program must guide people who do not know the Code, show only relevant fields, explain better, and produce real label content (ingredient declaration, allergens, mock NIP) rather than only REVIEW REQUIRED results. Drafted docs/usability-design.md (track U1-U8: guided label builder, three-way plain-English checklist over unchanged engine statuses, draft label content). Awaiting approval of the design. Sports supplements postponed until the usability track is done.
-- 2026-11-10: Usability track U1 approved (docs/usability-design.md), now U1-U9 with a plain-English pass on Overview, Ingredients, Formulations and Products as U2. Decisions: other products get a basic label plus consultant note; state names 'Entered information looks fine!', 'Needs attention!', 'Consultant review recommended'. The analyst agent verified NIP display rules in primary legislation (docs/nip-display-research.md): 3 significant figure cap (1.2.8-7(3)), optional LESS THAN (40 kJ, 1 g, 5 mg), Schedule 12 order and wording; the Code has no decimal-place rule or rounding mode, so a secondary website's rounding claims were not adopted. Open: FSANZ guidance, Schedule 12 table geometry, Standard 1.2.1 legibility and label exemptions.
+- 2026-11-10: Completed Worked-examples Turn W7 (review checkpoint). The user's feedback is that the Additives & names and Claims pages are confusing and wordy, the program must guide people who do not know the Code, show only relevant fields, explain better, and produce real label content (ingredient declaration, allergens, mock NIP) rather than only REVIEW REQUIRED results. Drafted docs/history/usability-design.md (track U1-U8: guided label builder, three-way plain-English checklist over unchanged engine statuses, draft label content). Awaiting approval of the design. Sports supplements postponed until the usability track is done.
+- 2026-11-10: Usability track U1 approved (docs/history/usability-design.md), now U1-U9 with a plain-English pass on Overview, Ingredients, Formulations and Products as U2. Decisions: other products get a basic label plus consultant note; state names 'Entered information looks fine!', 'Needs attention!', 'Consultant review recommended'. The analyst agent verified NIP display rules in primary legislation (docs/nip-display-research.md): 3 significant figure cap (1.2.8-7(3)), optional LESS THAN (40 kJ, 1 g, 5 mg), Schedule 12 order and wording; the Code has no decimal-place rule or rounding mode, so a secondary website's rounding claims were not adopted. Open: FSANZ guidance, Schedule 12 table geometry, Standard 1.2.1 legibility and label exemptions.
 - 2026-11-10: Completed Usability Turn U2 (plain-English pass). Reworded the Overview journey, Ingredients (type options, additive, nutrient, allergen and source-status hints), Formulations (lede, empty states) and Products (lede, food-state explanation, optional classification section) in App.vue. No logic changes. One e2e selector updated for the renamed classification section. Typecheck, lint, 269 unit tests and 12 e2e tests pass.
-- 2026-11-10: Usability track restructured at the user's direction (design only, no code). Pages become Overview, Ingredients, Formulations, Products, Labels and Backup, each list-page paired with a guided builder; Labels shows every product but only exports finished ones, with finished recalculated live. U4-U9 re-sequenced (builder shell and Ingredient builder, Formulation builder, Product builder, Labels page with declaration and allergens, mock NIP, checklist and consultant PDF). Recorded as decision 5 in docs/usability-design.md. Awaiting approval of U4.
+- 2026-11-10: Usability track restructured at the user's direction (design only, no code). Pages become Overview, Ingredients, Formulations, Products, Labels and Backup, each list-page paired with a guided builder; Labels shows every product but only exports finished ones, with finished recalculated live. U4-U9 re-sequenced (builder shell and Ingredient builder, Formulation builder, Product builder, Labels page with declaration and allergens, mock NIP, checklist and consultant PDF). Recorded as decision 5 in docs/history/usability-design.md. Awaiting approval of U4.
 - 2026-11-10: U4 complete. New `apps/web/src/ingredient-form.ts` (pure, 9 unit tests), `components/BuilderShell.vue` and `components/IngredientBuilder.vue`; Ingredients page is now a list with Add, Edit and Delete; navigation restructured; allergens are a checklist from the rule-data vocabulary plus an "Other" box. Evidence for an additive's amount and source is hidden until requested. Known behaviour: a worked-example ingredient with nutrient evidence but no spec sheet needs a spec reference and date before a nutrient is changed. Checks: vue-tsc, eslint, 283 unit and 14 e2e tests pass.
 - 2026-11-10: U5 complete. New `apps/web/src/formulation-form.ts` (pure, 6 unit tests) and `components/FormulationBuilder.vue`; Formulations page is a list with Add, Edit, Expand and Delete. Editing keeps line ids, creation date and any process-mass profile. Line type label "Formulation" is now "Another recipe". Checks: vue-tsc, eslint, 289 unit and 14 e2e tests pass.
 - 2026-11-10: U6 complete. New `apps/web/src/product-form.ts` (pure, 9 unit tests), `components/ProductBuilder.vue` and `components/ProductTypeStep.vue`; storage gains optional `packDetails` on products (validated, 1 test). The builder saves the first step to create the product, then later steps save onto it, so one step never overwrites another's answers. Additives & names and Claims panels take an optional `productId` and hide their own picker; the Label builder page was removed (its questions live in "What is it?"). Pack details are not yet used by the label or NIP (U7/U8). Checks: vue-tsc, eslint, 298 unit and 15 e2e tests pass.
@@ -787,3 +986,12 @@ Phase 1 manual demo: complete the flow offline; restore an encrypted backup on a
 - 2026-11-11: U8: added the draft base nutrition panel to the Labels page and PDF (CALC-001, CALC-004, CALC-011, CALC-013, CALC-015, PACK-004). Supplier energy, explicit food form, a recipe-specific sold-food confirmation and sourced final density for volume are required; missing evidence is never zero. NPC display conventions are used with rounding-stage review still open. Unsupported food states and regulated claims block export rather than silently omitting their required nutrition handling. Prepared-food calculations, claim-driven rows, optional less-than declarations and other label content remain open; see ADR 008. This is not regulatory acceptance.
 - 2026-11-11: U9: added plain-English three-way summaries and suggested actions to additive/name and claim checks (TRACE-008, TRACE-012), without changing official results or promoting missing facts to a pass. Extended the PDF's separate report with paginated consultant notes, official findings, sources and limitations (TRACE-009, PACK-005); illustrative previews stay on screen only. Improved builder readiness wording, conditional questions and automated accessibility coverage. PDF export explicitly rejects characters the built-in font cannot represent rather than silently corrupting text. Regulatory approval, further label content and U8's calculation limitations remain open.
 - 2026-11-11: Proposed the D0-D11 Victorian caffeinated-drink end-to-end demo sequence. It prioritizes a representative local label and PDF, reuse of known ingredient/formulation facts, specific actionable results and bounded source research. D1/D8 and ADR-006 remain in force until the precise provisional-demo policy is approved and recorded; no implementation or release gate is changed by this planning entry.
+- 2026-11-11: Product owner approved ADR-009's local-demo provisional results and incomplete-export policy, requesting useful specific results and encouragement of independent review. Updated D1/D8 only for the selected eligible local-demo checks; existing implementation and other release gates remain unchanged. D0 scenario and source research remain in progress.
+- 2026-11-11: Completed D0 planning and bounded primary-source research. Added a complete fictional drink and supplier/pack fixture, independently calculated nutrition and caffeine examples, boundary and incomplete-input cases, and a source-linked output inventory in `docs/drink-demo-scenario.md`. Remaining declaration, origin, packaging, technical stability and physical-proof uncertainties are explicit implementation/review follow-ups; no rule, application behaviour or reviewer/public-release gate was approved by this planning milestone.
+- 2026-11-11: Began D1. `docs/drink-demo-data-flow.md` maps current fields and result paths, proposes evidence and blend propagation, outlines safe migrations and backup/restore, and flags that current product approvals snapshot one record rather than a full dependency closure. The material design awaits product-owner approval; no application code changed.
+- 2026-11-11: Completed D1 after product-owner approval of the existing compound ingredient plus user-created composition formulation model and historical dependency-snapshot direction. ADR-010 records the decision; D2 remains a separate implementation turn. No schema, engine, UI or rule behaviour changed.
+- 2026-11-11: Began D2 (TRACE-008, TRACE-012, TRACE-015, PACK-001, PACK-005). Added a separate, local review-report PDF with input paths and effective dates; it remains available when draft data is incomplete. Blocked label-PDF export for all current layouts because required pack content and the applicability of warnings are not yet fully assessed or assembled. Provisional outcomes are not implemented: existing draft rules and ADR-006 hypothetical reruns do not meet ADR-009 eligibility. D2 remains open; no reviewer approval or deterministic legal outcome has been fabricated.
+- D2 continuation: product owner approved bringing forward the smallest source-verified drink check from D6. Added the narrowly scoped caffeine range evaluator and versioned draft rule (Standard 2.6.4-3(a); TRACE-008, TRACE-012, TRACE-015), preserving reviewer status separately. The evaluator's eligible fixture outcomes are provisional, not approved. The current UI and report deliberately remain unresolved because the current records cannot establish all classification and total-caffeine evidence. The verified period is limited to 2026-06-09 through the 2026-11-11 source check; later dates need a fresh source check, not assumed currency. P1056 source permissions and other requirements are not assessed. D2 is not complete.
+- Began D3 (DATA-001, DATA-003, TRACE-008). Added supplier-linked caffeine evidence entry with explicit unknown, presence, absence and conflict; no total is calculated. Database schema v3 leaves existing records untouched; backup format v2 protects new data from old backup readers while importing v1. A v2-schema Dexie application can still open the newer database, so safe downgrade of a live workspace is not guaranteed: use the current app and a v2 backup, not an older app, for records with new evidence. Controlled identities, blend completeness, nutrient basis and remaining D3 acceptance tests are still outstanding.
+- D3 continuation (DATA-003, DATA-006, VER-002): the product owner approved isolated workspaces (ADR-011). The current app uses a new database name and offers an explicit verified copy from the old workspace only into an empty destination, including recovery points. Copies do not sync; older apps can still alter the original, not the current workspace. Added explicitly selected versioned demo identities, with unresolved and stale-evidence handling. D3 remains open for the outstanding supplier-data and scenario tests.
+- D3 continuation (FR-002, DATA-003, VER-002): added a dated supplier statement for other added Schedule 28 substances, excluding caffeine, vitamins and taurine. Blank, conflicting and earlier statements remain explicit; it does not cover naturally occurring substances or feed product checks. To avoid a further workspace copy, the new field is separate from the previous v2 editor's managed supplier-facts object. An actual previous-build browser check confirmed preservation through edit, export and restore; it cannot display this field. This compatibility result is specific to the tested field and build, not a general future-version guarantee (ADR-011). D3 remains open.

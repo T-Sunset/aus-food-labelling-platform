@@ -281,9 +281,21 @@ export interface FormulationLine {
 
 export type FormulationComponent = IngredientLine | FormulationLine;
 
+export type UnquantifiedFormulationComponent =
+  | { readonly id: string; readonly kind: 'ingredient'; readonly ingredientId: string }
+  | { readonly id: string; readonly kind: 'formulation'; readonly formulationId: string };
+
+export interface SupplierCompositionEvidence {
+  readonly coverage: 'partial' | 'complete';
+  readonly specification: { readonly reference: string; readonly sourceDate: string };
+  readonly unquantifiedComponents: readonly UnquantifiedFormulationComponent[];
+  readonly lineOrder?: readonly string[];
+}
+
 export interface Formulation {
   readonly id: string;
   readonly lines: readonly FormulationComponent[];
+  readonly supplierComposition?: SupplierCompositionEvidence;
 }
 
 export interface ExpandedIngredient {
@@ -953,6 +965,51 @@ export interface EvaluationInputTrace {
   readonly sourceId: string;
   readonly sourceDate: string;
   readonly sourcePath: readonly string[];
+}
+
+export interface ProvisionalCaffeineRule {
+  readonly trace: RuleTraceMetadata;
+  readonly reviewStatus: 'draft' | 'reviewed';
+  readonly checkedOn: string;
+  readonly minimumMgPerL: string;
+  readonly maximumMgPerL: string;
+  readonly transition: {
+    readonly starts: string;
+    readonly ends: string;
+    readonly sourceUrl: string;
+    readonly note: string;
+  };
+}
+
+export interface ProvisionalCaffeineInput {
+  readonly rule: ProvisionalCaffeineRule;
+  readonly evaluationDate: string;
+  readonly classification: {
+    readonly beverage: ProductClassificationFact;
+    readonly flavoured: ProductClassificationFact;
+    readonly nonAlcoholic: ProductClassificationFact;
+    readonly containsCaffeine: ProductClassificationFact;
+    readonly mentalPerformancePurpose: ProductClassificationFact;
+  };
+  readonly concentration?: {
+    readonly value: string;
+    readonly unit: 'mg/L';
+    readonly foodState: 'readyToDrinkAsSold' | 'other' | 'unknown';
+    readonly completeness: 'complete' | 'unknown' | 'conflicting';
+    readonly evidence: readonly EvaluationInputTrace[];
+  };
+}
+
+export interface ProvisionalCaffeineResult {
+  readonly status: 'WITHIN RANGE' | 'OUTSIDE RANGE' | 'NOT APPLICABLE' | 'REVIEW REQUIRED';
+  readonly resultBasis: 'provisional' | 'unresolved';
+  readonly ruleReviewStatus: ProvisionalCaffeineRule['reviewStatus'];
+  readonly rule: RuleTraceMetadata;
+  readonly evaluationDate: string;
+  readonly inputs: readonly EvaluationInputTrace[];
+  readonly explanation: string;
+  readonly limitations: readonly string[];
+  readonly nonCertificationStatement: 'This result assists review and does not certify legal compliance.';
 }
 
 interface EngineResultBase<T> {

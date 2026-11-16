@@ -6,7 +6,7 @@ import type {
 import type { FormulationRecord, IngredientRecord, ProductRecord } from '@aus-food/storage';
 import { workedExampleTag, type WorkedExampleSet } from './worked-examples.js';
 
-// Every name, figure and date here is INVENTED for illustration. See docs/worked-examples-scenarios.md.
+// Every name, figure and date here is INVENTED for illustration. See docs/history/worked-examples-scenarios.md.
 // Caffeinated beverages (W4) are here; food for infants is added in W5.
 const at = '2026-11-10T00:00:00.000Z';
 const tags = [workedExampleTag];

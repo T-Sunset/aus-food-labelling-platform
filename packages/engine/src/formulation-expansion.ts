@@ -12,6 +12,7 @@ type ExpansionErrorCode =
   | 'FORMULATION_NOT_FOUND'
   | 'CIRCULAR_REFERENCE'
   | 'EMPTY_FORMULATION'
+  | 'PARTIAL_COMPOSITION'
   | 'INVALID_INGREDIENT_QUANTITY'
   | 'INVALID_TARGET_MASS';
 
@@ -135,6 +136,13 @@ export function expandFormulation(
         'FORMULATION_NOT_FOUND',
         `Formulation "${formulationId}" was not found.`,
         [...sourcePath, formulationId],
+      );
+    }
+    if (formulation.supplierComposition?.coverage === 'partial') {
+      throw new FormulationExpansionError(
+        'PARTIAL_COMPOSITION',
+        `Supplier composition "${formulationId}" is partial; its proportions cannot be calculated.`,
+        sourcePath,
       );
     }
     if (formulation.lines.length === 0) {

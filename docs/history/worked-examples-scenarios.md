@@ -1,6 +1,6 @@
 # Worked examples - scenario sheet (W2)
 
-Status: DRAFT for user approval. Nothing here is built yet (W3-W5 build it).
+Status: HISTORICAL scenario sheet. W3-W7 were subsequently implemented; the current direction is in [implementation-plan.md](../implementation-plan.md). The examples remain fictional and do not establish current regulatory coverage.
 
 ## Purpose and ground rules
 

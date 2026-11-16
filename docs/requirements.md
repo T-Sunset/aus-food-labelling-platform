@@ -9,6 +9,18 @@
 
 > This document specifies a product that assists food businesses to prepare and review Australian food-labelling information. It must not be described as certifying legal compliance. A generated label or automated result is an aid to review. The food business remains responsible for its product, evidence, label and market decision, and must obtain regulatory or legal advice where the facts or law require it.
 
+**2026-11-16 scope clarification:** The owner prioritises a general, guided
+ingredient -> formulation -> product -> label and pack-copy workflow for
+common Australian foods. An everyday baked good and a caffeinated drink are
+contrasting reference cases, not restrictions on ingredient entry. Coverage
+will expand in verified increments toward many food types; no first release
+is assumed to cover all products. The current [implementation plan](./implementation-plan.md)
+and its updated locked decision D1 take precedence over older statements in
+this document that identify caffeinated beverages and infant foods as the
+exclusive initial focus. Claims remain a public-MVP commitment; exact later
+release coverage remains to be agreed. Existing requirements and requirement
+IDs are preserved for review rather than silently removed.
+
 ## 1. Executive summary
 
 The product shall turn a structured chain of ingredient, supplier specification, formulation, recipe, product and packaging data into reproducible labelling outputs and traceable compliance findings. The central product decision is **local-first formulation data with optional encrypted synchronisation, immutable product versions, and a rules system that never hides the source or the limits of automation**.
@@ -106,7 +118,11 @@ Give Australian food businesses a practical, evidence-aware workspace in which a
 
 **Must for MVP:** Australian packaged retail products using ordinary foods; atomic and nested ingredients; supplier specifications; formulation quantities and yield; ingredients/allergens; core NIP; date/storage/directions fields; deterministic warnings/advisories for supported rules; source-linked findings; immutable product/label versions; local-first draft work; exportable review package.
 
-**Should for Version 1:** additive permission and carry-over checks; prescribed-name and composition prompts for selected product classes; nutrition/content claim checks; NPSC and HSR calculation integration; country-of-origin evidence workflow; packaging/legibility review; encrypted cloud sync and recovery; collaborative review.
+**Phased coverage:** additive permission, carry-over, prescribed names, claims,
+origin and other applicable requirements must be prioritised against real
+product journeys. Unsupported requirements must remain visible, not silently
+omitted. Exact first-release coverage and timing are to be agreed in the plan;
+HSR, cloud sync and collaboration remain later candidates.
 
 **Could later:** expanded Chapter 2 categories; full rule catalogue coverage; supplier portal; laboratory result import; batch variance scenarios; label artwork preflight; regulator-ready evidence package; New Zealand profile; export profiles; change-impact alerts.
 
@@ -624,7 +640,7 @@ REG-ADD-005 and REG-ADD-006 in 6.3 are realised by NAME-001 to NAME-003.
 
 | ID | Priority | Requirement |
 | --- | --- | --- |
-| ING-001 | Must | Identity: internal identifier, name, declared name, regulatory-name mapping, category, notes. Supplier data comes from supplier specifications (SPEC-001). |
+| ING-001 | Must | Identity: internal identifier, name, declared name, regulatory-name mapping where applicable, category and notes. Ingredient facts may be supplied by the user from a recipe, supplier specification, product label, database, analysis or another source; retain the source and uncertainty where relevant. A supplier specification is not required merely to save an ingredient draft (SPEC-001). |
 | ING-002 | Must | Nutrition on a stated per 100 g or 100 mL basis. Required NIP nutrients (1.2.8-6): energy (kJ), protein (g), fat total (g), saturated fat (g), carbohydrate (g), sugars (g), sodium (mg). Valuable additional fields: dietary fibre (g), trans fat, monounsaturated and polyunsaturated fat (g), potassium and other vitamins/minerals (units per the Code), moisture (g), alcohol (g), polyols (g), starch (g), added sugars. Each value has an evidence type and may be unknown. |
 | ING-003 | Must | Regulatory attributes: allergens (controlled vocabulary) and gluten status, GM status, irradiation, origin, special warnings and advisory triggers, processing-aid and novel-food flags. |
 | ING-004 | Must | Additives are first-class records (ADD-001) attached to the ingredient with concentration, unit, basis and evidence, not flags. |
@@ -1128,7 +1144,7 @@ Fixtures should include at least:
 - Atomic/compound ingredients and supplier evidence.
 - Recursive allergen and ingredient declaration generation.
 - Core NIP calculation with explicit source values and yield.
-- Additive permission/limit evaluation and prescribed-name support focused on the same initial product cohorts: formulated caffeinated beverages and foods for infants. Exact Code classifications/subcategories and applicable name rules require reviewer verification; unsupported cases remain `REVIEW REQUIRED`.
+- Additive identity and evidence in the general ingredient model; additive permission/limit and prescribed-name support expand by source-mapped product category. Drink and infant-food work is retained for later coverage; exact first-release coverage requires agreement. Unsupported cases remain `REVIEW REQUIRED`.
 - No candidate prescribed-name rule found is not a PASS.
 - Supported claims are required before public MVP launch, after the core and additive/name groundwork. Claims must not be treated as cleared merely because their nutrient threshold is met.
 - Name, supplier, lot, date, storage and directions capture.
@@ -1137,12 +1153,12 @@ Fixtures should include at least:
 - Immutable product/label versions and review tasks.
 - Local-first drafts, explicit export, encrypted workspace backup and privacy disclosure.
 - Label preview and PDF export of label/pack copy at custom dimensions (PACK-001).
-- Account, trial and entitlement with a read-only/export-only expiry mode (SUB-004).
+- Accounts, trials and entitlements (SUB-004) are deferred beyond the local-only MVP under locked decision D3.
 - Characterising-ingredient candidate flagging and percentage calculation where the basis is pinned (4.16).
 
 ### 13.2 Version 1
 
-- Broader additive permission and prescribed-name coverage beyond formulated caffeinated beverages and foods for infants.
+- Broader additive permission and prescribed-name coverage across additional food categories.
 - HSR calculator/profile integration with a pinned official source, if separately approved.
 - GM, irradiation and country-of-origin workflows.
 - Packaging/legibility preflight and review package.

@@ -109,7 +109,7 @@ export async function removeWorkedExamples(store: LocalFoodStore): Promise<Remov
     ownFormulationIds.add(product.formulationId);
   }
   for (const formulation of formulations.filter((record) => !isTagged(record))) {
-    for (const line of formulation.lines) {
+    for (const line of [...formulation.lines, ...(formulation.supplierComposition?.unquantifiedComponents ?? [])]) {
       if (line.kind === 'ingredient') {
         ownIngredientIds.add(line.ingredientId);
       } else {
@@ -154,7 +154,7 @@ export async function removeWorkedExamples(store: LocalFoodStore): Promise<Remov
     const keptBefore = kept;
     await attempt(record, ownFormulationIds.has(record.id), () => store.formulations.delete(record.id));
     if (isTagged(record) && kept > keptBefore) {
-      for (const line of record.lines) {
+      for (const line of [...record.lines, ...(record.supplierComposition?.unquantifiedComponents ?? [])]) {
         if (line.kind === 'ingredient') {
           ownIngredientIds.add(line.ingredientId);
         }

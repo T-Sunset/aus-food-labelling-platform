@@ -5,6 +5,12 @@
 - Plan: Phase 3 groundwork turn C2; would become locked decision D8
 - Requirements: TRACE-012, TRACE-015, DATA-003, TEST-004, CLAIM-004
 
+**2026-11-11 update:** ADR-009 supersedes this decision only for explicitly
+selected local-demo checks that meet its eligibility conditions. This ADR
+continues to describe the existing illustrative-preview implementation and
+applies to other checks until deliberately changed. No existing code or
+review status was changed by ADR-009's approval.
+
 ## Context
 
 Every Phase 2 result is REVIEW REQUIRED because the shipped rule data is draft

@@ -1,6 +1,6 @@
 # Australian Food Labelling Platform
 
-A web application designed to simplify the creation of Australian-compliant food labels by combining structured product data, nutritional information, ingredient declarations and food-labelling rules.
+A local-first web application in development to help Australian food businesses prepare label content from ingredient, formulation and product information. It assists label preparation; it does not certify legal compliance.
 
 The project explores how complex, domain-specific regulatory requirements can be represented as software rules and used to generate consistent food-labelling information.
 
@@ -12,7 +12,7 @@ For small food businesses, preparing this information manually can be time-consu
 
 The Australian Food Labelling Platform aims to provide a structured workflow for entering product and ingredient information and using that data to produce the information required for an Australian food label.
 
-The project is being developed with future expansion into a rules-driven labelling engine in mind.
+The intended workflow guides a user from ingredients and formulations through product questions to pack copy and a label. The current app is a development baseline: label PDF export is blocked while required content is not fully assessed. See the [implementation plan](docs/implementation-plan.md) for the reset, proposed steps and current limitations.
 
 ## Key Features
 
@@ -126,27 +126,37 @@ This provides a foundation for performing calculations and applying the appropri
 
 ## Technology Stack
 
-* Vue.js
+* Vue 3
 * TypeScript
-* Pinia
-* Firebase
-* Cloud Firestore
-* Bootstrap
+* Vite and Tailwind CSS
+* Dexie and IndexedDB for local storage
 
 ## Project Structure
 
 ```text id="q17a0p"
 aus-food-labelling-platform/
 │
-├── frontend/
-│   └── ...
-│
-├── .gitignore
-├── .gitattributes
-└── README.md
+├── apps/web/             guided local application
+├── packages/             domain, engine, rules, storage and label packages
+├── docs/                 requirements, plan, research and decisions
+└── archive/              legacy code
 ```
 
-The project currently centres on the frontend application, with the architecture intended to support further separation of application logic and domain rules as development continues.
+The old `frontend/` prototype is not the current application. No cloud
+service is required for the local MVP.
+
+## Run locally
+
+With the Node.js version in `.nvmrc` and Corepack available, from Windows
+Command Prompt:
+
+```cmd
+cd /d "<path-to-repository>" && corepack pnpm install && corepack pnpm --filter @aus-food/web... run build && corepack pnpm --filter @aus-food/web dev
+```
+
+Open `http://127.0.0.1:4173` and stop the server with Ctrl+C. Ingredient and
+formulation data stay in the local browser profile; use the app's backup
+feature to retain a separate copy.
 
 ## Project Status
 

@@ -28,6 +28,7 @@ import {
 } from './worked-examples.js';
 import {
   openLocalFoodStore,
+  StorageMarkerWriteError,
   type ApprovedVersionRecord,
   type FormulationRecord,
   type IngredientRecord,
@@ -52,6 +53,8 @@ const activeSection = ref<Section>('overview');
 const store = shallowRef<LocalFoodStore>();
 const loading = ref(true);
 const loadError = ref('');
+const previousWorkspaceAvailable = ref(false);
+const copyingPreviousWorkspace = ref(false);
 const actionMessage = ref('');
 const actionError = ref('');
 const ingredients = ref<IngredientRecord[]>([]);
@@ -214,6 +217,7 @@ async function removeWorkedExampleRecords(): Promise<void> {
 onMounted(async () => {
   try {
     store.value = await openLocalFoodStore();
+    previousWorkspaceAvailable.value = store.value.previousWorkspaceAvailable;
     await refreshRecords();
   } catch (error) {
     loadError.value = explainError(error);
@@ -221,6 +225,32 @@ onMounted(async () => {
     loading.value = false;
   }
 });
+
+async function copyPreviousWorkspace(): Promise<void> {
+  if (!store.value || copyingPreviousWorkspace.value) return;
+  if (!window.confirm('Copy the previous local workspace into this empty workspace? The previous workspace stays unchanged. Changes in the two workspaces will not sync.')) return;
+  copyingPreviousWorkspace.value = true;
+  clearMessages();
+  try {
+    const counts = await store.value.copyPreviousWorkspace();
+    previousWorkspaceAvailable.value = false;
+    await refreshRecords();
+    actionMessage.value = `Previous workspace copied: ${counts.ingredients} ingredients, ${counts.formulations} formulations and ${counts.products} products. The original remains separate.`;
+  } catch (error) {
+    if (error instanceof StorageMarkerWriteError) {
+      previousWorkspaceAvailable.value = false;
+      try {
+        await refreshRecords();
+      } catch (refreshError) {
+        actionError.value = `${explainError(error)} Refresh also failed: ${explainError(refreshError)}`;
+        return;
+      }
+    }
+    actionError.value = explainError(error);
+  } finally {
+    copyingPreviousWorkspace.value = false;
+  }
+}
 
 function additiveDeclarationCandidate(source: IngredientAdditiveSource, ingredientId: string, sourcePath: readonly string[]) {
   const selection = source.declarationSelection;
@@ -335,7 +365,10 @@ async function saveFormulation(record: FormulationRecord): Promise<void> {
       await store.value.formulations.create(record);
     } else {
       // Only the fields the builder manages are changed; anything else on the record is kept.
-      await store.value.formulations.update(record.id, { name: record.name, lines: record.lines });
+      await store.value.formulations.update(record.id, {
+        name: record.name, lines: record.lines,
+        ...(record.supplierComposition ? { supplierComposition: record.supplierComposition } : {}),
+      });
     }
     await refreshRecords();
     formulationEditor.value = undefined;
@@ -539,7 +572,23 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
         </section>
         <template v-else>
           <div
-            v-if="store?.workspaceWasPreviouslyUsed"
+            v-if="previousWorkspaceAvailable"
+            class="notice notice-warning"
+            role="status"
+          >
+            <strong>A previous local workspace is available.</strong>
+            <span>Copy it into this empty workspace to protect newer data from older app versions.
+              The original remains unchanged and the two copies do not sync.</span>
+            <AppButton
+              type="button"
+              :disabled="copyingPreviousWorkspace"
+              @click="copyPreviousWorkspace"
+            >
+              {{ copyingPreviousWorkspace ? 'Copying workspace…' : 'Copy previous workspace' }}
+            </AppButton>
+          </div>
+          <div
+            v-if="store?.workspaceWasPreviouslyUsed && !previousWorkspaceAvailable"
             class="notice notice-warning"
             role="status"
           >
@@ -811,9 +860,8 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 </p>
                 <h1>Ingredients</h1>
                 <p class="lede">
-                  Your ingredient library. Add each ingredient from its supplier's spec sheet, and edit or
-                  delete them any time. If a value isn't on the sheet, leave it blank. We never treat a
-                  blank as zero.
+                  Keep the ingredients you use in recipes here. You can save an unfinished draft and
+                  come back to it. Leave unknown values blank; we never treat a blank as zero.
                 </p>
               </div>
               <span class="record-count">{{ records.ingredients }} saved</span>
@@ -862,8 +910,8 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                   >01</span>
                   <h3>No ingredients yet</h3>
                   <p>
-                    Choose "Add ingredient" to start with a supplier ingredient or specification. You can save
-                    incomplete drafts and fill in missing evidence later.
+                    Choose "Add ingredient" to start with a name. You can save an incomplete draft
+                    and fill in missing evidence later.
                   </p>
                 </div>
                 <ul
@@ -1046,8 +1094,13 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                     >F</span>
                     <div class="record-main">
                       <strong>{{ record.name }}</strong>
-                      <span>{{ record.lines.length }} ingoing
-                        {{ record.lines.length === 1 ? 'line' : 'lines' }}</span>
+                      <span>{{ record.lines.length + (record.supplierComposition?.unquantifiedComponents.length ?? 0) }} ingoing lines</span>
+                      <span v-if="record.supplierComposition">
+                        Supplier composition: {{ record.supplierComposition.coverage }}
+                        <template v-if="record.supplierComposition.coverage === 'partial'">
+                          — proportions not calculated
+                        </template>
+                      </span>
                       <small>{{
                         record.lines
                           .map((line) => line.quantity.value + ' ' + line.quantity.unit)

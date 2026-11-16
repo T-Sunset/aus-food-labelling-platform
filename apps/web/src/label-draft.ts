@@ -165,6 +165,12 @@ export function makeLabelDraft(
         ? nodesFor(record.compoundFormulationId, [...stack, formulationId])
         : [];
       if (record.kind === 'compound' && children.length === 0) missing.add(`${record.name}: compound ingredient recipe`);
+      const compositionConfirmed = record.kind === 'compound' && record.compoundFormulationId
+        && formulations.find((formulation) => formulation.id === record.compoundFormulationId)
+          ?.supplierComposition?.coverage === 'complete';
+      if (record.kind === 'compound' && !compositionConfirmed) {
+        missing.add(`${record.name}: confirm complete compound composition and its source`);
+      }
       return {
         ingredientId: id,
         displayName: record.name,
@@ -172,7 +178,7 @@ export function makeLabelDraft(
         mass: { value: sumDecimals(group.map((item) => item.mass.value)), unit: 'g' },
         sourcePath: first.sourcePath,
         kind: record.kind,
-        compositionStatus: record.kind === 'compound' ? (children.length ? 'complete' : 'review_required') : 'not_applicable',
+        compositionStatus: record.kind === 'compound' ? (children.length && compositionConfirmed ? 'complete' : 'review_required') : 'not_applicable',
         children,
       };
     });

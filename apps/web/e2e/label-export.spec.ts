@@ -14,6 +14,12 @@ test('exports a deterministic exact-size label and separate review report', asyn
   expect(result.unsupportedLabelRejected).toBe(true);
   expect(result.notesFirstBytes).toEqual(result.notesSecondBytes);
   expect(result.notesFirstBytes).not.toEqual(result.firstBytes);
+  expect(result.reportFirstBytes).toEqual(result.reportSecondBytes);
+  const standaloneReport = Buffer.from(result.reportFirstBytes).toString('latin1');
+  expect(standaloneReport).toContain('No label layout is included in this report.');
+  expect(standaloneReport).toContain('Review detail 60');
+  expect(standaloneReport).not.toContain('Oat beverage');
+  expect(Array.from(standaloneReport.matchAll(/\/MediaBox\s*\[/gu)).length).toBeGreaterThan(1);
   const notesText = Buffer.from(result.notesFirstBytes).toString('latin1');
   expect(notesText).toContain('Notes for your consultant');
   expect(notesText).toContain('Review detail 60');

@@ -12,7 +12,12 @@ A privacy-focused Australian food-labelling and formulation product. Users model
 
 ## Current state
 
-The reviewer-ready Phase 1 engineering baseline is available. Phase 2 groundwork is the current workstream; product classification, NIP presentation, additive results and prescribed-name results remain `REVIEW REQUIRED` where their reviewer gates are unresolved. Do not treat this milestone as regulatory acceptance or public-release approval.
+The 2026-11-16 product reset pauses the drink-specific D0-D11 sequence.
+General ingredient and formulation foundations come first; the I1-I9 track
+is approved in `docs/implementation-plan.md`; I1's direction and the I2
+ingredient-data approach are agreed, and the I3 basic ingredient page is complete. I4 is next.
+Existing draft checks and release gates remain in force. Do not
+treat the current app as regulatory acceptance or public-release approval.
 
 ## Rules that always apply
 
@@ -27,7 +32,10 @@ The reviewer-ready Phase 1 engineering baseline is available. Phase 2 groundwork
 
 ## Working agreements
 
-- Work on the current phase and step from the plan. Do not start later phases early.
+- Work on the approved current step from the plan; do not treat historical
+  sequences as current. General food workflows must not be designed around a
+  single example. Ask only relevant questions not reliably derivable from
+  recorded data; missing composition does not establish absence.
 - Record technology and design decisions as ADRs in `docs/adr/`. Do not change locked decisions (plan section 3) without asking the user.
 - Tick the progress tracker in the plan when a step meets its exit criteria.
 - Ask before destructive actions: deleting `archive/`, rewriting history, force pushes, removing data. Do not commit or push unless asked.

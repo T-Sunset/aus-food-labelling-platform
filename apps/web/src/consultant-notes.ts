@@ -4,16 +4,18 @@ import type { FormulationRecord, IngredientRecord, ProductRecord } from '@aus-fo
 import { buildAdditiveNameReport } from './additive-name-checks';
 import { buildClaimChecks, CLAIM_LIMITATIONS } from './claim-checks';
 import type { LabelDraft } from './label-draft';
+import { LABEL_EXPORT_BLOCKERS } from './label-export-readiness';
+import { caffeineCheckForProduct } from './caffeine-check';
 
 function officialResult(name: string, result: EngineResult<unknown>): string[] {
   return [
     `${name}: ${result.status} (${result.applicationMode}). ${result.explanation}`,
     `What was checked: ${result.whatWasChecked}`,
     ...(result.suggestedAction ? [`Next step: ${result.suggestedAction}`] : []),
-    `Rule: ${result.rule.name} (${result.rule.id}); ${result.rule.provision}; mapping ${result.rule.mappingConfidence}; version ${result.rule.version}.`,
+    `Rule: ${result.rule.name} (${result.rule.id}); ${result.rule.provision}; mapping ${result.rule.mappingConfidence}; version ${result.rule.version}; effective from ${result.rule.effectiveFrom}${result.rule.effectiveTo ? ` to ${result.rule.effectiveTo}` : ''}.`,
     `Source: ${result.rule.sourceUrl}`,
     ...result.inputs.map((input) =>
-      `Input: ${input.name}: ${input.value}${input.unit ? ` ${input.unit}` : ''}; source ${input.sourceId}; date ${input.sourceDate}.`),
+      `Input: ${input.name}: ${input.value}${input.unit ? ` ${input.unit}` : ''}; source ${input.sourceId}; date ${input.sourceDate}; path ${input.sourcePath.length ? input.sourcePath.join(' > ') : 'not supplied'}.`),
   ];
 }
 
@@ -25,6 +27,7 @@ export function makeConsultantNotes(
 ): readonly LabelConsultantSection[] {
   const report = buildAdditiveNameReport(product, formulations, ingredients, false);
   const claims = buildClaimChecks(product, false);
+  const caffeine = caffeineCheckForProduct(product, new Date().toISOString().slice(0, 10));
   const additives: string[] = [];
   if (report.error) additives.push(`Could not assess additive and name information: ${report.error}`);
   for (const declaration of report.declarations) {
@@ -55,6 +58,7 @@ export function makeConsultantNotes(
       heading: 'Draft label and nutrition',
       lines: [
         `Product: ${product.name}.`,
+        ...LABEL_EXPORT_BLOCKERS.map((reason) => `Label PDF export blocked: ${reason}`),
         ...draft.warnings,
         'The nutrition panel is a draft estimate based on supplier data and the confirmed recipe basis. Review the food form, density where used, rounding stage and any additional required rows.',
         'Warnings, other mandatory content, exemptions, and physical print legibility are not fully assessed.',
@@ -62,6 +66,19 @@ export function makeConsultantNotes(
       ],
     },
     { heading: 'Additives and product name', lines: additives },
+    ...(caffeine ? [{
+      heading: 'Caffeine concentration',
+      lines: [
+        `${caffeine.status} (${caffeine.resultBasis}; rule ${caffeine.ruleReviewStatus}). ${caffeine.explanation}`,
+        'The app cannot yet establish total caffeine from every ingredient or all classification facts; do not substitute a guessed total.',
+        `Rule: ${caffeine.rule.provision}; mapping ${caffeine.rule.mappingConfidence}; version ${caffeine.rule.version}; effective from ${caffeine.rule.effectiveFrom}.`,
+        `Source: ${caffeine.rule.sourceUrl}`,
+        `Evaluation date: ${caffeine.evaluationDate}.`,
+        ...caffeine.inputs.map((input) => `Input: ${input.name}: ${input.value}; source ${input.sourceId}; date ${input.sourceDate}; path ${input.sourcePath.join(' > ')}.`),
+        ...caffeine.limitations,
+        caffeine.nonCertificationStatement,
+      ],
+    }] : []),
     { heading: 'Claims', lines: [...claimLines, ...CLAIM_LIMITATIONS] },
   ];
 }

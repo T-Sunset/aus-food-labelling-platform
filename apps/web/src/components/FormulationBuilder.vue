@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import type { FormulationRecord, IngredientRecord } from '@aus-food/storage';
 import {
   buildFormulationRecord,
@@ -23,8 +23,11 @@ const emit = defineEmits<{ save: [record: FormulationRecord]; cancel: [] }>();
 const draft = reactive(props.record ? draftFromFormulation(props.record) : emptyFormulationDraft());
 const activeStep = ref(0);
 const errorMessage = ref('');
+watch(
+  () => [draft.compositionCoverage, draft.compositionReference, draft.compositionDate, JSON.stringify(draft.lines)],
+  () => { draft.confirmCompositionChanges = false; },
+);
 
-const singleIngredients = computed(() => props.ingredients.filter((item) => item.kind === 'atomic'));
 // A recipe cannot contain itself, so it is not offered as a choice for its own lines.
 const otherFormulations = computed(() => props.formulations.filter((item) => item.id !== props.record?.id));
 
@@ -37,7 +40,7 @@ const steps = computed<BuilderStep[]>(() => [
 ]);
 
 function options(kind: FormulationLineDraft['kind']): readonly { id: string; name: string }[] {
-  return kind === 'ingredient' ? singleIngredients.value : otherFormulations.value;
+  return kind === 'ingredient' ? props.ingredients : otherFormulations.value;
 }
 
 function targetName(line: FormulationLineDraft): string {
@@ -47,7 +50,7 @@ function targetName(line: FormulationLineDraft): string {
 function addLine(): void {
   draft.lines.push({
     id: props.makeId('line'),
-    kind: singleIngredients.value.length > 0 ? 'ingredient' : 'formulation',
+    kind: props.ingredients.length > 0 ? 'ingredient' : 'formulation',
     targetId: '',
     quantity: '',
     unit: 'g',
@@ -99,6 +102,31 @@ function submit(): void {
             placeholder="e.g. Breakfast base"
           >
         </label>
+        <label class="field full">
+          <span>What is this formulation?</span>
+          <select v-model="draft.compositionCoverage">
+            <option value="">My recipe or a composition without confirmed coverage</option>
+            <option value="partial">Supplier composition: information is partial</option>
+            <option value="complete">Supplier composition: supplier confirms it is complete</option>
+          </select>
+          <small>Partial information is not scaled or treated as a complete recipe. Changing a shared formulation affects every ingredient and product linked to it.</small>
+        </label>
+        <template v-if="draft.compositionCoverage">
+          <label class="field">
+            <span>Composition evidence reference</span>
+            <input
+              v-model="draft.compositionReference"
+              maxlength="120"
+            >
+          </label>
+          <label class="field">
+            <span>Composition evidence date</span>
+            <input
+              v-model="draft.compositionDate"
+              type="date"
+            >
+          </label>
+        </template>
       </div>
 
       <div
@@ -109,8 +137,13 @@ function submit(): void {
           <div>
             <h3>Ingredients in this recipe</h3>
             <p class="field-hint">
-              Use the amounts you weigh out before any cooking or processing. The total can be anything;
-              it doesn't have to add up to 100 g.
+              <template v-if="draft.compositionCoverage === 'partial'">
+                Enter known component amounts on the same basis. Leave an amount blank when unknown;
+                no percentages or full composition will be calculated.
+              </template>
+              <template v-else>
+                Use amounts on the same basis. The total can be anything; it doesn't have to add up to 100 g.
+              </template>
             </p>
           </div>
           <AppButton
@@ -123,7 +156,7 @@ function submit(): void {
           </AppButton>
         </div>
         <div
-          v-if="singleIngredients.length === 0"
+          v-if="ingredients.length === 0"
           class="inline-empty"
         >
           You haven't saved any ingredients yet. Add them on the Ingredients page first, or use another
@@ -206,6 +239,18 @@ function submit(): void {
             another recipe, and we'll stop you if it does.
           </p>
         </div>
+        <label
+          v-if="record?.supplierComposition?.coverage === 'complete' && draft.compositionCoverage === 'complete'"
+          class="field"
+        >
+          <span>
+            <input
+              v-model="draft.confirmCompositionChanges"
+              type="checkbox"
+            >
+            If I changed the composition or source, I checked that it is still complete.
+          </span>
+        </label>
       </div>
 
       <div
@@ -235,7 +280,7 @@ function submit(): void {
             v-for="(line, index) in draft.lines"
             :key="line.id"
           >
-            <strong>{{ targetName(line) }}</strong>: {{ line.quantity || 'no amount' }} {{ line.unit }}
+            <strong>{{ targetName(line) }}</strong>: {{ line.quantity || 'amount unknown' }} {{ line.quantity ? line.unit : '' }}
             <small v-if="shares[index]">(about {{ shares[index] }} of the recipe by weight)</small>
           </li>
         </ul>

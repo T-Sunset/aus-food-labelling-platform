@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
+import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import { openProductStep } from './helpers';
 
@@ -66,6 +67,16 @@ test('worked examples load, stay REVIEW REQUIRED, preview when asked, show label
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
   await page.getByLabel('Product draft').selectOption({ label: 'Example Apple and Oat Puree' });
   await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeDisabled();
+  const reportDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download review report' }).click();
+  const report = await reportDownload;
+  expect(report.suggestedFilename()).toMatch(/-review-report\.pdf$/);
+  const reportPath = await report.path();
+  if (!reportPath) throw new Error('The review report was not saved locally.');
+  const reportText = (await readFile(reportPath)).toString('latin1');
+  expect(reportText).toContain('Still needed:');
+  expect(reportText).toContain('No label layout is included in this report.');
+  expect(reportText).toContain('does not certify legal compliance.');
   await expect(page.getByText('Needs attention!').first()).toBeVisible();
 
   const axe = await new AxeBuilder({ page })

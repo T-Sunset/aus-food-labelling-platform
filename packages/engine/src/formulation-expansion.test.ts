@@ -3,6 +3,28 @@ import type { Formulation } from '@aus-food/domain';
 import { expandFormulation, FormulationExpansionError } from './formulation-expansion.js';
 
 describe('formulation expansion', () => {
+  it('rejects partial supplier compositions at the root and on nested paths', () => {
+    const partial: Formulation = {
+      id: 'partial',
+      lines: [{ id: 'known', kind: 'ingredient', ingredientId: 'water', quantity: { value: '99', unit: 'g' } }],
+      supplierComposition: {
+        coverage: 'partial', specification: { reference: 'SPEC', sourceDate: '2026-01-01' },
+        unquantifiedComponents: [{ id: 'unknown', kind: 'ingredient', ingredientId: 'oil' }],
+      },
+    };
+    const outer: Formulation = {
+      id: 'outer',
+      lines: [{ id: 'nested', kind: 'formulation', formulationId: 'partial', quantity: { value: '1', unit: 'g' } }],
+    };
+    for (const id of ['partial', 'outer']) {
+      expect(() => expandFormulation(id, { value: '100', unit: 'g' }, [outer, partial]))
+        .toThrow(/partial; its proportions cannot be calculated/);
+    }
+    const complete: Formulation = {
+      ...partial, supplierComposition: { ...partial.supplierComposition!, coverage: 'complete', unquantifiedComponents: [] },
+    };
+    expect(expandFormulation('partial', { value: '100', unit: 'g' }, [complete])[0]?.mass.value).toBe('100');
+  });
   it('expands direct ingredients to the requested batch mass', () => {
     const formulations: readonly Formulation[] = [
       {

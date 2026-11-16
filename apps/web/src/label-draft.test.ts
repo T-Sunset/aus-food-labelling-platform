@@ -115,9 +115,21 @@ describe('draft label and live readiness', () => {
     const compound = { ...ingredient('Flour'), kind: 'compound' as const, compoundFormulationId: 'inside' };
     const inside: FormulationRecord = {
       ...recipe, id: 'inside', lines: [{ id: 'c', kind: 'ingredient', ingredientId: 'Sugar', quantity: { value: '1', unit: 'g' } }],
+      supplierComposition: {
+        coverage: 'complete', specification: { reference: 'SPEC', sourceDate: '2026-01-01' }, unquantifiedComponents: [],
+      },
     };
     expect(makeLabelDraft(product, [recipe, inside], [compound, ingredient('Sugar')]).declaration)
       .toBe('Flour [Sugar], Sugar');
+    const legacy = { ...recipe, id: inside.id, lines: inside.lines };
+    const legacyResult = makeLabelDraft(product, [recipe, legacy], [compound, ingredient('Sugar')]);
+    expect(legacyResult.missing.join(' ')).toContain('confirm complete compound composition');
+    const partial: FormulationRecord = {
+      ...inside,
+      supplierComposition: { ...inside.supplierComposition!, coverage: 'partial' },
+    };
+    expect(makeLabelDraft(product, [recipe, partial], [compound, ingredient('Sugar')]).missing.join(' '))
+      .toContain('partial; its proportions cannot be calculated');
     const circular = { ...compound, compoundFormulationId: 'recipe' };
     expect(makeLabelDraft(product, [recipe], [circular, ingredient('Sugar')]).missing.join(' ')).toMatch(/circular/);
     expect(makeLabelDraft(product, [], []).missing.join(' ')).toMatch(/Recipe needs attention/);

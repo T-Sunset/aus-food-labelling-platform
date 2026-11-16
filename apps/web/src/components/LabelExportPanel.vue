@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
+  createConsultantReportPdf,
   createLabelPdf,
   layoutLabel,
   preloadLabelPdfRenderer,
@@ -9,6 +10,8 @@ import {
 import type { FormulationRecord, IngredientRecord, ProductRecord } from '@aus-food/storage';
 import { makeLabelDraft } from '../label-draft';
 import { makeConsultantNotes } from '../consultant-notes';
+import { LABEL_EXPORT_BLOCKERS } from '../label-export-readiness';
+import { caffeineCheckForProduct } from '../caffeine-check';
 import { RULE_RELEASE_LABEL } from '../rule-data';
 import AppButton from './ui/button/AppButton.vue';
 
@@ -25,6 +28,7 @@ const exportError = ref('');
 const exportStatus = ref('');
 const rendererStatus = ref('Loading the local PDF renderer.');
 const exporting = ref(false);
+const exportingReport = ref(false);
 
 watch(
   () => props.products,
@@ -42,6 +46,9 @@ const selectedProduct = computed(() =>
 const drafts = computed(() => new Map(props.products.map((product) =>
   [product.id, makeLabelDraft(product, props.formulations, props.ingredients)])));
 const selectedDraft = computed(() => drafts.value.get(selectedProductId.value));
+const caffeineCheck = computed(() => selectedProduct.value
+  ? caffeineCheckForProduct(selectedProduct.value, new Date().toISOString().slice(0, 10))
+  : undefined);
 
 function allergenSummary(draft: NonNullable<typeof selectedDraft.value>): string {
   const contains = draft.allergens.length ? `Contains: ${draft.allergens.join(', ')}.` : '';
@@ -196,9 +203,10 @@ async function exportPdf(): Promise<void> {
   const current = generatedLayout.value;
   const draft = selectedDraft.value;
   if (!current || !('layout' in current) || exporting.value || !draft
-    || draft.missing.length > 0 || hasLayoutOverflow.value) {
+    || draft.missing.length > 0 || hasLayoutOverflow.value || LABEL_EXPORT_BLOCKERS.length > 0) {
     return;
   }
+
   exportError.value = '';
   exportStatus.value = '';
   exporting.value = true;
@@ -228,6 +236,41 @@ async function exportPdf(): Promise<void> {
     exportError.value = error instanceof Error ? error.message : 'The PDF draft could not be exported.';
   } finally {
     exporting.value = false;
+  }
+}
+
+async function exportReport(): Promise<void> {
+  const product = selectedProduct.value;
+  const draft = selectedDraft.value;
+  if (!product || !draft || exportingReport.value) return;
+  exportError.value = '';
+  exportStatus.value = '';
+  exportingReport.value = true;
+  try {
+    const bytes = await createConsultantReportPdf({
+      productVersion: `draft-${product.updatedAt}`,
+      ruleRelease: `${RULE_RELEASE_LABEL}; no active release`,
+      exportedAt: new Date().toISOString(),
+      consultantNotes: makeConsultantNotes(product, props.formulations, props.ingredients, draft),
+    });
+    if (selectedDraft.value !== draft || selectedProductId.value !== product.id) {
+      throw new Error('The product or its ingredients changed during export. Please try again.');
+    }
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    const url = URL.createObjectURL(new Blob([buffer], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${product.id}-review-report.pdf`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    exportStatus.value = 'Review report exported. It is not a finished label.';
+  } catch (error) {
+    exportError.value = error instanceof Error ? error.message : 'The review report could not be exported.';
+  } finally {
+    exportingReport.value = false;
   }
 }
 </script>
@@ -317,6 +360,39 @@ async function exportPdf(): Promise<void> {
           </option>
         </select>
       </label>
+      <AppButton
+        type="button"
+        :disabled="exportingReport || !rendererStatus.startsWith('PDF renderer loaded') || !selectedDraft"
+        @click="exportReport"
+      >
+        {{ exportingReport ? 'Preparing report…' : 'Download review report' }}
+      </AppButton>
+      <section
+        v-if="caffeineCheck"
+        class="panel"
+        aria-label="Caffeine concentration check"
+      >
+        <h2>Caffeine concentration</h2>
+        <p><strong>{{ caffeineCheck.status }}</strong> - {{ caffeineCheck.explanation }}</p>
+        <p>
+          The app cannot yet establish total caffeine from every ingredient or all classification facts.
+          These are being added in the next demo steps; do not enter a separate guessed total.
+        </p>
+        <p>Rule data are {{ caffeineCheck.ruleReviewStatus }}. This check is not legal clearance.</p>
+        <details>
+          <summary>Source and limitations</summary>
+          <p>{{ caffeineCheck.rule.provision }}; {{ caffeineCheck.rule.version }}</p>
+          <a :href="caffeineCheck.rule.sourceUrl">View the source provision</a>
+          <ul>
+            <li
+              v-for="limitation in caffeineCheck.limitations"
+              :key="limitation"
+            >
+              {{ limitation }}
+            </li>
+          </ul>
+        </details>
+      </section>
       <section
         v-if="selectedDraft"
         class="panel"
@@ -402,6 +478,13 @@ async function exportPdf(): Promise<void> {
         {{ exportStatus }}
       </p>
       <div
+        class="notice notice-warning"
+        role="status"
+      >
+        <strong>Label PDF export is unavailable.</strong>
+        <span>{{ LABEL_EXPORT_BLOCKERS.join(' ') }} You can still download the review report.</span>
+      </div>
+      <div
         v-if="exportError"
         class="notice notice-error"
         role="alert"
@@ -454,7 +537,7 @@ async function exportPdf(): Promise<void> {
         </p>
         <AppButton
           type="button"
-          :disabled="exporting || !rendererStatus.startsWith('PDF renderer loaded') || !selectedDraft || selectedDraft.missing.length > 0 || hasLayoutOverflow"
+          :disabled="exporting || !rendererStatus.startsWith('PDF renderer loaded') || !selectedDraft || selectedDraft.missing.length > 0 || hasLayoutOverflow || LABEL_EXPORT_BLOCKERS.length > 0"
           @click="exportPdf"
         >
           {{ exporting ? 'Preparing PDF…' : 'Export draft PDF' }}

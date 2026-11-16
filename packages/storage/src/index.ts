@@ -21,6 +21,7 @@ import type {
   ProductAdditiveNameInputs,
   ProductClaim,
   ProductClaimFacts,
+  SupplierCompositionEvidence,
 } from '@aus-food/domain';
 
 export interface DraftRecordBase {
@@ -30,6 +31,19 @@ export interface DraftRecordBase {
   readonly tags: readonly string[];
   readonly createdAt: string;
   readonly updatedAt: string;
+}
+
+export interface CaffeineStatement {
+  readonly status: 'present' | 'absent';
+  readonly amount?: string;
+  readonly unit?: 'g/100g' | 'mg/100g' | 'mg/100mL';
+  readonly specification: { readonly reference: string; readonly sourceDate: string };
+}
+
+export type SupplierFactKind = 'fruitJuice' | 'addedVitamins' | 'addedTaurine';
+export interface SupplierFactStatement {
+  readonly status: 'present' | 'absent';
+  readonly specification: { readonly reference: string; readonly sourceDate: string };
 }
 
 export interface IngredientRecord extends DraftRecordBase {
@@ -56,11 +70,36 @@ export interface IngredientRecord extends DraftRecordBase {
     readonly reference: string;
     readonly sourceDate: string;
   };
+  readonly ingredientIdentity?: {
+    readonly vocabularyVersion: 'demo-ingredients-1';
+    readonly code: 'water' | 'sugar' | 'citric-acid' | 'caffeine' | 'lemon-peel-oil' | 'flavour-blend' | 'unrecognised';
+    readonly specification: { readonly reference: string; readonly sourceDate: string };
+  };
+  readonly nutritionPer100mL?: Partial<Record<
+    'energy' | 'protein' | 'fat' | 'saturatedFat' | 'carbohydrate' | 'sugars' | 'sodium',
+    { readonly value: string; readonly sourceId: string; readonly sourceDate: string }
+  >>;
+  readonly caffeineEvidence?: {
+    readonly status: 'present' | 'absent' | 'conflicting';
+    readonly amount?: string;
+    readonly unit?: 'g/100g' | 'mg/100g' | 'mg/100mL';
+    readonly specification: { readonly reference: string; readonly sourceDate: string };
+    readonly statements?: readonly [CaffeineStatement, CaffeineStatement];
+    readonly decisions?: readonly {
+      readonly choice: 'statement1' | 'statement2' | 'unresolved';
+      readonly reason: string;
+      readonly recordedAt: string;
+    }[];
+  };
+  readonly supplierFacts?: Partial<Record<SupplierFactKind, readonly SupplierFactStatement[]>>;
+  // Kept outside supplierFacts so the previous v2 editor preserves it when updating known topics.
+  readonly otherSchedule28Statements?: readonly SupplierFactStatement[];
 }
 
 export interface FormulationRecord extends DraftRecordBase {
   readonly recordType: 'formulation';
   readonly lines: readonly FormulationComponent[];
+  readonly supplierComposition?: SupplierCompositionEvidence;
   readonly processMassProfile?: ProcessMassProfile;
 }
 
@@ -202,12 +241,14 @@ export interface LocalFoodStore {
   readonly approvedVersions: ApprovedVersionRepository;
   readonly workspaceWasPreviouslyUsed: boolean;
   readonly workspaceUsageMarkerAvailable: boolean;
+  readonly previousWorkspaceAvailable: boolean;
   readonly recoveryPoints: {
     list(): Promise<RecoveryPointRecord[]>;
   };
   exportBackup(options: BackupExportOptions): Promise<string>;
   inspectBackup(backup: string, passphrase?: string): Promise<RestoreInspection>;
   restoreBackup(backup: string, options?: BackupImportOptions): Promise<RestoreInspection>;
+  copyPreviousWorkspace(): Promise<WorkspaceRecordCounts>;
   requestDurableStorage(): Promise<StorageDurabilityStatus>;
   close(): void;
 }
@@ -780,6 +821,14 @@ function isWorkspaceDraftRecord(value: unknown): value is WorkspaceDraftRecord {
   return value.recordType === 'product' && isNonEmpty(value.formulationId);
 }
 
+function validSupplierStatements(statements: unknown): boolean {
+  return Array.isArray(statements) && statements.length > 0
+    && statements.every((statement: unknown) => isRecord(statement)
+      && ['present', 'absent'].includes(String(statement.status))
+      && isRecord(statement.specification) && isNonEmpty(statement.specification.reference)
+      && isIsoDate(statement.specification.sourceDate));
+}
+
 function validateDraftRecord(record: WorkspaceDraftRecord): void {
   if (!isWorkspaceDraftRecord(record)) {
     throw new RecordValidationError('Draft record is malformed or has an unsupported type');
@@ -857,6 +906,76 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
         || !isIsoDate(record.coverageSpecification.sourceDate))) {
       throw new RecordValidationError('coverageSpecification must include a reference and valid source date');
     }
+    if (record.caffeineEvidence !== undefined) {
+      const evidence = record.caffeineEvidence;
+      if (!isRecord(evidence) || !['present', 'absent', 'conflicting'].includes(String(evidence.status))
+        || !isRecord(evidence.specification) || !isNonEmpty(evidence.specification.reference)
+        || !isIsoDate(evidence.specification.sourceDate)
+        || (evidence.status === 'present'
+          ? typeof evidence.amount !== 'string' || !/^\d+(\.\d+)?$/.test(evidence.amount)
+            || !Number.isFinite(Number(evidence.amount)) || Number(evidence.amount) <= 0
+            || (evidence.unit === 'g/100g' && Number(evidence.amount) > 100)
+            || (evidence.unit === 'mg/100g' && Number(evidence.amount) > 100000)
+            || !['g/100g', 'mg/100g', 'mg/100mL'].includes(String(evidence.unit))
+          : evidence.amount !== undefined || evidence.unit !== undefined)) {
+        throw new RecordValidationError('Caffeine evidence needs a status, dated specification and a positive amount and unit only when present');
+      }
+      if (evidence.statements !== undefined) {
+        if (evidence.status !== 'conflicting' || !Array.isArray(evidence.statements) || evidence.statements.length !== 2) {
+          throw new RecordValidationError('Conflicting caffeine evidence needs two statements');
+        }
+        for (const statement of evidence.statements) {
+          if (!isRecord(statement) || !['present', 'absent'].includes(String(statement.status))
+            || !isRecord(statement.specification) || !isNonEmpty(statement.specification.reference)
+            || !isIsoDate(statement.specification.sourceDate)
+            || (statement.status === 'present'
+              ? typeof statement.amount !== 'string' || !/^\d+(\.\d+)?$/.test(statement.amount)
+                || !Number.isFinite(Number(statement.amount)) || Number(statement.amount) <= 0
+                || (statement.unit === 'g/100g' && Number(statement.amount) > 100)
+                || (statement.unit === 'mg/100g' && Number(statement.amount) > 100000)
+                || !['g/100g', 'mg/100g', 'mg/100mL'].includes(String(statement.unit))
+              : statement.amount !== undefined || statement.unit !== undefined)) {
+            throw new RecordValidationError('Each caffeine statement needs a dated source and, when present, a positive amount and unit');
+          }
+        }
+      }
+      if (evidence.decisions !== undefined && (
+        evidence.status !== 'conflicting' || !Array.isArray(evidence.statements)
+        || !Array.isArray(evidence.decisions) || evidence.decisions.length === 0
+        || evidence.decisions.some((decision: unknown) => !isRecord(decision)
+          || !['statement1', 'statement2', 'unresolved'].includes(String(decision.choice))
+          || !isNonEmpty(decision.reason) || !isIsoDateTime(decision.recordedAt))
+      )) {
+        throw new RecordValidationError('Caffeine conflict decisions need two statements, a choice, an explanation and a valid time');
+      }
+    }
+    if (record.ingredientIdentity !== undefined) {
+      const identity = record.ingredientIdentity;
+      if (!isRecord(identity) || identity.vocabularyVersion !== 'demo-ingredients-1'
+        || !['water', 'sugar', 'citric-acid', 'caffeine', 'lemon-peel-oil', 'flavour-blend', 'unrecognised'].includes(String(identity.code))
+        || !isRecord(identity.specification) || !isNonEmpty(identity.specification.reference)
+        || !isIsoDate(identity.specification.sourceDate)) {
+        throw new RecordValidationError('Ingredient identity needs a supported vocabulary and dated specification');
+      }
+    }
+    if (record.nutritionPer100mL !== undefined) {
+      if (!isRecord(record.nutritionPer100mL) || Object.entries(record.nutritionPer100mL).some(([key, value]) =>
+        !['energy', 'protein', 'fat', 'saturatedFat', 'carbohydrate', 'sugars', 'sodium'].includes(key)
+        || !isRecord(value) || typeof value.value !== 'string' || !/^\d+(\.\d+)?$/.test(value.value)
+        || !Number.isFinite(Number(value.value)) || !isNonEmpty(value.sourceId) || !isIsoDate(value.sourceDate))) {
+        throw new RecordValidationError('Per-100 mL nutrition needs non-negative values and dated sources');
+      }
+    }
+    if (record.supplierFacts !== undefined) {
+      if (!isRecord(record.supplierFacts) || Object.entries(record.supplierFacts).some(([kind, statements]) =>
+        !['fruitJuice', 'addedVitamins', 'addedTaurine'].includes(kind)
+        || !validSupplierStatements(statements))) {
+        throw new RecordValidationError('Supplier facts need supported topics, present or absent statements and dated specifications');
+      }
+    }
+    if (record.otherSchedule28Statements !== undefined && !validSupplierStatements(record.otherSchedule28Statements)) {
+      throw new RecordValidationError('Other Schedule 28 statements need present or absent statements and dated specifications');
+    }
   } else if (record.recordType === 'formulation') {
     if (!Array.isArray(record.lines)) {
       throw new RecordValidationError('Formulation lines must be an array');
@@ -879,6 +998,32 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
         throw new RecordValidationError(`Formulation line ${index} has an unsupported kind`);
       }
       validateMassQuantity(line.quantity, `Formulation line ${index} quantity`);
+    }
+    if (record.supplierComposition !== undefined) {
+      const composition = record.supplierComposition;
+      if (!isRecord(composition) || !['partial', 'complete'].includes(String(composition.coverage))
+        || !isRecord(composition.specification) || !isNonEmpty(composition.specification.reference)
+        || !isIsoDate(composition.specification.sourceDate)
+        || !Array.isArray(composition.unquantifiedComponents)
+        || (composition.coverage === 'complete' && composition.unquantifiedComponents.length > 0)
+        || (composition.coverage === 'complete' && record.lines.length === 0)) {
+        throw new RecordValidationError('Supplier composition needs dated evidence and complete compositions need quantified lines');
+      }
+      for (const [index, line] of composition.unquantifiedComponents.entries()) {
+        if (!isRecord(line) || !isNonEmpty(line.id) || lineIds.has(line.id)
+          || (line.kind === 'ingredient' ? !isNonEmpty(line.ingredientId)
+            : line.kind === 'formulation' ? !isNonEmpty(line.formulationId) : true)
+          || line.quantity !== undefined) {
+          throw new RecordValidationError(`Unquantified composition line ${index} must have a unique id and a valid reference`);
+        }
+        lineIds.add(line.id);
+      }
+      if (composition.lineOrder !== undefined
+        && (!Array.isArray(composition.lineOrder) || composition.lineOrder.length !== lineIds.size
+          || new Set(composition.lineOrder).size !== lineIds.size
+          || composition.lineOrder.some((id) => !lineIds.has(id)))) {
+        throw new RecordValidationError('Supplier composition line order must contain each component once');
+      }
     }
   } else if (record.recordType === 'product' && !isNonEmpty(record.formulationId)) {
     throw new RecordValidationError('Product formulationId must be a non-empty string');
@@ -1019,7 +1164,7 @@ async function assertNoCircularReferences(database: FoodLabellingDatabase): Prom
   const edges = new Map<string, string[]>();
   for (const formulation of formulations) {
     const children: string[] = [];
-    for (const line of formulation.lines) {
+    for (const line of [...formulation.lines, ...(formulation.supplierComposition?.unquantifiedComponents ?? [])]) {
       if (line.kind === 'formulation' && formulationIds.has(line.formulationId)) {
         children.push(line.formulationId);
       } else if (line.kind === 'ingredient') {
@@ -1330,6 +1475,7 @@ class FoodLabellingDatabase extends Dexie {
           await transaction.table('reviewDecisions').add(reviewDecision);
         }
       });
+    this.version(3).stores({});
   }
 }
 
@@ -1390,10 +1536,14 @@ async function validateStoredData(database: FoodLabellingDatabase): Promise<void
 
 export async function openLocalFoodStore(options?: {
   readonly name?: string;
+  readonly previousName?: string;
   readonly now?: () => string;
   readonly usageMarker?: WorkspaceUsageMarker;
 }): Promise<LocalFoodStore> {
-  const database = new FoodLabellingDatabase(options?.name ?? 'aus-food-labelling');
+  const name = options?.name ?? 'aus-food-labelling-v2';
+  const previousName = options?.previousName ?? (options?.name === undefined ? 'aus-food-labelling' : undefined);
+  if (previousName === name) throw new RecordValidationError('Previous and current workspaces must be different');
+  const database = new FoodLabellingDatabase(name);
   await database.open();
   try {
     await validateStoredData(database);
@@ -1426,6 +1576,14 @@ export async function openLocalFoodStore(options?: {
       approvedVersions: new DexieApprovedVersionRepository(database, tables, markUsed, now),
       workspaceWasPreviouslyUsed,
       workspaceUsageMarkerAvailable: usageMarker !== undefined,
+      previousWorkspaceAvailable: empty && await database.recoveryPoints.count() === 0
+        && previousName !== undefined && await Dexie.exists(previousName),
+      copyPreviousWorkspace: async () => {
+        if (previousName === undefined) throw new RecordValidationError('No previous workspace is configured');
+        const counts = await copyPreviousWorkspace(previousName, database);
+        markUsed();
+        return counts;
+      },
       recoveryPoints: {
         list: () => database.recoveryPoints.toArray(),
       },
@@ -1447,7 +1605,8 @@ export async function openLocalFoodStore(options?: {
 }
 
 const backupFormat = 'aus-food-workspace-backup';
-const backupFormatVersion = 1;
+const backupFormatVersion = 2;
+type SupportedBackupVersion = 1 | 2;
 const backupKdfIterations = 310_000;
 const maximumBackupBytes = 100 * 1024 * 1024;
 const utf8Encoder = new TextEncoder();
@@ -1461,9 +1620,70 @@ interface BackupDataRecords {
   readonly reviewDecisions: readonly ReviewDecisionRecord[];
 }
 
+async function copyPreviousWorkspace(
+  previousName: string,
+  target: FoodLabellingDatabase,
+): Promise<WorkspaceRecordCounts> {
+  if (!await Dexie.exists(previousName)) throw new RecordValidationError('The previous workspace no longer exists');
+  const source = new Dexie(previousName);
+  try {
+    await source.open();
+    const tableNames = ['ingredients', 'formulations', 'products', 'approvedVersions', 'reviewDecisions', 'recoveryPoints'] as const;
+    if (tableNames.some((name) => !source.tables.some((table) => table.name === name))) {
+      throw new RecordValidationError('The previous workspace has an unsupported schema. Export a backup from the previous app and restore it here.');
+    }
+    const tables = tableNames.map((name) => source.table(name));
+    const snapshot = await source.transaction('r', tables, async () => {
+      const [ingredients, formulations, products, approvedVersions, reviewDecisions, recoveryPoints] = await Promise.all([
+        source.table('ingredients').toArray(),
+        source.table('formulations').toArray(),
+        source.table('products').toArray(),
+        source.table('approvedVersions').toArray(),
+        source.table('reviewDecisions').toArray(),
+        source.table('recoveryPoints').toArray(),
+      ]);
+      return { ingredients, formulations, products, approvedVersions, reviewDecisions, recoveryPoints };
+    });
+    const payload = {
+      format: backupFormat, formatVersion: backupFormatVersion, createdAt: new Date().toISOString(),
+      ingredients: snapshot.ingredients, formulations: snapshot.formulations, products: snapshot.products,
+      approvedVersions: snapshot.approvedVersions, reviewDecisions: snapshot.reviewDecisions,
+    };
+    validateBackupPayload(payload);
+    if (!snapshot.recoveryPoints.every((item) => isRecord(item) && isNonEmpty(item.id))) {
+      throw new RecordValidationError('The previous workspace has an invalid recovery point');
+    }
+    const targetTables = [target.ingredients, target.formulations, target.products, target.approvedVersions, target.reviewDecisions, target.recoveryPoints];
+    await target.transaction('rw', targetTables, async () => {
+      const counts = await Promise.all(targetTables.map((table) => table.count()));
+      if (counts.some((count) => count !== 0)) {
+        throw new RecordValidationError('The current workspace is not empty. No data was changed; use backup and restore to manage existing data.');
+      }
+      await target.ingredients.bulkAdd(payload.ingredients);
+      await target.formulations.bulkAdd(payload.formulations);
+      await target.products.bulkAdd(payload.products);
+      await target.approvedVersions.bulkAdd(payload.approvedVersions);
+      await target.reviewDecisions.bulkAdd(payload.reviewDecisions);
+      await target.recoveryPoints.bulkAdd(snapshot.recoveryPoints);
+      const copied = await Promise.all(targetTables.map((table) => table.toArray()));
+      for (let index = 0; index < tables.length; index += 1) {
+        const original = Object.values(snapshot)[index] as readonly { id: string }[];
+        const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
+        const actual = copied[index] as { id: string }[];
+        if (JSON.stringify([...original].sort(byId)) !== JSON.stringify([...actual].sort(byId))) {
+          throw new RecordValidationError('Workspace copy verification failed; no data was copied');
+        }
+      }
+    });
+    return countBackupRecords(payload);
+  } finally {
+    source.close();
+  }
+}
+
 interface WorkspaceBackupPayload extends BackupDataRecords {
   readonly format: typeof backupFormat;
-  readonly formatVersion: typeof backupFormatVersion;
+  readonly formatVersion: SupportedBackupVersion;
   readonly createdAt: string;
 }
 
@@ -1571,7 +1791,7 @@ function parseBackupObject(backup: string): Record<string, unknown> {
     || !('format' in value)
     || !('formatVersion' in value)
     || value.format !== backupFormat
-    || value.formatVersion !== backupFormatVersion
+    || (value.formatVersion !== 1 && value.formatVersion !== backupFormatVersion)
   ) {
     throw new BackupFormatError('Backup format or version is unsupported');
   }
@@ -1589,7 +1809,7 @@ function validateBackupPayload(value: unknown): asserts value is WorkspaceBackup
   const payload = value as Record<string, unknown>;
   if (
     payload.format !== backupFormat
-    || payload.formatVersion !== backupFormatVersion
+    || (payload.formatVersion !== 1 && payload.formatVersion !== backupFormatVersion)
     || !isIsoDateTime(payload.createdAt)
   ) {
     throw new BackupFormatError('Backup payload metadata is invalid');
@@ -1600,7 +1820,21 @@ function validateBackupPayload(value: unknown): asserts value is WorkspaceBackup
   }
 
   const ingredients = payload.ingredients as IngredientRecord[];
+  if (payload.formatVersion === 1 && (ingredients.some((item) =>
+    isRecord(item) && (item.caffeineEvidence !== undefined || item.ingredientIdentity !== undefined || item.nutritionPer100mL !== undefined || item.supplierFacts !== undefined || item.otherSchedule28Statements !== undefined))
+    || (payload.approvedVersions as unknown[]).some((item) => isRecord(item)
+      && isRecord(item.snapshot) && item.snapshot.recordType === 'ingredient'
+      && (item.snapshot.caffeineEvidence !== undefined || item.snapshot.ingredientIdentity !== undefined || item.snapshot.nutritionPer100mL !== undefined || item.snapshot.supplierFacts !== undefined || item.snapshot.otherSchedule28Statements !== undefined)))) {
+    throw new BackupFormatError('Version 1 backups cannot contain version 2 ingredient evidence');
+  }
   const formulations = payload.formulations as FormulationRecord[];
+  if (payload.formatVersion === 1 && (formulations.some((item) =>
+    isRecord(item) && item.supplierComposition !== undefined)
+    || (payload.approvedVersions as unknown[]).some((item) => isRecord(item)
+      && isRecord(item.snapshot) && item.snapshot.recordType === 'formulation'
+      && item.snapshot.supplierComposition !== undefined))) {
+    throw new BackupFormatError('Version 1 backups cannot contain version 2 supplier composition evidence');
+  }
   const products = payload.products as ProductRecord[];
   const versions = payload.approvedVersions as ApprovedVersionRecord[];
   const decisions = payload.reviewDecisions as ReviewDecisionRecord[];
@@ -1670,7 +1904,7 @@ function validateBackupPayload(value: unknown): asserts value is WorkspaceBackup
   const formulationEdges = new Map<string, string[]>();
   for (const formulation of formulations) {
     const edges: string[] = [];
-    for (const line of formulation.lines) {
+    for (const line of [...formulation.lines, ...(formulation.supplierComposition?.unquantifiedComponents ?? [])]) {
       if (line.kind === 'ingredient') {
         const ingredient = ingredientById.get(line.ingredientId);
         if (ingredient?.kind === 'compound' && ingredient.compoundFormulationId !== undefined) {
@@ -1858,6 +2092,9 @@ async function decodeBackup(backup: string, passphrase?: string): Promise<Worksp
   }
   if (typeof expectedHash !== 'string' || await sha256(JSON.stringify(payload)) !== expectedHash) {
     throw new BackupIntegrityError('Backup integrity check failed');
+  }
+  if (payload.formatVersion !== envelope.formatVersion) {
+    throw new BackupFormatError('Backup envelope and payload versions do not match');
   }
   return payload;
 }

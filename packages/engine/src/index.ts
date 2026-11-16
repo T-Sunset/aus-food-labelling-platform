@@ -27,6 +27,7 @@ export { evaluateAggregateColourLimit, evaluateSamePurposeMixture } from './addi
 export { evaluateAdditivePresencePath } from './additive-presence.js';
 export { identifyPrescribedNameCandidates } from './prescribed-name-candidates.js';
 export { evaluateInfantSweetenedWord } from './infant-sweetened-word.js';
+export { evaluateProvisionalCaffeine } from './provisional-caffeine.js';
 export { evaluateNutritionContentClaim } from './claim-evaluator.js';
 export { evaluateClaim } from './claim-router.js';
 export {

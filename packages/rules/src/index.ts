@@ -1,3 +1,5 @@
+export { demoCaffeineRule } from './caffeine-demo.js';
+
 export type MappingConfidence =
   | 'Provision'
   | 'Standard'

@@ -16,6 +16,7 @@ import {
   RepositoryCycleError,
   RepositoryNotFoundError,
   RestoreConflictError,
+  StorageMarkerWriteError,
   type ApprovedVersionRecord,
   type FormulationRecord,
   type IngredientRecord,
@@ -676,6 +677,330 @@ describe('schema migrations and recovery points', () => {
 });
 
 describe('versioned workspace backups', () => {
+  it('preserves additional statements when an earlier-style editor updates the known supplier facts', async () => {
+    const store = await openTestStore();
+    const statement = { status: 'absent' as const, specification: { reference: 'SPEC', sourceDate: '2026-01-01' } };
+    await store.ingredients.create({ ...ingredient, otherSchedule28Statements: [statement] });
+    await store.ingredients.update(ingredient.id, {
+      name: 'Edited ingredient',
+      supplierFacts: { fruitJuice: [statement] },
+    });
+    expect((await store.ingredients.get(ingredient.id))?.otherSchedule28Statements).toEqual([statement]);
+  });
+  it.each(['none', 'passphrase'] as const)('preserves sourced supplier statements in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const item: IngredientRecord = {
+      ...ingredient,
+      supplierFacts: {
+        fruitJuice: [
+          { status: 'absent', specification: { reference: 'OLD', sourceDate: '2026-01-01' } },
+          { status: 'present', specification: { reference: 'NEW', sourceDate: '2026-02-01' } },
+        ],
+        addedVitamins: [{ status: 'absent', specification: { reference: 'NEW', sourceDate: '2026-02-01' } }],
+      },
+      otherSchedule28Statements: [
+        { status: 'absent', specification: { reference: 'OLD', sourceDate: '2026-01-01' } },
+        { status: 'present', specification: { reference: 'NEW', sourceDate: '2026-02-01' } },
+      ],
+    };
+    await source.ingredients.create(item);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
+    expect((await target.ingredients.get(item.id))?.supplierFacts).toEqual(item.supplierFacts);
+    expect((await target.ingredients.get(item.id))?.otherSchedule28Statements).toEqual(item.otherSchedule28Statements);
+  });
+  it('rejects invalid supplier facts instead of treating them as absent', async () => {
+    const store = await openTestStore();
+    await expect(store.ingredients.create({
+      ...ingredient,
+      supplierFacts: { fruitJuice: [{ status: 'absent', specification: { reference: 'SPEC', sourceDate: '2026-02-30' } }] },
+    })).rejects.toThrow(/Supplier facts/);
+    await expect(store.ingredients.create({ ...ingredient, supplierFacts: { addedTaurine: [] } }))
+      .rejects.toThrow(/Supplier facts/);
+    await expect(store.ingredients.create({ ...ingredient, otherSchedule28Statements: [] }))
+      .rejects.toThrow(/Other Schedule 28 statements/);
+    await expect(store.ingredients.create({
+      ...ingredient,
+      otherSchedule28Statements: [{ status: 'absent', specification: { reference: 'SPEC', sourceDate: '2026-02-30' } }],
+    })).rejects.toThrow(/Other Schedule 28 statements/);
+  });
+  it('rejects supplier facts disguised as a version 1 backup', async () => {
+    const source = await openTestStore();
+    await source.ingredients.create({
+      ...ingredient,
+      supplierFacts: { fruitJuice: [{ status: 'absent', specification: { reference: 'SPEC', sourceDate: '2026-01-01' } }] },
+    });
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    envelope.formatVersion = 1;
+    envelope.payload.formatVersion = 1;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(envelope.payload)));
+    envelope.sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const target = await openTestStore();
+    await expect(target.restoreBackup(JSON.stringify(envelope))).rejects.toThrow(/Version 1 backups cannot contain version 2 ingredient evidence/);
+    expect(await target.ingredients.list()).toEqual([]);
+  });
+  it('rejects other Schedule 28 statements disguised as a version 1 backup', async () => {
+    const source = await openTestStore();
+    await source.ingredients.create({
+      ...ingredient,
+      otherSchedule28Statements: [{ status: 'absent', specification: { reference: 'SPEC', sourceDate: '2026-01-01' } }],
+    });
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    envelope.formatVersion = 1;
+    envelope.payload.formatVersion = 1;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(envelope.payload)));
+    envelope.sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const target = await openTestStore();
+    await expect(target.restoreBackup(JSON.stringify(envelope))).rejects.toThrow(/Version 1 backups cannot contain version 2 ingredient evidence/);
+    expect(await target.ingredients.list()).toEqual([]);
+  });
+  it.each(['none', 'passphrase'] as const)('round-trips partial composition in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const partial: FormulationRecord = {
+      ...formulation,
+      supplierComposition: {
+        coverage: 'partial',
+        specification: { reference: 'BLEND-SPEC', sourceDate: '2026-01-01' },
+        unquantifiedComponents: [{ id: 'unknown', kind: 'ingredient', ingredientId: 'other' }],
+      },
+    };
+    await source.formulations.create(partial);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
+    expect(await target.formulations.get(partial.id)).toEqual(partial);
+  });
+  it('rejects invalid complete composition and cycles through unquantified components', async () => {
+    const store = await openTestStore();
+    const evidence = {
+      coverage: 'partial' as const,
+      specification: { reference: 'BLEND', sourceDate: '2026-01-01' },
+      unquantifiedComponents: [{ id: 'unknown', kind: 'formulation' as const, formulationId: formulation.id }],
+    };
+    await expect(store.formulations.create({ ...formulation, supplierComposition: evidence }))
+      .rejects.toBeInstanceOf(RepositoryCycleError);
+    await store.formulations.create(formulation);
+    await expect(store.formulations.update(formulation.id, { supplierComposition: evidence }))
+      .rejects.toBeInstanceOf(RepositoryCycleError);
+    expect(await store.formulations.get(formulation.id)).toEqual(formulation);
+    await expect(store.formulations.update(formulation.id, {
+      supplierComposition: { ...evidence, coverage: 'complete' },
+    })).rejects.toThrow(/complete compositions/);
+  });
+  it('rejects imported partial composition cycles and v1 composition fields', async () => {
+    const source = await openTestStore();
+    const partial: FormulationRecord = {
+      ...formulation,
+      supplierComposition: {
+        coverage: 'partial',
+        specification: { reference: 'BLEND', sourceDate: '2026-01-01' },
+        unquantifiedComponents: [{ id: 'unknown', kind: 'ingredient', ingredientId: 'other' }],
+        lineOrder: ['line-1', 'unknown'],
+      },
+    };
+    await source.formulations.create(partial);
+    const target = await openTestStore();
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    const checksum = async () => {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(envelope.payload)));
+      envelope.sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    };
+    envelope.payload.formulations[0].supplierComposition.unquantifiedComponents[0] = {
+      id: 'unknown', kind: 'formulation', formulationId: partial.id,
+    };
+    await checksum();
+    await expect(target.restoreBackup(JSON.stringify(envelope))).rejects.toThrow(/circular/);
+    expect(await target.formulations.list()).toEqual([]);
+    envelope.formatVersion = 1;
+    envelope.payload.formatVersion = 1;
+    await checksum();
+    await expect(target.restoreBackup(JSON.stringify(envelope))).rejects.toThrow(/Version 1 backups cannot contain version 2 supplier composition/);
+  });
+  it('reports a marker failure after copying while retaining the copied data', async () => {
+    const previousName = `food-test-${crypto.randomUUID()}`;
+    const currentName = `food-test-${crypto.randomUUID()}`;
+    const previous = await openLocalFoodStore({ name: previousName });
+    await previous.ingredients.create(ingredient);
+    const current = await openLocalFoodStore({
+      name: currentName, previousName,
+      usageMarker: { wasPreviouslyUsed: () => false, markUsed: () => { throw new Error('marker unavailable'); } },
+    });
+    stores.push({ name: previousName, close: previous.close }, { name: currentName, close: current.close });
+    await expect(current.copyPreviousWorkspace()).rejects.toBeInstanceOf(StorageMarkerWriteError);
+    expect(await current.ingredients.get(ingredient.id)).toEqual(ingredient);
+    expect(await previous.ingredients.get(ingredient.id)).toEqual(ingredient);
+    await expect(current.copyPreviousWorkspace()).rejects.toThrow('current workspace is not empty');
+  });
+  it('copies a previous workspace without overwriting or syncing either workspace', async () => {
+    const previousName = `food-test-${crypto.randomUUID()}`;
+    const currentName = `food-test-${crypto.randomUUID()}`;
+    const previous = await openLocalFoodStore({ name: previousName });
+    const current = await openLocalFoodStore({ name: currentName, previousName });
+    stores.push({ name: previousName, close: previous.close }, { name: currentName, close: current.close });
+    await previous.ingredients.create(ingredient);
+    await previous.formulations.create(formulation);
+    await previous.products.create(product);
+    await previous.approvedVersions.approveDraft('ingredient', ingredient.id, {
+      reviewDecisionId: 'copy-decision', reviewerId: 'reviewer', rationale: 'Fixture review', results: [reviewResult],
+    });
+    const raw = new Dexie(previousName);
+    await raw.open();
+    const recovery = {
+      id: 'recovery-fixture', fromVersion: 1, toVersion: 2, createdAt: '2026-01-01T00:00:00.000Z',
+      records: { ingredients: [ingredient], formulations: [], products: [], approvedVersions: [] },
+    };
+    await raw.table('recoveryPoints').add(recovery);
+    raw.close();
+    const counts = await current.copyPreviousWorkspace();
+    expect(counts).toMatchObject({ ingredients: 1, formulations: 1, products: 1, approvedVersions: 1, reviewDecisions: 1 });
+    expect(await current.ingredients.get(ingredient.id)).toEqual(ingredient);
+    expect(await current.approvedVersions.list('ingredient', ingredient.id)).toEqual(
+      await previous.approvedVersions.list('ingredient', ingredient.id),
+    );
+    expect(await current.recoveryPoints.list()).toEqual([recovery]);
+    await previous.ingredients.update(ingredient.id, { name: 'Old copy edited' });
+    expect((await current.ingredients.get(ingredient.id))?.name).toBe('Oats');
+    await expect(current.copyPreviousWorkspace()).rejects.toThrow('current workspace is not empty');
+    expect((await current.ingredients.get(ingredient.id))?.name).toBe('Oats');
+  });
+  it('upgrades a version 2 workspace without inventing evidence', async () => {
+    const name = `food-test-${crypto.randomUUID()}`;
+    const legacy = new Dexie(name);
+    legacy.version(1).stores({
+      ingredients: 'id, name, supplierName, kind, updatedAt, *tags',
+      formulations: 'id, name, updatedAt, *tags',
+      products: 'id, name, formulationId, updatedAt, *tags',
+      approvedVersions: 'id, &[recordType+recordId+version]',
+    });
+    legacy.version(2).stores({
+      reviewDecisions: 'id, versionId, reviewerId, decidedAt',
+      recoveryPoints: 'id, createdAt',
+    });
+    await legacy.open();
+    await legacy.table('ingredients').add(ingredient);
+    legacy.close();
+    const upgraded = await openLocalFoodStore({ name });
+    expect(await upgraded.ingredients.get(ingredient.id)).toEqual(ingredient);
+    upgraded.close();
+    await Dexie.delete(name);
+  });
+  it('imports a version 1 backup without inventing caffeine evidence', async () => {
+    const source = await openTestStore();
+    await source.ingredients.create(ingredient);
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    envelope.formatVersion = 1;
+    envelope.payload.formatVersion = 1;
+    const bytes = new TextEncoder().encode(JSON.stringify(envelope.payload));
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    envelope.sha256 = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    const target = await openTestStore();
+    await target.restoreBackup(JSON.stringify(envelope));
+    expect(await target.ingredients.get(ingredient.id)).toEqual(ingredient);
+  });
+  it.each(['none', 'passphrase'] as const)('round-trips sourced caffeine in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const item: IngredientRecord = {
+      ...ingredient,
+      caffeineEvidence: {
+        status: 'present', amount: '0.5', unit: 'mg/100mL',
+        specification: { reference: 'SPEC', sourceDate: '2026-01-01' },
+      },
+      ingredientIdentity: {
+        vocabularyVersion: 'demo-ingredients-1', code: 'unrecognised',
+        specification: { reference: 'SPEC', sourceDate: '2026-01-01' },
+      },
+      nutritionPer100mL: { energy: { value: '0', sourceId: 'SPEC', sourceDate: '2026-01-01' } },
+    };
+    await source.ingredients.create(item);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
+    expect(JSON.parse(backup).formatVersion).toBe(2);
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
+    expect(await target.ingredients.get(item.id)).toEqual(item);
+  });
+
+  it('rejects invalid caffeine data rather than treating it as absent', async () => {
+    const store = await openTestStore();
+    await expect(store.ingredients.create({
+      ...ingredient,
+      caffeineEvidence: {
+        status: 'present', amount: '0', unit: 'g/100g',
+        specification: { reference: 'SPEC', sourceDate: '2026-01-01' },
+      },
+    })).rejects.toThrow(/Caffeine evidence/);
+  });
+  it('validates identity and volume nutrition independently of caffeine evidence', async () => {
+    const store = await openTestStore();
+    await expect(store.ingredients.create({
+      ...ingredient,
+      ingredientIdentity: {
+        vocabularyVersion: 'demo-ingredients-1', code: 'water',
+        specification: { reference: '', sourceDate: '2026-01-01' },
+      },
+    })).rejects.toThrow(/Ingredient identity/);
+    await expect(store.ingredients.create({
+      ...ingredient,
+      nutritionPer100mL: { energy: { value: '-1', sourceId: 'SPEC', sourceDate: '2026-01-01' } },
+    })).rejects.toThrow(/Per-100 mL nutrition/);
+  });
+  it.each(['none', 'passphrase'] as const)('preserves both caffeine conflict sources in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const item: IngredientRecord = {
+      ...ingredient,
+      caffeineEvidence: {
+        status: 'conflicting',
+        specification: { reference: 'SPEC-2', sourceDate: '2026-02-01' },
+        statements: [
+          { status: 'present', amount: '10', unit: 'mg/100mL', specification: { reference: 'SPEC-1', sourceDate: '2026-01-01' } },
+          { status: 'absent', specification: { reference: 'SPEC-2', sourceDate: '2026-02-01' } },
+        ],
+        decisions: [{ choice: 'statement2', reason: 'Supplier confirmed the newer specification.', recordedAt: '2026-02-02T00:00:00.000Z' }],
+      },
+    };
+    await source.ingredients.create(item);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
+    expect(await target.ingredients.get(item.id)).toEqual(item);
+  });
+  it('rejects malformed or incomplete caffeine conflict statements', async () => {
+    const store = await openTestStore();
+    await expect(store.ingredients.create({
+      ...ingredient,
+      caffeineEvidence: {
+        status: 'conflicting', specification: { reference: 'SPEC', sourceDate: '2026-01-01' },
+        statements: [
+          { status: 'present', amount: '101', unit: 'g/100g', specification: { reference: 'A', sourceDate: '2026-01-01' } },
+          { status: 'absent', specification: { reference: 'B', sourceDate: '2026-01-01' } },
+        ],
+      },
+    })).rejects.toThrow(/Each caffeine statement/);
+    await expect(store.ingredients.create({
+      ...ingredient,
+      caffeineEvidence: {
+        status: 'conflicting', specification: { reference: 'SPEC', sourceDate: '2026-01-01' },
+        statements: [
+          { status: 'absent', specification: { reference: 'A', sourceDate: '2026-02-30' } },
+          { status: 'absent', specification: { reference: 'B', sourceDate: '2026-01-01' } },
+        ],
+      },
+    })).rejects.toThrow(/Each caffeine statement/);
+  });
+  it('rejects caffeine decisions without supporting statements or an explanation', async () => {
+    const store = await openTestStore();
+    await expect(store.ingredients.create({
+      ...ingredient,
+      caffeineEvidence: {
+        status: 'conflicting', specification: { reference: 'SPEC', sourceDate: '2026-01-01' },
+        decisions: [{ choice: 'statement1', reason: '', recordedAt: '2026-01-01T00:00:00.000Z' }],
+      },
+    })).rejects.toThrow(/conflict decisions/);
+  });
   it('round-trips nutrition energy, food basis and density evidence', async () => {
     const source = await openTestStore();
     const ingredientWithEnergy: IngredientRecord = {

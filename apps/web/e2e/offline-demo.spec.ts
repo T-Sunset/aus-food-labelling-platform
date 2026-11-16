@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import AxeBuilder from '@axe-core/playwright';
+import { openIngredientSection } from './helpers';
 
-test('loads the illustrative workflow and exports a PDF while offline', async ({ page }) => {
+test('loads the illustrative workflow and exports a review report while offline', async ({ page }) => {
   const response = await page.goto('/');
   expect(response?.headers()['content-security-policy']).toContain("script-src 'self'");
   await expect(page.getByRole('heading', { name: 'Good work starts with good records.' })).toBeVisible();
@@ -21,19 +22,18 @@ test('loads the illustrative workflow and exports a PDF while offline', async ({
   await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
   for (const name of ['Illustrative base', 'Illustrative carrier']) {
     await page.getByRole('button', { name: `Edit ingredient ${name}` }).click();
-    const steps = page.getByRole('navigation', { name: 'Steps' });
-    await steps.getByRole('button', { name: 'Spec sheet' }).click();
+    await openIngredientSection(page, 'Source details');
     await page.getByLabel('Specification reference').fill('Illustrative spec');
     await page.getByLabel('Specification date').fill('2026-01-01');
-    await steps.getByRole('button', { name: 'Nutrition' }).click();
+    await openIngredientSection(page, 'Nutrition');
     await page.getByLabel('Energy').fill('100');
     for (const nutrient of ['Protein', 'Fat, total', 'Saturated fat', 'Carbohydrate', 'Sugars', 'Sodium']) {
       await page.getByLabel(nutrient).fill('1');
     }
-    await steps.getByRole('button', { name: 'Allergens' }).click();
+    await openIngredientSection(page, 'Allergens');
     if (name === 'Illustrative base') await page.getByLabel('Milk', { exact: true }).check();
     await page.getByLabel(/I checked the supplier information for every allergen shown/).check();
-    await steps.getByRole('button', { name: 'Additives' }).click();
+    await openIngredientSection(page, 'Additives and other ingredients');
     await page.getByLabel(/The supplier confirms this ingredient contains no additives/).check();
     await page.getByRole('button', { name: 'Save ingredient draft' }).click();
   }
@@ -83,30 +83,28 @@ test('loads the illustrative workflow and exports a PDF while offline', async ({
   await expect(page.getByText('REVIEW REQUIRED', { exact: true }).first()).toBeVisible();
 
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeDisabled();
+  await expect(page.getByText('Label PDF export is unavailable.')).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export draft PDF' }).click();
+  await page.getByRole('button', { name: 'Download review report' }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe('demo-product-label-draft.pdf');
+  expect(download.suggestedFilename()).toBe('demo-product-review-report.pdf');
   const pdfPath = await download.path();
   expect(pdfPath).not.toBeNull();
   if (!pdfPath) throw new Error('The PDF was not saved locally.');
   const pdfText = (await readFile(pdfPath)).toString('latin1');
-  expect(pdfText).toContain('Illustrative carrier, Illustrative base');
-  expect(pdfText).toContain('Contains: milk');
-  expect(pdfText).toContain('DRAFT NUTRITION INFORMATION');
-  expect(pdfText).toContain('50 kJ');
+  expect(pdfText).toContain('No label layout is included in this report.');
   expect(pdfText).toContain('Notes for your consultant');
   expect(pdfText).toContain('No claims were entered.');
   expect(pdfText).toContain('Official results and limitations only');
   expect(pdfText).not.toContain('ILLUSTRATIVE ONLY');
-  expect(pdfText).toContain('DRAFT - consultant review required');
-  await expect(page.getByRole('status').filter({ hasText: 'Draft PDF exported' }))
+  await expect(page.getByRole('status').filter({ hasText: 'Review report exported' }))
     .toBeVisible();
   const secondDownloadPromise = page.waitForEvent('download');
-  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Export draft PDF' }).click();
+  await expect(page.getByRole('button', { name: 'Download review report' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Download review report' }).click();
   expect((await secondDownloadPromise).suggestedFilename()).toBe(
-    'demo-product-label-draft.pdf',
+    'demo-product-review-report.pdf',
   );
   await page.getByRole('button', { name: 'Products', exact: true }).click();
   await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Pack details' }).click();
@@ -128,15 +126,7 @@ test('loads the illustrative workflow and exports a PDF while offline', async ({
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
   await expect(page.getByRole('table', { name: 'Draft nutrition information' })).toContainText('60 kJ');
   await expect(page.getByRole('table', { name: 'Draft nutrition information' })).toContainText('120 kJ');
-  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeEnabled();
-  const liquidDownload = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export draft PDF' }).click();
-  const liquidPath = await (await liquidDownload).path();
-  if (!liquidPath) throw new Error('The liquid draft PDF was not saved locally.');
-  const liquidText = (await readFile(liquidPath)).toString('latin1');
-  expect(liquidText).toContain('Per 100 mL');
-  expect(liquidText).toContain('60 kJ');
-  expect(liquidText).toContain('120 kJ');
+  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeDisabled();
   await page.getByRole('button', { name: 'Products', exact: true }).click();
   await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Claims' }).click();
   await page.getByRole('button', { name: 'Add a claim' }).click();
@@ -147,9 +137,9 @@ test('loads the illustrative workflow and exports a PDF while offline', async ({
   await expect(page.getByRole('status').filter({ hasText: 'Claims and claim facts saved' })).toBeVisible();
   await page.getByLabel(/Show what each result would be/).check();
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeDisabled();
   const claimDownload = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export draft PDF' }).click();
+  await page.getByRole('button', { name: 'Download review report' }).click();
   const claimPath = await (await claimDownload).path();
   if (!claimPath) throw new Error('The claim report PDF was not saved locally.');
   const claimText = (await readFile(claimPath)).toString('latin1');
@@ -162,11 +152,11 @@ test('loads the illustrative workflow and exports a PDF while offline', async ({
   await page.getByRole('button', { name: 'Save claims' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Claims and claim facts saved' })).toBeVisible();
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
-  await page.getByRole('button', { name: 'Export draft PDF' }).click();
+  await page.getByRole('button', { name: 'Download review report' }).click();
   await expect(page.getByRole('alert')).toContainText('characters the PDF font cannot display');
   await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
   await page.getByRole('button', { name: 'Edit ingredient Illustrative carrier' }).click();
-  await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Nutrition' }).click();
+  await openIngredientSection(page, 'Nutrition');
   await page.getByLabel('Protein').fill('');
   await page.getByRole('button', { name: 'Save ingredient draft' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Ingredient draft saved locally.' })).toBeVisible();

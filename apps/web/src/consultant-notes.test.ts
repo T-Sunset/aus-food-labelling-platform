@@ -17,7 +17,10 @@ describe('consultant notes', () => {
     expect(text).toContain('Supports concentration');
     expect(text).toContain('REVIEW REQUIRED');
     expect(text).toContain('Still needed:');
+    expect(text).toContain('Label PDF export blocked:');
     expect(text).toContain('Source: https://');
+    expect(text).toContain('effective from ');
+    expect(text).toContain('; path ');
     expect(text).not.toContain('ILLUSTRATIVE ONLY');
     expect(text).not.toContain('would be FAIL');
     expect(text).not.toContain('would be PASS');

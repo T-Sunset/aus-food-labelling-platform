@@ -1,5 +1,14 @@
 import type { Page } from '@playwright/test';
 
+export async function openIngredientSection(page: Page, title: string): Promise<void> {
+  const section = page.locator('details.ingredient-section').filter({
+    has: page.locator('summary').filter({ hasText: new RegExp(`^${title}$`) }),
+  });
+  if (!(await section.evaluate((element) => (element as HTMLDetailsElement).open))) {
+    await section.locator(':scope > summary').click();
+  }
+}
+
 // Opens a saved product in the Product builder and jumps to one of its steps.
 export async function openProductStep(page: Page, productName: string, stepTitle: string): Promise<void> {
   await page.getByRole('button', { name: 'Products', exact: true }).click();

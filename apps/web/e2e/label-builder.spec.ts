@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
+import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import { openProductStep } from './helpers';
 
@@ -35,6 +36,31 @@ test('product builder asks simple questions, requires a source and has no access
 
   const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(results.violations).toEqual([]);
+});
+
+test('caffeine check and review report remain unresolved without complete recipe evidence', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Load worked examples' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Worked examples loaded locally' })).toBeVisible();
+  await openProductStep(page, 'Example Citrus Boost', 'What is it?');
+  await page.getByLabel('What kind of product is this?').selectOption('caffeinatedBeverage');
+  await expect(page.getByText('Saved on this device.')).toBeVisible();
+  await page.getByRole('button', { name: 'Labels', exact: true }).click();
+  await page.getByLabel('Product draft').selectOption({ label: 'Example Citrus Boost' });
+  const check = page.getByRole('region', { name: 'Caffeine concentration check' });
+  await expect(check).toContainText('REVIEW REQUIRED');
+  await expect(check).toContainText('Total caffeine from every source is missing');
+  await expect(check).toContainText('do not enter a separate guessed total');
+  await expect(check).not.toContainText('WITHIN RANGE');
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download review report' }).click();
+  const reportPath = await (await downloadPromise).path();
+  if (!reportPath) throw new Error('Review report was not saved locally.');
+  const report = (await readFile(reportPath)).toString('latin1');
+  expect(report).toContain('Caffeine concentration');
+  expect(report).toContain('Total caffeine from every source is missing');
+  expect(report).toContain('F2015L00467');
+  expect(report).not.toContain('WITHIN RANGE');
 });
 
 test('a new product is built step by step, with pack details saved and edited', async ({ page }) => {

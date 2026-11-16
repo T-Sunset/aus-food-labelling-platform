@@ -53,6 +53,54 @@ describe('buildFormulationRecord', () => {
     expect(edited.name).toBe('Renamed');
     expect((edited as unknown as { processMassProfile: unknown }).processMassProfile).toEqual({ marker: true });
   });
+
+  it('retains partial supplier evidence and components with unknown amounts', () => {
+    const draft = draftWithLines();
+    draft.compositionCoverage = 'partial';
+    draft.compositionReference = 'BLEND-SPEC';
+    draft.compositionDate = '2026-01-01';
+    draft.lines[1]!.quantity = '';
+    const record = buildFormulationRecord(draft, undefined, makeId, now);
+    expect(record.lines).toHaveLength(1);
+    expect(record.supplierComposition).toEqual({
+      coverage: 'partial',
+      specification: { reference: 'BLEND-SPEC', sourceDate: '2026-01-01' },
+      unquantifiedComponents: [{ id: 'l2', kind: 'formulation', formulationId: 'f-2' }],
+      lineOrder: ['l1', 'l2'],
+    });
+    expect(lineShares(draft)).toEqual([undefined, undefined]);
+    expect(buildFormulationRecord(draftFromFormulation(record), record, makeId, now)).toEqual(record);
+    const edit = draftFromFormulation(record);
+    edit.compositionCoverage = 'complete';
+    expect(() => buildFormulationRecord(edit, record, makeId, now)).toThrow(/positive quantity/);
+    edit.lines[1]!.quantity = '10';
+    expect(buildFormulationRecord(edit, record, makeId, now).supplierComposition?.unquantifiedComponents).toEqual([]);
+    edit.compositionCoverage = '';
+    expect(() => buildFormulationRecord(edit, record, makeId, now)).toThrow(/cannot be removed/);
+  });
+
+  it('requires source details for supplier composition and supports unknown components', () => {
+    const draft = emptyFormulationDraft();
+    draft.name = 'Unknown blend';
+    draft.compositionCoverage = 'partial';
+    expect(() => buildFormulationRecord(draft, undefined, makeId, now)).toThrow(/reference and date/);
+    draft.compositionReference = 'SPEC';
+    draft.compositionDate = '2026-01-01';
+    expect(buildFormulationRecord(draft, undefined, makeId, now).lines).toEqual([]);
+  });
+
+  it('requires reconfirmation when an evidenced complete composition is changed', () => {
+    const draft = draftWithLines();
+    draft.compositionCoverage = 'complete';
+    draft.compositionReference = 'SPEC';
+    draft.compositionDate = '2026-01-01';
+    const original = buildFormulationRecord(draft, undefined, makeId, now);
+    const edit = draftFromFormulation(original);
+    edit.lines[0]!.quantity = '800';
+    expect(() => buildFormulationRecord(edit, original, makeId, now)).toThrow(/Confirm that the updated composition/);
+    edit.confirmCompositionChanges = true;
+    expect(buildFormulationRecord(edit, original, makeId, now).lines[0]?.quantity.value).toBe('800');
+  });
 });
 
 describe('lineShares and statuses', () => {

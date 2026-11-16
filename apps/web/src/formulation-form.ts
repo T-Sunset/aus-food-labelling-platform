@@ -13,22 +13,41 @@ export interface FormulationLineDraft {
 export interface FormulationDraft {
   name: string;
   lines: FormulationLineDraft[];
+  compositionCoverage: '' | 'partial' | 'complete';
+  compositionReference: string;
+  compositionDate: string;
+  confirmCompositionChanges: boolean;
 }
 
 export function emptyFormulationDraft(): FormulationDraft {
-  return { name: '', lines: [] };
+  return { name: '', lines: [], compositionCoverage: '', compositionReference: '', compositionDate: '', confirmCompositionChanges: false };
 }
 
 export function draftFromFormulation(record: FormulationRecord): FormulationDraft {
+  const lines: FormulationLineDraft[] = [...record.lines.map((line) => ({
+    id: line.id,
+    kind: line.kind,
+    targetId: line.kind === 'ingredient' ? line.ingredientId : line.formulationId,
+    quantity: line.quantity.value,
+    unit: line.quantity.unit,
+  })), ...(record.supplierComposition?.unquantifiedComponents ?? []).map((line) => ({
+    id: line.id,
+    kind: line.kind,
+    targetId: line.kind === 'ingredient' ? line.ingredientId : line.formulationId,
+    quantity: '',
+    unit: 'g' as const,
+  }))];
+  if (record.supplierComposition?.lineOrder) {
+    const positions = new Map(record.supplierComposition.lineOrder.map((id, index) => [id, index]));
+    lines.sort((a, b) => (positions.get(a.id) ?? lines.length) - (positions.get(b.id) ?? lines.length));
+  }
   return {
     name: record.name,
-    lines: record.lines.map((line) => ({
-      id: line.id,
-      kind: line.kind,
-      targetId: line.kind === 'ingredient' ? line.ingredientId : line.formulationId,
-      quantity: line.quantity.value,
-      unit: line.quantity.unit,
-    })),
+    compositionCoverage: record.supplierComposition?.coverage ?? '',
+    compositionReference: record.supplierComposition?.specification.reference ?? '',
+    compositionDate: record.supplierComposition?.specification.sourceDate ?? '',
+    confirmCompositionChanges: false,
+    lines,
   };
 }
 
@@ -45,27 +64,55 @@ export function buildFormulationRecord(
   if (!name) {
     throw new Error('Give the formulation a name.');
   }
-  if (draft.lines.length === 0) {
+  if (draft.lines.length === 0 && draft.compositionCoverage !== 'partial') {
     throw new Error('Add at least one ingredient or nested formulation line.');
   }
-  const lines = draft.lines.map((line) => {
+  if (existing?.supplierComposition && !draft.compositionCoverage) {
+    throw new Error('Supplier composition evidence cannot be removed here. Keep a partial or complete supplier composition.');
+  }
+  if (draft.compositionCoverage && (!draft.compositionReference.trim() || !draft.compositionDate)) {
+    throw new Error('Enter the supplier composition reference and date.');
+  }
+  const lines: FormulationRecord['lines'][number][] = [];
+  const unquantified: NonNullable<FormulationRecord['supplierComposition']>['unquantifiedComponents'][number][] = [];
+  for (const line of draft.lines) {
     if (!line.targetId) {
       throw new Error('Choose a record for each formulation line.');
     }
-    if (!positiveNumber.test(line.quantity) || Number(line.quantity) <= 0) {
+    const target = line.kind === 'ingredient'
+      ? { id: line.id, kind: 'ingredient' as const, ingredientId: line.targetId }
+      : { id: line.id, kind: 'formulation' as const, formulationId: line.targetId };
+    if (!line.quantity.trim() && draft.compositionCoverage === 'partial') {
+      unquantified.push(target);
+      continue;
+    }
+    if (!positiveNumber.test(line.quantity) || !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0) {
       throw new Error('Each formulation line needs a positive quantity.');
     }
     const quantity = { value: line.quantity, unit: line.unit };
-    return line.kind === 'ingredient'
-      ? { id: line.id, kind: 'ingredient' as const, ingredientId: line.targetId, quantity }
-      : { id: line.id, kind: 'formulation' as const, formulationId: line.targetId, quantity };
-  });
+    lines.push({ ...target, quantity });
+  }
+  if (existing?.supplierComposition?.coverage === 'complete' && draft.compositionCoverage === 'complete'
+    && (JSON.stringify(lines) !== JSON.stringify(existing.lines)
+      || draft.compositionReference.trim() !== existing.supplierComposition.specification.reference
+      || draft.compositionDate !== existing.supplierComposition.specification.sourceDate)
+    && !draft.confirmCompositionChanges) {
+    throw new Error('Confirm that the updated composition and source are complete before saving.');
+  }
   return {
     ...(existing ?? {}),
     id: existing?.id ?? makeId('formulation'),
     name,
     recordType: 'formulation',
     lines,
+    ...(draft.compositionCoverage ? {
+      supplierComposition: {
+        coverage: draft.compositionCoverage,
+        specification: { reference: draft.compositionReference.trim(), sourceDate: draft.compositionDate },
+        unquantifiedComponents: unquantified,
+        lineOrder: draft.lines.map((line) => line.id),
+      },
+    } : {}),
     tags: existing?.tags ?? [],
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
@@ -76,6 +123,7 @@ const gramsPerUnit: Record<LineUnit, number> = { g: 1, kg: 1000, mg: 0.001 };
 
 // Display-only share of the recipe by weight; the engine does the exact calculation.
 export function lineShares(draft: FormulationDraft): (string | undefined)[] {
+  if (draft.compositionCoverage === 'partial') return draft.lines.map(() => undefined);
   const grams = draft.lines.map((line) =>
     positiveNumber.test(line.quantity) ? Number(line.quantity) * gramsPerUnit[line.unit] : undefined,
   );

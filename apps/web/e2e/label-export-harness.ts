@@ -1,4 +1,4 @@
-import { createLabelPdf, layoutLabel } from '../../../packages/label/src/index.js';
+import { createConsultantReportPdf, createLabelPdf, layoutLabel } from '../../../packages/label/src/index.js';
 
 export async function createRepeatExportFixture() {
   const layout = layoutLabel({
@@ -38,6 +38,8 @@ export async function createRepeatExportFixture() {
   };
   const notesFirst = await createLabelPdf(layout, withNotes);
   const notesSecond = await createLabelPdf(layout, withNotes);
+  const reportFirst = await createConsultantReportPdf(withNotes);
+  const reportSecond = await createConsultantReportPdf(withNotes);
   let unsupportedNotesRejected = false;
   try {
     await createLabelPdf(layout, { ...metadata, consultantNotes: [{ heading: 'Claims', lines: ['Unsupported character: 🥝'] }] });
@@ -72,6 +74,8 @@ export async function createRepeatExportFixture() {
     unsafeSvgRejected,
     notesFirstBytes: Array.from(notesFirst.pdfBytes),
     notesSecondBytes: Array.from(notesSecond.pdfBytes),
+    reportFirstBytes: Array.from(reportFirst),
+    reportSecondBytes: Array.from(reportSecond),
     unsupportedNotesRejected,
     unsupportedLabelRejected,
   };

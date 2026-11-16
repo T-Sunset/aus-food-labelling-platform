@@ -23,6 +23,147 @@ function filledDraft() {
 }
 
 describe('buildIngredientRecord', () => {
+  it('records only supplier-stated facts and keeps dated disagreements', () => {
+    const draft = filledDraft();
+    expect(buildIngredientRecord(draft, undefined, makeId, now).supplierFacts).toBeUndefined();
+    draft.supplierFacts.fruitJuice.status = 'absent';
+    draft.supplierFacts.addedVitamins.status = 'absent';
+    const original = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(original.supplierFacts?.fruitJuice).toEqual([
+      { status: 'absent', specification: { reference: 'SPEC-1', sourceDate: '2026-01-01' } },
+    ]);
+    expect(original.supplierFacts?.addedTaurine).toBeUndefined();
+    const edit = draftFromIngredient(original);
+    edit.specificationDate = '2026-02-01';
+    expect(buildIngredientRecord(edit, original, makeId, now).supplierFacts).toEqual(original.supplierFacts);
+    edit.supplierFacts.fruitJuice.status = 'present';
+    const changed = buildIngredientRecord(edit, original, makeId, now);
+    expect(changed.supplierFacts?.fruitJuice).toEqual([
+      { status: 'absent', specification: { reference: 'SPEC-1', sourceDate: '2026-01-01' } },
+      { status: 'present', specification: { reference: 'SPEC-1', sourceDate: '2026-02-01' } },
+    ]);
+    const reconfirm = draftFromIngredient(changed);
+    reconfirm.supplierFacts.addedVitamins.confirmCurrentSpec = true;
+    expect(buildIngredientRecord(reconfirm, changed, makeId, now).supplierFacts?.addedVitamins).toHaveLength(2);
+    reconfirm.supplierFacts.fruitJuice.status = '';
+    expect(() => buildIngredientRecord(reconfirm, changed, makeId, now)).toThrow(/saved statements cannot be removed/);
+    const noSource = emptyIngredientDraft();
+    noSource.name = 'Example';
+    noSource.kind = 'atomic';
+    noSource.supplierFacts.addedTaurine.status = 'present';
+    expect(() => buildIngredientRecord(noSource, undefined, makeId, now)).toThrow(/specification reference and date/);
+  });
+  it('keeps the other Schedule 28 coverage unknown, dated and conflict-aware', () => {
+    const draft = filledDraft();
+    expect(buildIngredientRecord(draft, undefined, makeId, now).otherSchedule28Statements).toBeUndefined();
+    draft.supplierFacts.otherSchedule28.status = 'absent';
+    const original = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(original.otherSchedule28Statements).toEqual([
+      { status: 'absent', specification: { reference: 'SPEC-1', sourceDate: '2026-01-01' } },
+    ]);
+    const edit = draftFromIngredient(original);
+    edit.specificationDate = '2026-02-01';
+    expect(buildIngredientRecord(edit, original, makeId, now).otherSchedule28Statements).toEqual(original.otherSchedule28Statements);
+    edit.supplierFacts.otherSchedule28.status = 'present';
+    const changed = buildIngredientRecord(edit, original, makeId, now);
+    expect(changed.otherSchedule28Statements).toEqual([
+      ...original.otherSchedule28Statements!,
+      { status: 'present', specification: { reference: 'SPEC-1', sourceDate: '2026-02-01' } },
+    ]);
+    const clear = draftFromIngredient(changed);
+    clear.supplierFacts.otherSchedule28.status = '';
+    expect(() => buildIngredientRecord(clear, changed, makeId, now)).toThrow(/saved statements cannot be removed/);
+    const noSource = emptyIngredientDraft();
+    noSource.name = 'Example';
+    noSource.kind = 'atomic';
+    noSource.supplierFacts.otherSchedule28.status = 'absent';
+    expect(() => buildIngredientRecord(noSource, undefined, makeId, now)).toThrow(/specification reference and date/);
+  });
+  it('stores supplier volume nutrition separately, retaining the original source on edits', () => {
+    const draft = filledDraft();
+    draft.nutritionPer100mL.energy = '0';
+    draft.nutritionPer100mL.sodium = '5.1';
+    const first = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(first.nutritionPer100mL).toEqual({
+      energy: { value: '0', sourceId: 'SPEC-1', sourceDate: '2026-01-01' },
+      sodium: { value: '5.1', sourceId: 'SPEC-1', sourceDate: '2026-01-01' },
+    });
+    const edit = draftFromIngredient(first);
+    edit.specificationDate = '2026-02-01';
+    expect(buildIngredientRecord(edit, first, makeId, now).nutritionPer100mL).toEqual(first.nutritionPer100mL);
+    edit.nutritionPer100mL.energy = '-1';
+    expect(() => buildIngredientRecord(edit, first, makeId, now)).toThrow(/non-negative per-100 mL/);
+  });
+  it('stores explicit identities with their specification and never infers them from names', () => {
+    const draft = filledDraft();
+    draft.name = 'Caffeine';
+    expect(buildIngredientRecord(draft, undefined, makeId, now).ingredientIdentity).toBeUndefined();
+    draft.ingredientIdentity = 'unrecognised';
+    const first = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(first.ingredientIdentity).toEqual({
+      vocabularyVersion: 'demo-ingredients-1', code: 'unrecognised',
+      specification: { reference: 'SPEC-1', sourceDate: '2026-01-01' },
+    });
+    const edit = draftFromIngredient(first);
+    edit.specificationDate = '2026-02-01';
+    expect(buildIngredientRecord(edit, first, makeId, now).ingredientIdentity).toEqual(first.ingredientIdentity);
+    edit.confirmIdentityForCurrentSpec = true;
+    expect(buildIngredientRecord(edit, first, makeId, now).ingredientIdentity?.specification.sourceDate).toBe('2026-02-01');
+  });
+  it('records sourced caffeine evidence without treating blank as absence', () => {
+    const draft = filledDraft();
+    expect(buildIngredientRecord(draft, undefined, makeId, now).caffeineEvidence).toBeUndefined();
+    draft.caffeineStatus = 'present';
+    draft.caffeineAmount = '100';
+    draft.caffeineUnit = 'g/100g';
+    const present = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(present.caffeineEvidence).toEqual({
+      status: 'present', amount: '100', unit: 'g/100g',
+      specification: { reference: 'SPEC-1', sourceDate: '2026-01-01' },
+    });
+    const edit = draftFromIngredient(present);
+    edit.specificationDate = '2026-02-01';
+    expect(buildIngredientRecord(edit, present, makeId, now).caffeineEvidence).toEqual(present.caffeineEvidence);
+    edit.confirmCaffeineForCurrentSpec = true;
+    expect(buildIngredientRecord(edit, present, makeId, now).caffeineEvidence?.specification.sourceDate).toBe('2026-02-01');
+    edit.confirmCaffeineForCurrentSpec = false;
+    edit.caffeineStatus = 'conflicting';
+    expect(() => buildIngredientRecord(edit, present, makeId, now)).toThrow(/both caffeine statements/);
+    edit.caffeineStatements[1] = {
+      status: 'absent', amount: '', unit: '', reference: 'SPEC-2', sourceDate: '2026-02-01',
+    };
+    const conflicting = buildIngredientRecord(edit, present, makeId, now);
+    expect(conflicting.caffeineEvidence?.statements).toEqual([
+      present.caffeineEvidence,
+      { status: 'absent', specification: { reference: 'SPEC-2', sourceDate: '2026-02-01' } },
+    ]);
+    const roundTrip = draftFromIngredient(conflicting);
+    expect(buildIngredientRecord(roundTrip, conflicting, makeId, now).caffeineEvidence).toEqual(conflicting.caffeineEvidence);
+    roundTrip.specificationDate = '2026-03-01';
+    expect(buildIngredientRecord(roundTrip, conflicting, makeId, now).caffeineEvidence).toEqual(conflicting.caffeineEvidence);
+    roundTrip.caffeineDecision = 'statement2';
+    expect(() => buildIngredientRecord(roundTrip, conflicting, makeId, now)).toThrow(/explain why/);
+    roundTrip.caffeineDecisionReason = 'Supplier confirmed the second document applies.';
+    const decided = buildIngredientRecord(roundTrip, conflicting, makeId, now);
+    expect(decided.caffeineEvidence?.decisions).toEqual([{
+      choice: 'statement2', reason: 'Supplier confirmed the second document applies.', recordedAt: now,
+    }]);
+    expect(decided.caffeineEvidence?.statements).toEqual(conflicting.caffeineEvidence?.statements);
+    const reconsider = draftFromIngredient(decided);
+    expect(buildIngredientRecord(reconsider, decided, makeId, now).caffeineEvidence).toEqual(decided.caffeineEvidence);
+    reconsider.caffeineDecision = 'unresolved';
+    reconsider.caffeineDecisionReason = 'Supplier withdrew confirmation.';
+    expect(buildIngredientRecord(reconsider, decided, makeId, now).caffeineEvidence?.decisions).toHaveLength(2);
+    reconsider.caffeineStatements[0].amount = '6';
+    expect(() => buildIngredientRecord(reconsider, decided, makeId, now)).toThrow(/cannot be changed/);
+    roundTrip.caffeineStatus = 'absent';
+    expect(() => buildIngredientRecord(roundTrip, conflicting, makeId, now)).toThrow(/cannot yet be removed/);
+    edit.caffeineStatus = 'absent';
+    expect(buildIngredientRecord(edit, present, makeId, now).caffeineEvidence?.status).toBe('absent');
+    edit.caffeineStatus = 'present';
+    edit.caffeineAmount = '0';
+    expect(() => buildIngredientRecord(edit, present, makeId, now)).toThrow(/positive caffeine amount/);
+  });
   it('builds a record with nutrient evidence from the specification', () => {
     const record = buildIngredientRecord(filledDraft(), undefined, makeId, now);
     expect(record.nutrientProfile?.values.protein).toMatchObject({
@@ -87,6 +228,16 @@ describe('buildIngredientRecord', () => {
 });
 
 describe('editing keeps data the form does not manage', () => {
+  it('does not silently re-date unchanged allergen evidence when a specification changes', () => {
+    const draft = filledDraft();
+    draft.knownAllergens = ['milk'];
+    const original = buildIngredientRecord(draft, undefined, makeId, now);
+    const edit = draftFromIngredient(original);
+    edit.specificationDate = '2026-02-01';
+    const updated = buildIngredientRecord(edit, original, makeId, now);
+    expect(updated.allergenEvidence).toEqual(original.allergenEvidence);
+    expect(updated.coverageSpecification).toBeUndefined();
+  });
   it('preserves fibre, unchanged nutrient evidence and non-present allergen statements', () => {
     const original = buildIngredientRecord(filledDraft(), undefined, makeId, now);
     const withExtras: IngredientRecord = {
