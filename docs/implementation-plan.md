@@ -2,8 +2,8 @@
 
 **Status:** Living plan; the 2026-11-16 priority reset and I1-I9
 ingredient/formulation track are approved. I1's direction is agreed in
-principle; I2 ingredient-data research and approach are approved, I3 is complete
-and I4 is complete.
+principle; I2 ingredient-data research and approach are approved, I3 through
+I6 are complete; I7 is next.
 Earlier plans and their progress are retained as history.
 **Audience:** engineers and AI agents implementing the product.
 **Related documents:** `AGENTS.md` (always-on agent rules), `docs/requirements.md` (the contract), `docs/reviewer-questions.md` (questions for the human regulatory reviewer).
@@ -48,10 +48,10 @@ supported. The drink remains a contrasting test case.
 | --- | --- | --- |
 | I1 | Direction agreed | Single-page ingredient entry with expandable sections, inline compound-component entry and a recipe screen with ingredients and amounts together. Detailed interactions and preservation checks continue in later steps. |
 | I2 | Approved | Research and agree general ingredient data, nutrition, allergen and additive identity/evidence; distinguish common, optional and conditional information. Bounded source review and the agreed approach are recorded below. |
-| I3 | Complete | Basic ingredient creation/editing uses a single expandable page and general names, without mandatory drink-specific questions. Existing specialised evidence remains accessible under source details; storage and backup formats are unchanged. Tested basic drafts and existing specialised evidence, including backup/restore (ING-001, DATA-003, DATA-005). |
-| I4 | Complete | Nutrient and allergen entry accepts general sources; common and additional supported nutrient values can be entered on either basis with explicit units and dated evidence. Unknowns remain unknown, and volume calculations require sourced ingredient density (ING-002, ING-003, DATA-003, DATA-005, DATA-006). Catalogue expansion and optional-nutrient product calculations remain future work. |
-| I5 | Pending | Support an additive as an ingredient and record additive information within another ingredient without duplicate entry; additive permission coverage expands separately. |
-| I6 | Pending | Guide entry of complete and partial compound ingredients and supplier composition without requiring users to understand internal links. |
+| I3 | Complete | Basic ingredient creation/editing uses a single expandable page and general names, without mandatory drink-specific questions. The earlier specialised controls were retired during I6 (ING-001, DATA-003, DATA-005). |
+| I4 | Complete | Nutrient and allergen entry accepts optional general sources; supported nutrient values can be entered on either basis with explicit units. Unknowns remain unknown, and volume nutrition calculations currently require sourced ingredient density (ING-002, ING-003, DATA-003, DATA-005, DATA-006). Catalogue expansion and optional-nutrient product calculations remain future work. |
+| I5 | Complete | Support an additive as an ingredient; the redundant additive-within-ingredient entry was replaced by component entry during I6. Additive permission coverage expands separately (ING-001, DATA-003, DATA-005). |
+| I6 | Complete | Guide entry of complete and partial compound ingredients and composition inline, with explicit unknown amounts and nutrition basis. |
 | I7 | Pending | Rebuild recipe/formulation entry, quantities, nested recipes and relevant process/yield details; preserve cycle protection. |
 | I8 | Pending | Carry supported nutrient, allergen and additive evidence through formulations, with source paths, missing/conflicting data and no double counting. |
 | I9 | Pending | Exercise multiple fictional cakes, cookies and the drink, including incomplete evidence and a direct additive; test accessibility, edits, backup/restore and regressions. |
@@ -73,9 +73,8 @@ This is not approval to discard evidence or assume a specific migration.
 
 I3 was a layout and basic-entry step, not the finished ingredient workflow.
 I4 subsequently added general sources and the additional-nutrient control.
-Direct additives and inline
-compound composition remain I5 and I6 work; compound records currently
-still require a separately saved formulation.
+Direct additives were added in I5; I6 subsequently added inline compound
+composition without requiring a separately saved formulation.
 
 I4 owner feedback: use one coherent nutrition-entry area for known values,
 regardless of their source, rather than separating "nutrient" and "supplier"
@@ -109,10 +108,83 @@ minerals. Optional values are saved with their individual source and are not
 automatically added to labels or included in product nutrition calculations;
 calculation propagation and catalogue expansion remain future work (I8).
 Current-format backups are tested, but compatibility with an actual earlier
-v2 app remains unverified; see ADR 011. Additive confirmation still needs a
-supplier specification and is I5 work. The owner expects the existing
-specialised questions to be reconsidered later; preserve their evidence
-without treating the current presentation as permanent.
+v2 app remains unverified; see ADR 011. I6 later retired the specialised
+questions from the ingredient editor.
+
+I5: a single ingredient can be identified as an additive using its
+own name and existing additive-source details; the same source is used by the
+current additive report and a direct declaration candidate is not printed as
+a second ingredient. A source may be promoted rather than re-entered.
+General dated evidence can confirm additive-source coverage. No permission,
+purity, concentration or legal identity is inferred from a name or number.
+Complete inline composition was added in I6; end-to-end nested additive propagation
+and prevention of parent/component double counting remain I8. Actual
+previous-v2 app compatibility for these new fields remains unverified.
+Until nested additive propagation is implemented, the additive report warns
+when a compound ingredient occurs and does not present a partial total as a
+calculated final concentration.
+
+I6 owner feedback: make single ingredients, additives and ingredients made
+from other ingredients clear choices. Components should be entered once, not
+repeated as separate additive records. Sources and dates should be optional
+supporting information; unknown evidence must remain unknown. Preserve
+existing evidence and avoid changing shared formulations silently. The first
+interface change moves the additive choice to the ingredient type field and
+reuses matching saved additive details; code and purpose now appear in Basics.
+The direct additive no longer asks whether it was added to itself. Optional
+label-wording choices use plain language and remain review-only; saved source
+status and declaration selections are preserved, not inferred or discarded.
+The owner wants Included Ingredients to contain the compound components, and
+compound nutrition to use either a component-derived value or an optional
+whole-ingredient value, clearly indicating the selected basis. Existing
+whole-ingredient values must be preserved. The ingredient screen now accepts
+known components and optional amounts inline, with explicit complete/partial
+list coverage and no mandatory composition source. It saves the ingredient
+and a new composition atomically and refuses cycles; edits make a separate
+composition rather than modifying a shared recipe. A complete list may still
+have unknown amounts; it cannot be scaled or used for nutrition until all
+amounts are known. Previous compositions remain available; recipes with
+processing profiles must currently be edited in Formulations. Compound
+nutrition now has an explicit component or whole-ingredient basis: existing
+records without a choice continue using the whole-ingredient profile, while
+new compound records default to components. Selecting components calculates
+from the complete quantified composition and never adds its parent profile.
+Incomplete compositions, missing evidence and processing effects remain
+unavailable for calculation. A product's nutrition-basis confirmation changes
+when the expanded component recipe changes. Switching choices preserves saved
+whole-ingredient values. Nutrition, allergen and additive coverage can now be
+entered without sources; optional source controls are collapsed. Unverified
+information remains flagged for review, and known allergens are retained.
+The owner subsequently retired the older supplier-specific questions and the
+separate additive-entry section from the ingredient editor. A direct additive's
+concentration and optional source are now entered in Basics; its allergens use
+the normal Allergens section. Other ingredients, including additives, are
+entered once under Included ingredients. Existing legacy fields remain in the
+data model but are not editable in this workflow; older records with separate
+additive entries are flagged for review. The owner does not require old
+pre-release saves to remain compatible. No saved data was deleted. I6's entry
+scope is complete; nested propagation remains I8.
+
+A direct additive with unknown saved status is treated as added when used as a
+recipe ingredient, without changing its saved status or overriding an explicit
+carry-over or processing-aid status. Known concentration and density values
+can now be calculated without a dated source; the result and consultant notes
+identify missing provenance, and an unsourced concentration cannot establish a
+permission result. Missing quantities, purity, density or other
+required calculation inputs are not guessed. Propagation through compound
+ingredients remains I8 work (ADD-004, ADD-009, DATA-003).
+
+I7/I8 follow-up: decide how to capture an additive's role per use, both in a
+formulation and in a compound ingredient. The same ingredient can have
+different roles in different uses. Derive a component's route from its recipe
+where possible, but do not infer processing-aid status or legal carry-over
+eligibility. Until a use-level workflow and checks exist, the current report
+states that direct additives are treated as added and that processing-aid and
+carry-over checks are not run (ADD-007, ADD-010, DATA-003).
+An ingredient cannot currently be both a direct additive and a compound
+ingredient: a supplied additive blend with carriers can record concentration
+but cannot list those carriers on that same record. Design this case before
+claiming general additive-blend support; do not infer unknown carriers.
 
 Bounded I4 research by the Australian Food Requirements Analyst, 2026-11-16:
 [Schedule 11 S11-2](https://www.legislation.gov.au/F2015L00481/2024-10-29/2024-10-29/text/original/epub/OEBPS/document_1/document_1.html)

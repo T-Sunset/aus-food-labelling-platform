@@ -46,6 +46,26 @@ describe('draft label and live readiness', () => {
     expect(result.warnings.join(' ')).toContain('consultant');
   });
 
+  it('keeps unsourced positive allergens visible and requires review', () => {
+    const draft = emptyIngredientDraft();
+    Object.assign(draft, { name: 'Flour', kind: 'atomic', allergensConfirmed: true, knownAllergens: ['milk'] });
+    const unsourced = buildIngredientRecord(draft, undefined, (prefix) => prefix === 'ingredient' ? 'Flour' : `Flour-${prefix}`, now);
+    const result = makeLabelDraft(product, [recipe], [ingredient('Sugar'), unsourced]);
+    expect(result.allergens).toContain('milk');
+    expect(result.missing.join(' ')).toContain('allergen source not recorded');
+  });
+
+  it('does not drop a known allergen from an additive without source details', () => {
+    const sugar: IngredientRecord = {
+      ...ingredient('Sugar'),
+      additiveSources: [{ id: 'additive', additiveName: 'Example', sourceStatus: 'added',
+        allergenAssessments: { milk: 'present' } }],
+    };
+    const result = makeLabelDraft(product, [recipe], [sugar, ingredient('Flour')]);
+    expect(result.allergens).toContain('milk');
+    expect(result.missing.join(' ')).toContain('allergen source not recorded for Example');
+  });
+
   it('blocks missing or unconfirmed data rather than treating it as absent', () => {
     const incomplete = { ...ingredient('Sugar'), allergensConfirmed: false, additivesConfirmed: false };
     const result = makeLabelDraft({ ...product, packDetails: {} }, [recipe], [incomplete, ingredient('Flour')]);
@@ -119,6 +139,43 @@ describe('draft label and live readiness', () => {
     }] };
     expect(makeLabelDraft(product, [recipe], [unknownSource, ingredient('Flour')]).missing.join(' '))
       .toContain('confirm the source status');
+  });
+
+  it('shows a direct additive once at its ingredient position and does not assume permission', () => {
+    const sugar = ingredient('Sugar');
+    const direct: IngredientRecord = {
+      ...sugar,
+      directAdditiveSourceId: 'direct',
+      additiveSources: [{
+        id: 'direct', additiveName: 'Sugar', codeNumber: '999', sourceStatus: 'added',
+        declarationSelection: { route: 'schedule7Class', schedule7ClassName: 'Example class', substanceChoice: 'schedule8Name' },
+      }],
+    };
+    const result = makeLabelDraft(product, [recipe], [direct, ingredient('Flour')]);
+    expect(result.declaration).toBe('Flour, Example class (Sugar)');
+    expect(result.warnings.join(' ')).toContain('check whether and how');
+    expect(result.missing).toContain('Product additive and name information');
+  });
+
+  it('uses the same additive ingredient inside a linked compound recipe without a duplicate source', () => {
+    const sugar = ingredient('Sugar');
+    const direct: IngredientRecord = {
+      ...sugar, directAdditiveSourceId: 'direct',
+      additiveSources: [{
+        id: 'direct', additiveName: 'Sugar', codeNumber: '999', sourceStatus: 'added',
+        declarationSelection: { route: 'schedule7Class', schedule7ClassName: 'Example class', substanceChoice: 'schedule8Name' },
+      }],
+    };
+    const compound = { ...ingredient('Flour'), kind: 'compound' as const, compoundFormulationId: 'compound-recipe' };
+    const inside: FormulationRecord = {
+      id: 'compound-recipe', name: 'Compound recipe', recordType: 'formulation', tags: [], createdAt: now, updatedAt: now,
+      lines: [{ id: 'direct-line', kind: 'ingredient', ingredientId: 'Sugar', quantity: { value: '100', unit: 'g' } }],
+    };
+    const root = { ...recipe, lines: [{ id: 'compound-line', kind: 'ingredient' as const, ingredientId: 'Flour', quantity: { value: '100', unit: 'g' as const } }] };
+    const result = makeLabelDraft(product, [root, inside], [direct, compound]);
+    expect(result.declaration).toContain('Example class (Sugar)');
+    expect(result.declaration.match(/Example class \(Sugar\)/g)).toHaveLength(1);
+    expect(result.missing).toContain('Flour: confirm complete compound composition and its source');
   });
 
   it('does not silently treat an entered, unclassified claim as complete', () => {

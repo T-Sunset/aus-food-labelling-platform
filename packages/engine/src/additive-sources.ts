@@ -30,17 +30,12 @@ export function traceAdditiveAllergenEvidence(
         continue;
       }
       const evidence = source.sourceEvidence?.[0];
-      if (evidence === undefined) {
-        throw new TypeError(
-          `Additive source "${source.id}" has allergen assessments without dated evidence`,
-        );
-      }
       traced.push({
-        id: `${source.id}:${evidence.id}:${ingredient.sourcePath.join(':')}`,
+        id: `${source.id}:${evidence?.id ?? 'unsourced'}:${ingredient.sourcePath.join(':')}`,
         subjectId: source.id,
         kind: 'additive',
-        sourceId: evidence.reference,
-        sourceDate: evidence.sourceDate,
+        sourceId: evidence?.reference ?? '',
+        sourceDate: evidence?.sourceDate ?? '',
         sourcePath: [...ingredient.sourcePath, 'additive-source', source.id],
         assessments,
       });

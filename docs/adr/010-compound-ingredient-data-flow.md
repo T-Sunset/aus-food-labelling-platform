@@ -48,6 +48,14 @@ dependencies change.
 
 ## Consequences
 
+I6 implementation note: inline edits create a new linked composition in the
+same transaction as the ingredient, leaving the previous recipe unchanged.
+List completeness is separate from known quantities; unquantified components
+are never scaled. Composition source details may be absent, rather than
+invented. Existing linked recipes with processing profiles remain editable in
+the Formulations screen, not copied by the ingredient editor. This does not
+implement the remaining nutrition and additive propagation described above.
+
 Existing formulation and compound-ingredient machinery can be reused, but
 its current expansion, label, nutrition and additive paths do not yet
 uniformly propagate through compound ingredients. A shared, source-traceable

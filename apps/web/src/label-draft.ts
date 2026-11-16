@@ -3,7 +3,7 @@ import { expandFormulation, formatAdditiveDeclarationCandidate, orderIngredientD
 import type { FormulationRecord, IngredientRecord, ProductRecord } from '@aus-food/storage';
 import { draftFromProduct, productStepStatuses } from './product-form';
 import { draftAllergenVocabulary } from './rule-data';
-import { currentAllergenCoverage, managedNutrients } from './ingredient-form';
+import { currentAdditiveCoverage, currentAllergenCoverage, managedNutrients } from './ingredient-form';
 import { ingredientNutrientPer100g, makeNipDraft, type NipDraft } from './nip-draft';
 
 export interface LabelDraft {
@@ -27,6 +27,7 @@ export function makeLabelDraft(
   const evidence: AllergenEvidenceSource[] = [];
   const checked = new Set<string>();
   const additiveCandidates = new Map<string, string[]>();
+  const directAdditiveCandidates = new Map<string, string>();
   const statuses = productStepStatuses(draftFromProduct(product), product);
   if (!statuses.about.done) missing.add('Product details and food state');
   if (!product.builderProductType || !statuses.type.done) missing.add('Product type and its questions');
@@ -45,16 +46,20 @@ export function makeLabelDraft(
   function collectIngredient(record: IngredientRecord): void {
     if (checked.has(record.id)) return;
     checked.add(record.id);
-    const coverageCurrent = record.specification !== undefined && record.coverageSpecification !== undefined
-      && record.coverageSpecification.reference === record.specification.reference
-      && record.coverageSpecification.sourceDate === record.specification.sourceDate;
     const allergenCoverage = currentAllergenCoverage(record);
     if (!allergenCoverage) missing.add(`${record.name}: confirm the allergen information`);
-    if (!record.additivesConfirmed || !coverageCurrent) {
+    else if (!allergenCoverage.sourceId.trim() || !allergenCoverage.sourceDate) {
+      missing.add(`${record.name}: allergen source not recorded; review entered details`);
+    }
+    if (!currentAdditiveCoverage(record)) {
       additivesComplete = false;
       missing.add(`${record.name}: confirm the additive information`);
+    } else if (record.additiveCoverage
+      && (!record.additiveCoverage.sourceId.trim() || !record.additiveCoverage.sourceDate)) {
+      additivesComplete = false;
+      missing.add(`${record.name}: additive information source not recorded; review entered details`);
     }
-    if (managedNutrients.some(({ key }) => {
+    if (!(record.kind === 'compound' && record.compoundNutritionBasis === 'components') && managedNutrients.some(({ key }) => {
       const value = ingredientNutrientPer100g(record, key);
       if (!value || typeof value.value !== 'string' || !/^\d+(\.\d+)?$/.test(value.value)
         || !Number.isFinite(Number(value.value)) || !['g/100g', 'mg/100g'].includes(value.unit)
@@ -81,6 +86,7 @@ export function makeLabelDraft(
         kind: 'ingredient',
         sourceId: allergenCoverage.sourceId,
         sourceDate: allergenCoverage.sourceDate,
+        ...(!allergenCoverage.sourceId && !allergenCoverage.sourceDate ? { sourceType: 'user' as const } : {}),
         sourcePath: [record.id],
         assessments: Object.fromEntries(draftAllergenVocabulary.map(({ id }) =>
           [id, assessments[id] ?? 'absent'])),
@@ -94,7 +100,7 @@ export function makeLabelDraft(
     }
     for (const [index, source] of (record.additiveSources ?? []).entries()) {
       hasAdditives = true;
-      if (source.sourceStatus === 'unknown') {
+      if (source.sourceStatus === 'unknown' && record.directAdditiveSourceId !== source.id) {
         additivesComplete = false;
         missing.add(`${record.name}: confirm the source status of ${source.additiveName}`);
       }
@@ -114,26 +120,29 @@ export function makeLabelDraft(
         missing.add(`${record.name}: choose declaration wording for ${source.additiveName}`);
       }
       if (candidate.text) {
-        const candidates = additiveCandidates.get(record.id) ?? [];
-        if (!candidates.includes(candidate.text)) candidates.push(candidate.text);
-        additiveCandidates.set(record.id, candidates);
+        if (record.directAdditiveSourceId === source.id) {
+          directAdditiveCandidates.set(record.id, candidate.text);
+        } else {
+          const candidates = additiveCandidates.get(record.id) ?? [];
+          if (!candidates.includes(candidate.text)) candidates.push(candidate.text);
+          additiveCandidates.set(record.id, candidates);
+        }
       }
       warnings.add(`${record.name}: check whether and how ${source.additiveName} belongs in the declaration${candidate.text ? ` (candidate: ${candidate.text})` : ''}.`);
       if (source.allergenAssessments && Object.keys(source.allergenAssessments).length) {
         const sourceEvidence = source.sourceEvidence?.[0];
-        if (!sourceEvidence) {
-          missing.add(`${record.name}: dated allergen evidence for ${source.additiveName}`);
-        } else {
-          evidence.push({
-            id: `additive:${record.id}:${index}`,
-            subjectId: source.id,
-            kind: 'additive',
-            sourceId: sourceEvidence.reference,
-            sourceDate: sourceEvidence.sourceDate,
-            sourcePath: [record.id, source.id],
-            assessments: source.allergenAssessments,
-          });
+        if (!sourceEvidence?.reference.trim() || !sourceEvidence.sourceDate) {
+          missing.add(`${record.name}: allergen source not recorded for ${source.additiveName}; review entered details`);
         }
+        evidence.push({
+          id: `additive:${record.id}:${index}`,
+          subjectId: source.id,
+          kind: 'additive',
+          sourceId: sourceEvidence?.reference ?? '',
+          sourceDate: sourceEvidence?.sourceDate ?? '',
+          sourcePath: [record.id, source.id],
+          assessments: source.allergenAssessments,
+        });
       }
     }
   }
@@ -191,7 +200,7 @@ export function makeLabelDraft(
     function render(node: OrderedIngredientDeclarationNode, depth: number): string {
       const candidates = additiveCandidates.get(node.ingredientId) ?? [];
       const additiveNote = candidates.length ? ` [additives to check: ${candidates.join(', ')}]` : '';
-      if (!node.children.length) return node.displayName + additiveNote;
+      if (!node.children.length) return (directAdditiveCandidates.get(node.ingredientId) ?? node.displayName) + additiveNote;
       const open = depth % 2 === 0 ? '[' : '(';
       const close = depth % 2 === 0 ? ']' : ')';
       return `${node.displayName} ${open}${node.children.map((child) => render(child, depth + 1)).join(', ')}${close}${additiveNote}`;

@@ -290,7 +290,10 @@ describe('local draft repositories', () => {
       sourceStatus: 'unknown',
       allergenAssessments: { milk: 'present' },
     }],
-    })).rejects.toBeInstanceOf(RecordValidationError);
+    })).resolves.toBeUndefined();
+    expect(await store.ingredients.get('ing-additive-allergen-without-evidence')).toMatchObject({
+      additiveSources: [{ allergenAssessments: { milk: 'present' } }],
+    });
 
     const incomplete: IngredientRecord = {
     ...ingredient,
@@ -346,6 +349,11 @@ describe('local draft repositories', () => {
     };
     await store.products.create(withInputs);
     expect(await store.products.get(product.id)).toEqual(withInputs);
+    const unsourcedDensity = { gramsPerMillilitre: '1.03', evidenceReference: '', sourceDate: '' };
+    await store.products.update(product.id, { additiveNameInputs: {
+      ...withInputs.additiveNameInputs!, finalDensity: unsourcedDensity,
+    } });
+    expect((await store.products.get(product.id))?.additiveNameInputs?.finalDensity).toEqual(unsourcedDensity);
 
     const invalid: Record<string, unknown>[] = [
       { confirmedCohorts: ['bread'] },
@@ -509,7 +517,6 @@ describe('local draft repositories', () => {
     expect((await store.ingredients.get(ingredient.id))?.energyPer100g).toEqual(energyPer100g);
     for (const bad of [
       { ...energyPer100g, value: '-1' },
-      { ...energyPer100g, sourceId: '' },
       { ...energyPer100g, sourceDate: 'yesterday' },
     ]) {
       await expect(store.ingredients.update(ingredient.id, { energyPer100g: bad })).rejects.toBeInstanceOf(RecordValidationError);
@@ -677,6 +684,59 @@ describe('schema migrations and recovery points', () => {
 });
 
 describe('versioned workspace backups', () => {
+  it.each(['none', 'passphrase'] as const)('round-trips incomplete sources in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const record: IngredientRecord = {
+      ...ingredient,
+      nutritionEntrySource: { sourceType: 'user', sourceId: 'Package', sourceDate: '' },
+      ingredientDensity: { gramsPerMillilitre: '1', evidenceReference: '', sourceDate: '' },
+      allergensConfirmed: true,
+      allergenEvidence: [{
+        id: 'allergen', subjectId: ingredient.id, kind: 'ingredient', sourceId: '',
+        sourceDate: '', sourceType: 'user', sourcePath: [ingredient.id], assessments: { milk: 'present' },
+      }],
+      allergenCoverage: { sourceType: 'user', sourceId: '', sourceDate: '', assessments: { milk: 'present' } },
+      additivesConfirmed: true,
+      additiveCoverage: { sourceType: 'user', sourceId: '', sourceDate: '', sourcesSnapshot: '[]' },
+    };
+    await source.ingredients.create(record);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
+    expect(await target.ingredients.get(record.id)).toEqual(record);
+  });
+
+  it.each(['none', 'passphrase'] as const)('preserves direct additive identity in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const item: IngredientRecord = {
+      ...ingredient,
+      directAdditiveSourceId: 'direct',
+      additiveSources: [{ id: 'direct', additiveName: ingredient.name, codeNumber: '999', sourceStatus: 'unknown' }],
+      additivesConfirmed: true,
+      additiveCoverage: {
+        sourceType: 'user', sourceId: 'Recipe', sourceDate: '2026-01-01',
+        sourcesSnapshot: JSON.stringify([{ id: 'direct', additiveName: ingredient.name, codeNumber: '999', sourceStatus: 'unknown' }]),
+      },
+    };
+    await source.ingredients.create(item);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
+    expect(await target.ingredients.get(item.id)).toEqual(item);
+  });
+  it('rejects direct additive links that do not match the ingredient', async () => {
+    const store = await openTestStore();
+    await expect(store.ingredients.create({
+      ...ingredient, directAdditiveSourceId: 'missing',
+      additiveSources: [{ id: 'direct', additiveName: ingredient.name, sourceStatus: 'unknown' }],
+    })).rejects.toThrow(/direct additive/);
+    await expect(store.ingredients.create({
+      ...ingredient, directAdditiveSourceId: 'direct',
+      additiveSources: [{ id: 'direct', additiveName: 'Different name', sourceStatus: 'unknown' }],
+    })).rejects.toThrow(/direct additive/);
+  });
   it.each(['none', 'passphrase'] as const)('preserves extra per-volume nutrients in %s backups', async (encryption) => {
     const source = await openTestStore();
     const item: IngredientRecord = {
@@ -860,6 +920,46 @@ describe('versioned workspace backups', () => {
     await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
     expect(await target.formulations.get(partial.id)).toEqual(partial);
   });
+  it.each(['none', 'passphrase'] as const)('saves and restores an unsourced component list with %s encryption and rejects cycles', async (encryption) => {
+    const store = await openTestStore();
+    const compound: IngredientRecord = {
+      ...ingredient, id: 'blend', name: 'Blend', kind: 'compound', compoundFormulationId: 'blend-form',
+      compoundNutritionBasis: 'components',
+    };
+    const composition: FormulationRecord = {
+      ...formulation, id: 'blend-form', lines: [],
+      supplierComposition: {
+        coverage: 'complete',
+        unquantifiedComponents: [{ id: 'unknown', kind: 'ingredient', ingredientId: ingredient.id }],
+      },
+    };
+    await store.ingredients.create(ingredient);
+    await store.saveIngredientWithComposition(compound, composition, true);
+    expect(await store.formulations.get(composition.id)).toEqual(composition);
+    const backup = await store.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
+    const restored = await openTestStore();
+    await restored.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
+    expect(await restored.formulations.get(composition.id)).toEqual(composition);
+    expect(await restored.ingredients.get(compound.id)).toEqual(compound);
+    const updatedComposition: FormulationRecord = {
+      ...composition, id: 'blend-form-updated',
+      lines: [{ id: 'known', kind: 'ingredient', ingredientId: ingredient.id, quantity: { value: '10', unit: 'g' } }],
+      supplierComposition: { coverage: 'complete', unquantifiedComponents: [] },
+    };
+    const updated = { ...compound, compoundFormulationId: updatedComposition.id };
+    await store.saveIngredientWithComposition(updated, updatedComposition, false);
+    expect(await store.formulations.get(composition.id)).toEqual(composition);
+    expect(await store.ingredients.get(compound.id)).toEqual(updated);
+    const cycle = { ...composition, id: 'cycle-form', supplierComposition: {
+      coverage: 'partial' as const,
+      unquantifiedComponents: [{ id: 'cycle', kind: 'ingredient' as const, ingredientId: 'blend' }],
+    } };
+    await expect(store.saveIngredientWithComposition({ ...compound, compoundFormulationId: cycle.id }, cycle, false))
+      .rejects.toBeInstanceOf(RepositoryCycleError);
+    expect(await store.formulations.get(cycle.id)).toBeUndefined();
+    expect(await store.ingredients.get(compound.id)).toEqual(updated);
+  });
   it('rejects invalid complete composition and cycles through unquantified components', async () => {
     const store = await openTestStore();
     const evidence = {
@@ -874,7 +974,7 @@ describe('versioned workspace backups', () => {
       .rejects.toBeInstanceOf(RepositoryCycleError);
     expect(await store.formulations.get(formulation.id)).toEqual(formulation);
     await expect(store.formulations.update(formulation.id, {
-      supplierComposition: { ...evidence, coverage: 'complete' },
+      lines: [], supplierComposition: { coverage: 'complete', unquantifiedComponents: [] },
     })).rejects.toThrow(/complete compositions/);
   });
   it('rejects imported partial composition cycles and v1 composition fields', async () => {

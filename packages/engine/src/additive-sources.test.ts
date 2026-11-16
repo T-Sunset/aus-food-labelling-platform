@@ -119,7 +119,7 @@ describe('additive source tracing', () => {
     });
   });
 
-  it('rejects additive allergen assessments without dated source evidence', () => {
+  it('propagates unsourced additive allergens while requiring review', () => {
     const noEvidence: IngredientAdditiveSource = {
       id: 'no-evidence',
       additiveName: 'Example additive',
@@ -127,11 +127,15 @@ describe('additive source tracing', () => {
       allergenAssessments: { milk: 'present' },
     };
 
-    expect(() => traceAdditiveAllergenEvidence([{
+    const traced = traceAdditiveAllergenEvidence([{
       ingredientId: 'ingredient-1',
       mass: { value: '1', unit: 'g' },
       sourcePath: ['product', 'ingredient-1'],
-    }], new Map([['ingredient-1', [noEvidence]]]))).toThrowError(/without dated evidence/);
+    }], new Map([['ingredient-1', [noEvidence]]]));
+    expect(traced).toMatchObject([{ sourceId: '', sourceDate: '', assessments: { milk: 'present' } }]);
+    expect(propagateAllergens(traced, [{
+      id: 'milk', ingredientListName: 'milk', summaryName: 'milk',
+    }], 'complete')).toMatchObject({ status: 'review_required', allergens: [{ id: 'milk' }] });
   });
 
   it('assigns distinct evidence IDs when the same ingredient is used on multiple paths', () => {

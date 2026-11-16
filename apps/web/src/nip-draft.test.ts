@@ -46,11 +46,51 @@ describe('draft nutrition information', () => {
     expect(result.rows[6]).toEqual({ label: 'Sodium', serving: '0 mg', unitQuantity: '1 mg' });
   });
 
+  it('calculates manually entered nutrition while flagging the missing source', () => {
+    const draft = emptyIngredientDraft();
+    Object.assign(draft, { name: 'A', kind: 'atomic', energyPer100g: '500' });
+    draft.nutrients = { protein: '20', fat: '0', saturatedFat: '0', carbohydrate: '0', sugars: '0', sodium: '1' };
+    const unsourced = buildIngredientRecord(draft, undefined, () => 'A', now);
+    const result = makeNipDraft(product, recipes, [unsourced, ingredients[1]!]);
+    expect(result.rows[1]?.unitQuantity).toBe('8.0 g');
+    expect(result.missing.join(' ')).toContain('nutrition source not recorded');
+  });
+
   it('uses a compound ingredient profile without also counting its children', () => {
     const compound = { ...ingredients[0]!, kind: 'compound' as const, compoundFormulationId: 'sub' };
     const result = makeNipDraft(product, recipes, [compound, ingredients[1]!]);
     expect(result.rows[1]?.unitQuantity).toBe('8.0 g');
     expect(result.rows[0]?.unitQuantity).toBe('200 kJ');
+  });
+
+  it('uses only component values when selected, and invalidates confirmation after composition changes', () => {
+    const compound = { ...ingredients[0]!, kind: 'compound' as const, compoundFormulationId: 'sub', compoundNutritionBasis: 'components' as const };
+    const completeRecipes: FormulationRecord[] = [
+      recipes[0]!,
+      { ...recipes[1]!, supplierComposition: { coverage: 'complete', unquantifiedComponents: [] } },
+    ];
+    const withCompound = [compound, ingredients[1]!];
+    const confirmed = {
+      ...product, packDetails: { ...product.packDetails!, nutritionRecipeSignature: nutritionRecipeSignature('root', completeRecipes, withCompound) },
+    };
+    const result = makeNipDraft(confirmed, completeRecipes, withCompound);
+    expect(result.rows[1]?.unitQuantity).toBe('4.0 g');
+    expect(result.rows[0]?.unitQuantity).toBe('100 kJ');
+    const changed = [completeRecipes[0]!, { ...completeRecipes[1]!, lines: [completeRecipes[1]!.lines[0]!] }];
+    expect(makeNipDraft(confirmed, changed, withCompound).rows[1]?.unitQuantity).toBe('Not available');
+    const partial = [completeRecipes[0]!, { ...completeRecipes[1]!, supplierComposition: { coverage: 'partial' as const, unquantifiedComponents: [] } }];
+    expect(makeNipDraft(confirmed, partial, withCompound).rows[1]?.unitQuantity).toBe('Not available');
+    const unknownAmount = [completeRecipes[0]!, { ...completeRecipes[1]!, supplierComposition: {
+      coverage: 'complete' as const, unquantifiedComponents: [{ id: 'unknown', kind: 'ingredient' as const, ingredientId: 'B' }],
+    } }];
+    expect(makeNipDraft(confirmed, unknownAmount, withCompound).rows[1]?.unitQuantity).toBe('Not available');
+    const processing = [completeRecipes[0]!, { ...completeRecipes[1]!, processMassProfile: { changes: [] } }];
+    expect(makeNipDraft(confirmed, processing, withCompound).missing.join(' ')).toContain('processing effects');
+    const missingProtein = { ...ingredients[1]!, nutrientProfile: { ingredientId: 'B', values: {} } };
+    expect(makeNipDraft(confirmed, completeRecipes, [compound, missingProtein]).rows[1]?.unitQuantity).toBe('Not available');
+    const whole = { ...compound, compoundNutritionBasis: 'whole' as const };
+    const wholeProduct = { ...product, packDetails: { ...product.packDetails!, nutritionRecipeSignature: nutritionRecipeSignature('root', completeRecipes, [whole, ingredients[1]!]) } };
+    expect(makeNipDraft(wholeProduct, completeRecipes, [whole, ingredients[1]!]).rows[1]?.unitQuantity).toBe('8.0 g');
   });
 
   it('requires density evidence for volume, including mixed serving and pack units', () => {

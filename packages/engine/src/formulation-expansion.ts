@@ -138,10 +138,13 @@ export function expandFormulation(
         [...sourcePath, formulationId],
       );
     }
-    if (formulation.supplierComposition?.coverage === 'partial') {
+    if (formulation.supplierComposition?.coverage === 'partial'
+      || (formulation.supplierComposition?.unquantifiedComponents.length ?? 0) > 0) {
       throw new FormulationExpansionError(
         'PARTIAL_COMPOSITION',
-        `Supplier composition "${formulationId}" is partial; its proportions cannot be calculated.`,
+        formulation.supplierComposition?.coverage === 'partial'
+          ? `Composition "${formulationId}" is partial; its proportions cannot be calculated.`
+          : `Composition "${formulationId}" has unknown amounts; its proportions cannot be calculated.`,
         sourcePath,
       );
     }

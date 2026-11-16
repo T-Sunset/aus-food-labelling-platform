@@ -4,6 +4,7 @@ import {
 import type { FormulationRecord, IngredientRecord, ProductRecord } from '@aus-food/storage';
 import type { NutrientEvidence } from '@aus-food/domain';
 import { nutritionRecipeSignature } from './product-form';
+import { expandNutritionComponents } from './nutrition-components';
 
 const rows = [
   { id: 'energy', label: 'Energy', unit: 'kJ', kind: 'energy' },
@@ -33,6 +34,10 @@ function validNumber(value: string, positive = false): boolean {
   return /^\d+(\.\d+)?$/.test(value) && Number.isFinite(Number(value))
     && (!positive || Number(value) > 0);
 }
+function usableSource(value: { sourceId: string; sourceDate: string; evidenceType?: string }): boolean {
+  return Boolean(value.sourceId.trim() && validDate(value.sourceDate))
+    || (value.evidenceType === 'user' && value.sourceId === '' && value.sourceDate === '');
+}
 
 export function usableIngredientDensity(record: IngredientRecord): boolean {
   const density = record.ingredientDensity;
@@ -49,7 +54,7 @@ export function ingredientNutrientPer100g(
   const volume = record.nutritionPer100mL?.[key];
   const density = record.ingredientDensity;
   if (!volume || !density || !usableIngredientDensity(record)
-    || !validNumber(volume.value) || !volume.sourceId.trim() || !validDate(volume.sourceDate)) return undefined;
+    || !validNumber(volume.value) || !usableSource(volume)) return undefined;
   return {
     value: divideDecimals(volume.value, density.gramsPerMillilitre),
     unit: key === 'sodium' ? 'mg/100g' : 'g/100g',
@@ -65,7 +70,7 @@ function ingredientEnergyPer100g(record: IngredientRecord): IngredientRecord['en
   const volume = record.nutritionPer100mL?.energy;
   const density = record.ingredientDensity;
   if (!volume || !density || !usableIngredientDensity(record)
-    || !validNumber(volume.value) || !volume.sourceId.trim() || !validDate(volume.sourceDate)) return undefined;
+    || !validNumber(volume.value) || !usableSource(volume)) return undefined;
   return { ...volume, value: divideDecimals(volume.value, density.gramsPerMillilitre) };
 }
 
@@ -110,14 +115,18 @@ export function makeNipDraft(
   const byId = new Map(ingredients.map((ingredient) => [ingredient.id, ingredient]));
   let expanded: ReturnType<typeof expandFormulation> = [];
   try {
-    expanded = expandFormulation(product.formulationId, { value: '100', unit: 'g' }, formulations);
+    expanded = expandNutritionComponents(
+      expandFormulation(product.formulationId, { value: '100', unit: 'g' }, formulations),
+      formulations, ingredients,
+    );
     if (!expanded.length) throw new Error('The recipe has no ingredients.');
-    if (pack?.nutritionRecipeSignature !== nutritionRecipeSignature(product.formulationId, formulations)) {
+    if (pack?.nutritionRecipeSignature !== nutritionRecipeSignature(product.formulationId, formulations, ingredients)) {
       missing.add('Confirm that the recipe and nutrients represent the food as sold (pack details)');
       canCalculate = false;
     }
   } catch (error) {
     missing.add(`Nutrition recipe needs attention: ${error instanceof Error ? error.message : 'could not read recipe'}`);
+    expanded = [];
     canCalculate = false;
   }
   const massFor = (quantity: string, amountUnit: 'g' | 'mL'): string =>
@@ -136,17 +145,18 @@ export function makeNipDraft(
         for (const ingredient of expanded) {
           const record = byId.get(ingredient.ingredientId);
           const energy = record && ingredientEnergyPer100g(record);
-          if (!energy || !validNumber(energy.value) || !energy.sourceId.trim() || !validDate(energy.sourceDate)) {
+          if (!energy || !validNumber(energy.value) || !usableSource(energy)) {
             missing.add(`${record?.name ?? ingredient.ingredientId}: energy per 100 g or per 100 mL with ingredient density`);
             continue;
           }
+          if (!energy.sourceId || !energy.sourceDate) missing.add(`${record?.name ?? ingredient.ingredientId}: nutrition source not recorded; review entered values`);
           weighted = addDecimals(weighted, multiplyDecimals(ingredient.mass.value, energy.value));
           total = addDecimals(total, ingredient.mass.value);
         }
         if (expanded.length && expanded.every((ingredient) => {
           const record = byId.get(ingredient.ingredientId);
           const energy = record && ingredientEnergyPer100g(record);
-          return energy && validNumber(energy.value) && energy.sourceId.trim() && validDate(energy.sourceDate);
+          return energy && validNumber(energy.value) && usableSource(energy);
         })) value = divideDecimals(weighted, total);
       } else if (expanded.length) {
         const input = expanded.map((ingredient) => {
@@ -160,7 +170,8 @@ export function makeNipDraft(
         const complete = input.map(({ ingredient, profile }) => {
           const evidence = profile?.values[row.id];
           const valid = evidence && validNumber(evidence.value) && ['g/100g', 'mg/100g'].includes(evidence.unit)
-            && evidence.sourceId.trim() && validDate(evidence.sourceDate);
+            && usableSource(evidence);
+          if (valid && (!evidence.sourceId || !evidence.sourceDate)) missing.add(`${byId.get(ingredient.ingredientId)?.name ?? ingredient.ingredientId}: nutrition source not recorded; review entered values`);
           if (!valid) missing.add(`${byId.get(ingredient.ingredientId)?.name ?? ingredient.ingredientId}: nutrition information`);
           return valid;
         }).every(Boolean);

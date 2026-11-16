@@ -23,6 +23,11 @@ describe('formulation expansion', () => {
     const complete: Formulation = {
       ...partial, supplierComposition: { ...partial.supplierComposition!, coverage: 'complete', unquantifiedComponents: [] },
     };
+    const completeWithUnknown = {
+      ...partial, supplierComposition: { ...partial.supplierComposition!, coverage: 'complete' as const },
+    };
+    expect(() => expandFormulation('partial', { value: '100', unit: 'g' }, [completeWithUnknown]))
+      .toThrow(/unknown amounts/);
     expect(expandFormulation('partial', { value: '100', unit: 'g' }, [complete])[0]?.mass.value).toBe('100');
   });
   it('expands direct ingredients to the requested batch mass', () => {

@@ -158,8 +158,37 @@ describe('additive final concentration', () => {
       .toEqual(['CONCENTRATION_MISSING']);
     expect(reasonsOf({ sourcesByIngredient: new Map([['syrup', [source('s', mgPerKg('-1'))]]]) }))
       .toEqual(['CONCENTRATION_MISSING']);
-    expect(reasonsOf({ sourcesByIngredient: new Map([['syrup', [source('s', mgPerKg('5'), { sourceEvidence: [] })]]]) }))
-      .toEqual(['EVIDENCE_MISSING']);
+  });
+
+  it('calculates without a source or date and flags incomplete provenance', () => {
+    for (const sourceEvidence of [
+      [],
+      [{ ...evidence[0]!, sourceDate: '' }],
+      [{ ...evidence[0]!, reference: '', sourceDate: '2026-11-01' }],
+    ]) {
+      const result = calculateAdditiveFinalConcentration(input({
+        sourcesByIngredient: new Map([['syrup', [source('s', mgPerKg('500'), { sourceEvidence })]]]),
+      }));
+      expect(result).toMatchObject({
+        status: 'calculated', value: '100',
+        provenanceWarnings: [expect.stringContaining('no complete dated source')],
+        contributions: [{ evidenceReference: sourceEvidence[0]?.reference ?? '', evidenceDate: sourceEvidence[0]?.sourceDate ?? '' }],
+      });
+    }
+    expect(calculateAdditiveFinalConcentration(input())).toMatchObject({ provenanceWarnings: [] });
+  });
+
+  it('uses known unsourced densities with review warnings rather than guessing', () => {
+    const unsourced = { gramsPerMillilitre: '1', evidenceReference: '', sourceDate: '' };
+    const result = calculateAdditiveFinalConcentration(input({
+      outputUnit: 'mg/L', finalDensity: unsourced,
+      ingredientDensities: new Map([['syrup', unsourced]]),
+      sourcesByIngredient: new Map([['syrup', [source('s', { value: '500', unit: 'mgPerL', basis: 'asSupplied' })]]]),
+    }));
+    expect(result).toMatchObject({
+      status: 'calculated', value: '100',
+      provenanceWarnings: [expect.stringContaining('final-food density'), expect.stringContaining('density for ingredient syrup')],
+    });
   });
 
   it('keeps one unresolved source from being silently dropped', () => {

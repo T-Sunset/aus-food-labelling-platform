@@ -37,6 +37,7 @@ export function makeConsultantNotes(
     additives.push(...officialResult(`Additive ${additive.codeNumber} (${additive.names.join(', ')})`, additive.permission));
     if (additive.concentration.status === 'calculated') {
       additives.push(`Calculated concentration: ${additive.concentration.value} ${additive.concentration.unit}; check its basis and evidence.`);
+      additives.push(...additive.concentration.provenanceWarnings.map((warning) => `REVIEW REQUIRED: ${warning}`));
     } else {
       additives.push(`Concentration unavailable: ${additive.concentration.reasons.join(', ')}.`);
     }

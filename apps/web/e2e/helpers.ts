@@ -1,11 +1,20 @@
 import type { Page } from '@playwright/test';
 
 export async function openIngredientSection(page: Page, title: string): Promise<void> {
+  const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const section = page.locator('details.ingredient-section').filter({
-    has: page.locator('summary').filter({ hasText: new RegExp(`^${title}$`) }),
+    has: page.locator('summary').filter({ hasText: new RegExp(`^${escapedTitle}$`) }),
   });
   if (!(await section.evaluate((element) => (element as HTMLDetailsElement).open))) {
     await section.locator(':scope > summary').click();
+  }
+  if (title === 'Nutrition' || title === 'Allergens') {
+    const optional = section.locator('details > summary').filter({ hasText: /^(Nutrition|Density|Allergen) source details \(optional\)$/ });
+    for (const summary of await optional.all()) {
+      if (await summary.isVisible() && !(await summary.locator('..').evaluate((element) => (element as HTMLDetailsElement).open))) {
+        await summary.click();
+      }
+    }
   }
 }
 

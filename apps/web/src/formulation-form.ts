@@ -44,8 +44,8 @@ export function draftFromFormulation(record: FormulationRecord): FormulationDraf
   return {
     name: record.name,
     compositionCoverage: record.supplierComposition?.coverage ?? '',
-    compositionReference: record.supplierComposition?.specification.reference ?? '',
-    compositionDate: record.supplierComposition?.specification.sourceDate ?? '',
+    compositionReference: record.supplierComposition?.specification?.reference ?? '',
+    compositionDate: record.supplierComposition?.specification?.sourceDate ?? '',
     confirmCompositionChanges: false,
     lines,
   };
@@ -70,8 +70,8 @@ export function buildFormulationRecord(
   if (existing?.supplierComposition && !draft.compositionCoverage) {
     throw new Error('Supplier composition evidence cannot be removed here. Keep a partial or complete supplier composition.');
   }
-  if (draft.compositionCoverage && (!draft.compositionReference.trim() || !draft.compositionDate)) {
-    throw new Error('Enter the supplier composition reference and date.');
+  if (draft.compositionCoverage && Boolean(draft.compositionReference.trim()) !== Boolean(draft.compositionDate)) {
+    throw new Error('Provide both a composition source reference and date, or leave both blank.');
   }
   const lines: FormulationRecord['lines'][number][] = [];
   const unquantified: NonNullable<FormulationRecord['supplierComposition']>['unquantifiedComponents'][number][] = [];
@@ -82,7 +82,7 @@ export function buildFormulationRecord(
     const target = line.kind === 'ingredient'
       ? { id: line.id, kind: 'ingredient' as const, ingredientId: line.targetId }
       : { id: line.id, kind: 'formulation' as const, formulationId: line.targetId };
-    if (!line.quantity.trim() && draft.compositionCoverage === 'partial') {
+    if (!line.quantity.trim() && draft.compositionCoverage) {
       unquantified.push(target);
       continue;
     }
@@ -94,8 +94,12 @@ export function buildFormulationRecord(
   }
   if (existing?.supplierComposition?.coverage === 'complete' && draft.compositionCoverage === 'complete'
     && (JSON.stringify(lines) !== JSON.stringify(existing.lines)
-      || draft.compositionReference.trim() !== existing.supplierComposition.specification.reference
-      || draft.compositionDate !== existing.supplierComposition.specification.sourceDate)
+      || JSON.stringify(unquantified) !== JSON.stringify(existing.supplierComposition.unquantifiedComponents)
+      || JSON.stringify(draft.lines.map((line) => line.id))
+        !== JSON.stringify(existing.supplierComposition.lineOrder
+          ?? [...existing.lines, ...existing.supplierComposition.unquantifiedComponents].map((line) => line.id))
+      || draft.compositionReference.trim() !== (existing.supplierComposition.specification?.reference ?? '')
+      || draft.compositionDate !== (existing.supplierComposition.specification?.sourceDate ?? ''))
     && !draft.confirmCompositionChanges) {
     throw new Error('Confirm that the updated composition and source are complete before saving.');
   }
@@ -108,7 +112,7 @@ export function buildFormulationRecord(
     ...(draft.compositionCoverage ? {
       supplierComposition: {
         coverage: draft.compositionCoverage,
-        specification: { reference: draft.compositionReference.trim(), sourceDate: draft.compositionDate },
+        ...(draft.compositionReference.trim() ? { specification: { reference: draft.compositionReference.trim(), sourceDate: draft.compositionDate } } : {}),
         unquantifiedComponents: unquantified,
         lineOrder: draft.lines.map((line) => line.id),
       },
@@ -123,7 +127,10 @@ const gramsPerUnit: Record<LineUnit, number> = { g: 1, kg: 1000, mg: 0.001 };
 
 // Display-only share of the recipe by weight; the engine does the exact calculation.
 export function lineShares(draft: FormulationDraft): (string | undefined)[] {
-  if (draft.compositionCoverage === 'partial') return draft.lines.map(() => undefined);
+  if (draft.compositionCoverage === 'partial'
+    || draft.lines.some((line) => !positiveNumber.test(line.quantity) || Number(line.quantity) <= 0)) {
+    return draft.lines.map(() => undefined);
+  }
   const grams = draft.lines.map((line) =>
     positiveNumber.test(line.quantity) ? Number(line.quantity) * gramsPerUnit[line.unit] : undefined,
   );

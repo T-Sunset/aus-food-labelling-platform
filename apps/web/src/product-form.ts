@@ -1,6 +1,7 @@
 import { expandFormulation } from '@aus-food/engine';
-import type { FormulationRecord, ProductPackDetails, ProductRecord } from '@aus-food/storage';
+import type { FormulationRecord, IngredientRecord, ProductPackDetails, ProductRecord } from '@aus-food/storage';
 import { countAnswered, detectProductType } from './label-builder';
+import { expandNutritionComponents } from './nutrition-components';
 
 export type ProductFoodState = NonNullable<ProductRecord['foodState']>;
 
@@ -66,9 +67,10 @@ export function draftFromProduct(record: ProductRecord): ProductDraft {
   };
 }
 
-export function nutritionRecipeSignature(id: string, formulations: readonly FormulationRecord[]): string {
+export function nutritionRecipeSignature(id: string, formulations: readonly FormulationRecord[], ingredients: readonly IngredientRecord[] = []): string {
   const expanded = expandFormulation(id, { value: '100', unit: 'g' }, formulations);
-  return JSON.stringify({ id, ingredients: expanded });
+  const nutrition = expandNutritionComponents(expanded, formulations, ingredients);
+  return JSON.stringify({ id, ingredients: expanded, ...(JSON.stringify(expanded) !== JSON.stringify(nutrition) ? { nutrition } : {}) });
 }
 
 const positiveNumber = /^\d+(\.\d+)?$/;

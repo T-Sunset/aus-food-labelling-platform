@@ -72,19 +72,21 @@ describe('buildFormulationRecord', () => {
     expect(buildFormulationRecord(draftFromFormulation(record), record, makeId, now)).toEqual(record);
     const edit = draftFromFormulation(record);
     edit.compositionCoverage = 'complete';
-    expect(() => buildFormulationRecord(edit, record, makeId, now)).toThrow(/positive quantity/);
+    expect(buildFormulationRecord(edit, record, makeId, now).supplierComposition?.unquantifiedComponents).toHaveLength(1);
+    expect(lineShares(edit)).toEqual([undefined, undefined]);
     edit.lines[1]!.quantity = '10';
     expect(buildFormulationRecord(edit, record, makeId, now).supplierComposition?.unquantifiedComponents).toEqual([]);
     edit.compositionCoverage = '';
     expect(() => buildFormulationRecord(edit, record, makeId, now)).toThrow(/cannot be removed/);
   });
 
-  it('requires source details for supplier composition and supports unknown components', () => {
+  it('allows an unknown source while rejecting incomplete source details', () => {
     const draft = emptyFormulationDraft();
     draft.name = 'Unknown blend';
     draft.compositionCoverage = 'partial';
-    expect(() => buildFormulationRecord(draft, undefined, makeId, now)).toThrow(/reference and date/);
+    expect(buildFormulationRecord(draft, undefined, makeId, now).supplierComposition?.specification).toBeUndefined();
     draft.compositionReference = 'SPEC';
+    expect(() => buildFormulationRecord(draft, undefined, makeId, now)).toThrow(/reference and date/);
     draft.compositionDate = '2026-01-01';
     expect(buildFormulationRecord(draft, undefined, makeId, now).lines).toEqual([]);
   });

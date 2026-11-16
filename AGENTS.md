@@ -15,7 +15,7 @@ A privacy-focused Australian food-labelling and formulation product. Users model
 The 2026-11-16 product reset pauses the drink-specific D0-D11 sequence.
 General ingredient and formulation foundations come first; the I1-I9 track
 is approved in `docs/implementation-plan.md`; I1's direction and the I2
-ingredient-data approach are agreed, and I3 and I4 are complete. I5 is next.
+ingredient-data approach are agreed, and I3 through I5 are complete. I6 is in progress.
 Existing draft checks and release gates remain in force. Do not
 treat the current app as regulatory acceptance or public-release approval.
 

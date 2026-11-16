@@ -124,7 +124,8 @@ const resultCards = computed<ResultCard[]>(() => {
       additive.permission,
       additive.permission.value?.reasons ?? [],
       concentration.status === 'calculated'
-        ? [`Calculated final concentration: ${concentration.value} ${concentration.unit} (from ${concentration.contributions.length} source record(s))`]
+        ? [`Calculated final concentration: ${concentration.value} ${concentration.unit} (from ${concentration.contributions.length} source record(s))`,
+          ...concentration.provenanceWarnings]
         : [`Concentration not calculated: ${concentration.reasons.join(', ')}`, ...concentration.detail],
       additive.preview,
     ));
@@ -144,13 +145,13 @@ function buildInputs(): ProductAdditiveNameInputs {
     throw new Error('Evidence needs both a reference and a date.');
   }
   const densityParts = [form.densityValue.trim(), form.densityReference.trim(), form.densityDate];
-  if (densityParts.some(Boolean) && !densityParts.every(Boolean)) {
-    throw new Error('Final density needs a value, evidence reference and date, even if its fields are currently hidden.');
+  if (densityParts.some(Boolean) && !densityParts[0]) {
+    throw new Error('Enter a final density value when recording its source details.');
   }
   const evidence = form.evidenceReference.trim() && form.evidenceDate
     ? { evidence: { reference: form.evidenceReference.trim(), sourceDate: form.evidenceDate } }
     : {};
-  const density = form.densityValue.trim() && form.densityReference.trim() && form.densityDate
+  const density = form.densityValue.trim()
     ? {
         finalDensity: {
           gramsPerMillilitre: form.densityValue.trim(),
@@ -302,11 +303,11 @@ async function save(): Promise<void> {
             >
           </label>
           <label class="field">
-            <span>Final density evidence reference</span>
+            <span>Final density evidence reference (optional)</span>
             <input v-model="form.densityReference">
           </label>
           <label class="field">
-            <span>Final density evidence date</span>
+            <span>Final density evidence date (optional)</span>
             <input
               v-model="form.densityDate"
               type="date"

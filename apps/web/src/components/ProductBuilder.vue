@@ -42,7 +42,7 @@ const recipe = computed(() => props.formulations.find((item) => item.id === draf
 const nutritionRecipe = computed(() => {
   if (!draft.formulationId) return { signature: '', error: '' };
   try {
-    return { signature: nutritionRecipeSignature(draft.formulationId, props.formulations), error: '' };
+    return { signature: nutritionRecipeSignature(draft.formulationId, props.formulations, props.ingredients), error: '' };
   } catch (error) {
     return { signature: '', error: error instanceof Error ? error.message : 'The recipe could not be read.' };
   }

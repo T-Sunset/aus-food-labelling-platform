@@ -45,10 +45,14 @@ function isUsableDecimal(value: string, allowZero: boolean): boolean {
 function usableDensity(density: AdditiveDensityEvidence | undefined): density is AdditiveDensityEvidence {
   return (
     density !== undefined &&
-    density.evidenceReference.trim() !== '' &&
-    density.sourceDate.trim() !== '' &&
     isUsableDecimal(density.gramsPerMillilitre, false)
   );
+}
+
+function completeEvidence(reference: string | undefined, sourceDate: string | undefined): boolean {
+  if (!reference?.trim() || !sourceDate || !/^\d{4}-\d{2}-\d{2}$/.test(sourceDate)) return false;
+  const date = new Date(`${sourceDate}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === sourceDate;
 }
 
 const normaliseCode = (code: string | undefined): string => (code ?? '').trim().toLowerCase();
@@ -58,6 +62,7 @@ export function calculateAdditiveFinalConcentration(
 ): AdditiveFinalConcentration {
   const reasons = new Set<AdditiveConcentrationReviewReason>();
   const detail: string[] = [];
+  const provenanceWarnings = new Set<string>();
   const flag = (reason: AdditiveConcentrationReviewReason, message: string): void => {
     reasons.add(reason);
     detail.push(message);
@@ -74,7 +79,10 @@ export function calculateAdditiveFinalConcentration(
     flag('PROCESS_MASS_PROFILE_MISSING', 'No documented process mass profile (yield) was supplied.');
   }
   if (input.outputUnit === 'mg/L' && !usableDensity(input.finalDensity)) {
-    flag('FINAL_DENSITY_MISSING', 'A mg/L result needs dated density evidence for the final food.');
+    flag('FINAL_DENSITY_MISSING', 'A mg/L result needs the density of the final food.');
+  } else if (input.outputUnit === 'mg/L' && input.finalDensity
+    && !completeEvidence(input.finalDensity.evidenceReference, input.finalDensity.sourceDate)) {
+    provenanceWarnings.add('The final-food density has no complete dated source; review the entered value.');
   }
 
   const contributions: AdditiveConcentrationContribution[] = [];
@@ -107,9 +115,8 @@ export function calculateAdditiveFinalConcentration(
         flag('CONCENTRATION_MISSING', `Additive source ${label} has no valid concentration.`);
         continue;
       }
-      if (evidence === undefined) {
-        flag('EVIDENCE_MISSING', `Additive source ${label} has no dated evidence.`);
-        continue;
+      if (!completeEvidence(evidence?.reference, evidence?.sourceDate)) {
+        provenanceWarnings.add(`Additive source ${label} has no complete dated source; review the entered concentration.`);
       }
       if (concentration.basis !== 'asSupplied' && concentration.basis !== 'asAdded') {
         flag('BASIS_NOT_SUPPORTED', `Additive source ${label} uses basis "${concentration.basis}", which is not converted.`);
@@ -129,8 +136,11 @@ export function calculateAdditiveFinalConcentration(
           continue;
         }
         if (!usableDensity(density)) {
-          flag('INGREDIENT_DENSITY_MISSING', `Additive source ${label} is per volume and needs dated ingredient density evidence.`);
+          flag('INGREDIENT_DENSITY_MISSING', `Additive source ${label} is per volume and needs ingredient density.`);
           continue;
+        }
+        if (!completeEvidence(density.evidenceReference, density.sourceDate)) {
+          provenanceWarnings.add(`The density for ingredient ${ingredient.ingredientId} has no complete dated source; review the entered value.`);
         }
         // g/mL equals kg/L, so mass in kg divided by density gives litres.
         const litres = divideDecimals(ingredientKg, density.gramsPerMillilitre);
@@ -144,8 +154,8 @@ export function calculateAdditiveFinalConcentration(
         ingredientMass: ingredient.mass,
         additiveMilligrams,
         ...(concentration.calculatedAs?.trim() ? { calculatedAs: concentration.calculatedAs.trim() } : {}),
-        evidenceReference: evidence.reference,
-        evidenceDate: evidence.sourceDate,
+        evidenceReference: evidence?.reference ?? '',
+        evidenceDate: evidence?.sourceDate ?? '',
       });
     }
   }
@@ -186,5 +196,6 @@ export function calculateAdditiveFinalConcentration(
     ...(input.outputUnit === 'mg/L' && finalDensity !== undefined ? { finalDensity } : {}),
     ...(sharedBasis === undefined ? {} : { calculatedAs: sharedBasis }),
     contributions,
+    provenanceWarnings: [...provenanceWarnings],
   };
 }

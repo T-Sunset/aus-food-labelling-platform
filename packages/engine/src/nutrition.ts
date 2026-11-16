@@ -82,8 +82,8 @@ function sourceFor(
 }
 
 function evidenceIsComplete(evidence: NutrientEvidence): boolean {
-  return evidence.sourceId.trim().length > 0
-      && evidence.sourceDate.trim().length > 0;
+  return (evidence.sourceId.trim().length > 0 && evidence.sourceDate.trim().length > 0)
+    || (evidence.evidenceType === 'user' && evidence.sourceId === '' && evidence.sourceDate === '');
 }
 
 export function aggregateNutrients(

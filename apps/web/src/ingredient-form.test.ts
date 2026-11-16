@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { IngredientRecord } from '@aus-food/storage';
 import {
   buildIngredientRecord,
+  currentAdditiveCoverage,
   currentAllergenCoverage,
   draftFromIngredient,
   emptyAdditiveSourceDraft,
@@ -24,6 +25,35 @@ function filledDraft() {
 }
 
 describe('buildIngredientRecord', () => {
+  it('records a direct additive once using the ingredient name and preserves its information', () => {
+    const draft = emptyIngredientDraft();
+    draft.name = 'Example additive';
+    draft.kind = 'atomic';
+    const direct = emptyAdditiveSourceDraft('direct');
+    direct.codeNumber = '999';
+    draft.additiveSources.push(direct);
+    draft.directAdditiveSourceId = direct.id;
+    draft.additiveCoverageType = 'user';
+    draft.additiveCoverageReference = 'Recipe knowledge';
+    draft.additiveCoverageDate = '2026-01-01';
+    draft.additivesConfirmed = true;
+    const record = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(record.additiveSources).toHaveLength(1);
+    expect(record.additiveSources?.[0]).toMatchObject({ additiveName: 'Example additive', codeNumber: '999', sourceStatus: 'unknown' });
+    expect(record.additiveSources?.[0]?.concentration).toBeUndefined();
+    expect(currentAdditiveCoverage(record)).toBe(true);
+    const edit = draftFromIngredient(record);
+    expect(buildIngredientRecord(edit, record, makeId, now).directAdditiveSourceId).toBe('direct');
+    expect(currentAdditiveCoverage({ ...record, additiveSources: [{ ...record.additiveSources![0]!, codeNumber: '123' }] })).toBe(false);
+    edit.name = 'Renamed additive';
+    edit.additivesConfirmed = false;
+    const changed = buildIngredientRecord(edit, record, makeId, now);
+    expect(changed.additiveSources?.[0]?.additiveName).toBe('Renamed additive');
+    expect(currentAdditiveCoverage(changed)).toBe(false);
+    edit.kind = 'compound';
+    edit.compoundFormulationId = 'recipe';
+    expect(() => buildIngredientRecord(edit, record, makeId, now)).toThrow(/direct additive/);
+  });
   it('round-trips optional nutrients in both bases and retains their original sources', () => {
     const draft = emptyIngredientDraft();
     draft.name = 'Example';
@@ -63,7 +93,8 @@ describe('buildIngredientRecord', () => {
     draft.additionalNutrientsMass[0]!.value = '-1';
     expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/non-negative/);
     draft.additionalNutrientsMass[0]!.value = '0';
-    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/nutrition source/);
+    expect(buildIngredientRecord(draft, undefined, makeId, now).nutrientProfile?.values.dietaryFibre)
+      .toMatchObject({ value: '0', sourceId: '', sourceDate: '', evidenceType: 'user' });
     draft.additionalNutrientsMass.push({ key: 'dietaryFibre', value: '', unit: 'g' });
     draft.nutritionSourceType = 'database';
     draft.nutritionSourceReference = 'Database';
@@ -269,11 +300,32 @@ describe('buildIngredientRecord', () => {
       expect(currentAllergenCoverage(unconfirmed)).toBeUndefined();
       expect(draftFromIngredient(unconfirmed).allergenSourceType).toBe('productLabel');
     });
-  it('requires a specification before nutrient values', () => {
+  it('stores manually entered nutrients without inventing a source', () => {
     const draft = filledDraft();
     draft.specificationReference = '';
     draft.specificationDate = '';
-    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/reference and date/);
+    expect(buildIngredientRecord(draft, undefined, makeId, now).nutrientProfile?.values.protein)
+      .toMatchObject({ value: '12.5', sourceId: '', sourceDate: '', evidenceType: 'user' });
+  });
+
+  it('preserves partial source details and an unsourced density across edits', () => {
+    const draft = emptyIngredientDraft();
+    draft.name = 'Juice';
+    draft.kind = 'atomic';
+    draft.nutrients.protein = '1';
+    draft.nutritionSourceReference = 'Package';
+    draft.allergenSourceDate = '2026-01-01';
+    draft.knownAllergens = ['milk'];
+    draft.allergensConfirmed = true;
+    draft.ingredientDensity = '1.05';
+    const record = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(record.nutritionEntrySource).toMatchObject({ sourceId: 'Package', sourceDate: '' });
+    expect(record.allergenCoverage).toMatchObject({ sourceId: '', sourceDate: '2026-01-01' });
+    expect(record.ingredientDensity).toMatchObject({ gramsPerMillilitre: '1.05', evidenceReference: '', sourceDate: '' });
+    const edited = buildIngredientRecord(draftFromIngredient(record), record, makeId, now);
+    expect(edited.nutritionEntrySource).toEqual(record.nutritionEntrySource);
+    expect(edited.allergenCoverage).toEqual(record.allergenCoverage);
+    expect(edited.ingredientDensity).toEqual(record.ingredientDensity);
   });
 
   it('stores supplier energy evidence and removes it when cleared', () => {
@@ -305,15 +357,19 @@ describe('buildIngredientRecord', () => {
     expect(record.allergenEvidence?.[0]?.assessments).toEqual({ wheat: 'present', milk: 'present' });
   });
 
-  it('requires a supplier reference for explicit coverage confirmations', () => {
+  it('allows allergen and additive confirmation without inventing sources', () => {
     const draft = emptyIngredientDraft();
     draft.name = 'Water';
     draft.kind = 'atomic';
     draft.allergensConfirmed = true;
-    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/source type, reference and date/);
+    const unsourced = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(currentAllergenCoverage(unsourced)).toMatchObject({ sourceId: '', sourceDate: '' });
+    expect(draftFromIngredient(unsourced).allergensConfirmed).toBe(true);
     draft.allergensConfirmed = false;
     draft.additivesConfirmed = true;
-    expect(() => buildIngredientRecord(draft, undefined, makeId, now)).toThrow(/specification reference and date/);
+    const additiveUnsourced = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(currentAdditiveCoverage(additiveUnsourced)).toBe(true);
+    expect(additiveUnsourced.additiveCoverage).toMatchObject({ sourceId: '', sourceDate: '', sourceType: 'user' });
     draft.specificationReference = 'SPEC';
     draft.specificationDate = '2026-01-01';
     const record = buildIngredientRecord(draft, undefined, makeId, now);

@@ -167,6 +167,9 @@ export function evaluateAdditivePermission(
   if (input.sourceStatus !== 'added') {
     reasons.push('SOURCE_STATUS_NOT_ADDED');
   }
+  if (input.concentrationProvenanceComplete === false) {
+    reasons.push('EVIDENCE_MISSING');
+  }
 
   let row: AdditivePermissionCatalogRow | undefined;
   if (category !== undefined && code !== undefined && code !== '') {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FormulationRecord, IngredientRecord, ProductRecord } from '@aus-food/storage';
 import { buildAdditiveNameReport } from './additive-name-checks';
+import { buildIngredientRecord, emptyAdditiveSourceDraft, emptyIngredientDraft } from './ingredient-form';
 
 const stamp = '2026-11-10T00:00:00.000Z';
 
@@ -48,6 +49,115 @@ const product: ProductRecord = {
 };
 
 describe('buildAdditiveNameReport', () => {
+  it('traces a direct additive once and leaves unknown purity unresolved', () => {
+    const direct: IngredientRecord = {
+      ...ingredient, name: 'Sorbic acid', directAdditiveSourceId: 'src-1',
+      additiveSources: [{ id: 'src-1', additiveName: 'Sorbic acid', codeNumber: '200', sourceStatus: 'unknown' }],
+    };
+    const report = buildAdditiveNameReport(product, [formulation], [direct]);
+    expect(report.declarations).toHaveLength(1);
+    expect(report.additives).toHaveLength(1);
+    expect(report.additives[0]?.concentration.status).toBe('review_required');
+    expect(report.additives[0]?.permission.status).toBe('REVIEW REQUIRED');
+  });
+
+  it('calculates a direct additive with known concentration and preserves explicit non-added statuses', () => {
+    const direct: IngredientRecord = {
+      ...ingredient, name: 'Sorbic acid', directAdditiveSourceId: 'src-1',
+      additiveSources: [{
+        ...ingredient.additiveSources![0]!, sourceStatus: 'unknown',
+        concentration: { value: '100', unit: 'mgPerKg', basis: 'asSupplied' },
+      }],
+    };
+    const ready: ProductRecord = {
+      ...product, additiveNameInputs: { confirmedCohorts: [], noProcessMassChangeConfirmed: true },
+    };
+    const report = buildAdditiveNameReport(ready, [formulation], [direct]);
+    expect(report.declarations).toHaveLength(1);
+    expect(report.additives[0]?.concentration).toMatchObject({ status: 'calculated', value: '100' });
+    for (const sourceStatus of ['carriedOver', 'processingAid'] as const) {
+      const source = direct.additiveSources![0]!;
+      const result = buildAdditiveNameReport(ready, [formulation], [
+        { ...direct, additiveSources: [{ ...source, sourceStatus }] },
+      ]);
+      expect(result.additives[0]?.concentration).toMatchObject({
+        status: 'review_required', reasons: expect.arrayContaining(['SOURCE_NOT_ADDED']),
+      });
+    }
+  });
+
+  it('calculates an unsourced direct additive but keeps permission under review', () => {
+    const direct: IngredientRecord = {
+      ...ingredient, name: 'Sorbic acid', directAdditiveSourceId: 'src-1',
+      additiveSources: [{
+        id: 'src-1', additiveName: 'Sorbic acid', codeNumber: '200', sourceStatus: 'unknown',
+        concentration: { value: '100', unit: 'mgPerKg', basis: 'asSupplied' },
+      }],
+    };
+    const ready: ProductRecord = {
+      ...product, additiveNameInputs: { confirmedCohorts: [], noProcessMassChangeConfirmed: true,
+        evidence: { reference: 'Calculation', sourceDate: '2026-11-10' } },
+    };
+    const result = buildAdditiveNameReport(ready, [formulation], [direct]).additives[0]!;
+    expect(result.concentration).toMatchObject({
+      status: 'calculated', value: '100', provenanceWarnings: [expect.stringContaining('no complete dated source')],
+    });
+    expect(result.permission.status).toBe('REVIEW REQUIRED');
+  });
+
+  it('calculates concentration entered for a direct additive ingredient without a source', () => {
+      const draft = emptyIngredientDraft();
+      draft.name = 'Sorbic acid';
+      draft.kind = 'atomic';
+      const source = emptyAdditiveSourceDraft('direct');
+      Object.assign(source, {
+        codeNumber: '200', showAmount: true, concentrationValue: '95',
+        concentrationUnit: 'percentByMass', concentrationBasis: 'asSupplied',
+      });
+      draft.directAdditiveSourceId = source.id;
+      draft.additiveSources.push(source);
+      const direct = buildIngredientRecord(draft, undefined, () => 'ing-1', stamp);
+      const ready: ProductRecord = {
+        ...product, additiveNameInputs: { confirmedCohorts: [], noProcessMassChangeConfirmed: true },
+      };
+      const result = buildAdditiveNameReport(ready, [formulation], [direct]);
+      expect(result.additives[0]?.concentration).toMatchObject({
+        status: 'calculated', value: '950000', provenanceWarnings: [expect.stringContaining('no complete dated source')],
+      });
+      expect(result.additives[0]?.permission.status).toBe('REVIEW REQUIRED');
+  });
+
+  it('does not present a partial total as calculated when a compound ingredient is present', () => {
+    const quantified: IngredientRecord = {
+      ...ingredient,
+      additiveSources: [{
+        ...ingredient.additiveSources![0]!,
+        concentration: { value: '100', unit: 'mgPerKg', basis: 'asSupplied' },
+      }],
+    };
+    const compound: IngredientRecord = {
+      ...ingredient, id: 'blend', name: 'Blend', kind: 'compound', compoundFormulationId: 'inside',
+      additiveSources: [],
+    };
+    const withCompound: FormulationRecord = {
+      ...formulation,
+      lines: [
+        { id: 'l1', kind: 'ingredient', ingredientId: 'ing-1', quantity: { value: '50', unit: 'g' } },
+        { id: 'l2', kind: 'ingredient', ingredientId: 'blend', quantity: { value: '50', unit: 'g' } },
+      ],
+    };
+    const readyProduct: ProductRecord = {
+      ...product, additiveNameInputs: { confirmedCohorts: [], noProcessMassChangeConfirmed: true },
+    };
+    expect(buildAdditiveNameReport(readyProduct, [formulation], [quantified]).additives[0]?.concentration.status)
+      .toBe('calculated');
+    const report = buildAdditiveNameReport(readyProduct, [withCompound], [quantified, compound]);
+    expect(report.limitations.join(' ')).toContain('not included in this report');
+    expect(report.additives[0]?.concentration).toMatchObject({
+      status: 'review_required', reasons: expect.arrayContaining(['COMPOUND_ADDITIVES_NOT_PROPAGATED']),
+    });
+    expect(report.additives[0]?.permission.status).toBe('REVIEW REQUIRED');
+  });
   it('never produces PASS or FAIL from the shipped draft data and keeps declarations separate', () => {
     const report = buildAdditiveNameReport(
       {

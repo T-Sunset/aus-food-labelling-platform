@@ -57,6 +57,7 @@ export interface IngredientRecord extends DraftRecordBase {
     readonly supplierProductCode?: string;
   };
   readonly compoundFormulationId?: string;
+  readonly compoundNutritionBasis?: 'components' | 'whole';
   readonly nutrientProfile?: IngredientNutrientProfile;
   readonly nutritionEntrySource?: {
     readonly sourceType: import('@aus-food/domain').NutrientEvidenceType;
@@ -83,7 +84,14 @@ export interface IngredientRecord extends DraftRecordBase {
     readonly assessments: Readonly<Record<string, AllergenEvidenceStatus>>;
   };
   readonly additiveSources?: readonly IngredientAdditiveSource[];
+  readonly directAdditiveSourceId?: string;
   readonly additivesConfirmed?: boolean;
+  readonly additiveCoverage?: {
+    readonly sourceType: import('@aus-food/domain').NutrientEvidenceType;
+    readonly sourceId: string;
+    readonly sourceDate: string;
+    readonly sourcesSnapshot: string;
+  };
   readonly coverageSpecification?: {
     readonly reference: string;
     readonly sourceDate: string;
@@ -267,6 +275,7 @@ export interface LocalFoodStore {
   readonly formulations: DraftRepository<FormulationRecord>;
   readonly products: DraftRepository<ProductRecord>;
   readonly approvedVersions: ApprovedVersionRepository;
+  saveIngredientWithComposition(ingredient: IngredientRecord, composition: FormulationRecord, isNew: boolean): Promise<void>;
   readonly workspaceWasPreviouslyUsed: boolean;
   readonly workspaceUsageMarkerAvailable: boolean;
   readonly previousWorkspaceAvailable: boolean;
@@ -482,8 +491,8 @@ function validateAdditiveSource(
         !isRecord(evidence)
         || !isNonEmpty(evidence.id)
         || ids.has(evidence.id)
-        || !isNonEmpty(evidence.reference)
-        || !isIsoDate(evidence.sourceDate)
+        || typeof evidence.reference !== 'string'
+        || !(evidence.sourceDate === '' || isIsoDate(evidence.sourceDate))
         || typeof evidence.kind !== 'string'
         || !allowedEvidenceKinds.some((kind) => kind === evidence.kind)
       ) {
@@ -543,12 +552,6 @@ function validateAdditiveSource(
         && allowedStatuses.some((allowed) => allowed === status))
     ) {
       throw new RecordValidationError(`${path}.allergenAssessments must use supported allergen statuses`);
-    }
-    if (
-      Object.keys(value.allergenAssessments).length > 0
-      && (!Array.isArray(value.sourceEvidence) || value.sourceEvidence.length === 0)
-    ) {
-      throw new RecordValidationError(`${path}.allergenAssessments need a dated source evidence reference`);
     }
   }
 }
@@ -702,8 +705,8 @@ function validateAdditiveNameInputs(value: unknown): void {
       || typeof density.gramsPerMillilitre !== 'string'
       || !decimal.test(density.gramsPerMillilitre)
       || Number(density.gramsPerMillilitre) <= 0
-      || !isNonEmpty(density.evidenceReference)
-      || !isIsoDate(density.sourceDate)
+      || typeof density.evidenceReference !== 'string'
+      || !(density.sourceDate === '' || isIsoDate(density.sourceDate))
     )
   ) {
     fail('finalDensity needs a positive g/mL value, an evidence reference and a valid date');
@@ -883,6 +886,10 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
     if (record.compoundFormulationId !== undefined && !isNonEmpty(record.compoundFormulationId)) {
       throw new RecordValidationError('compoundFormulationId must be a non-empty string when present');
     }
+    if (record.compoundNutritionBasis !== undefined
+      && (record.kind !== 'compound' || !['components', 'whole'].includes(record.compoundNutritionBasis))) {
+      throw new RecordValidationError('Compound nutrition basis must be components or whole');
+    }
     if (record.supplierName !== undefined && typeof record.supplierName !== 'string') {
       throw new RecordValidationError('supplierName must be a string when present');
     }
@@ -913,7 +920,8 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
     if (record.energyPer100g !== undefined) {
       const energy = record.energyPer100g;
       if (!isRecord(energy) || typeof energy.value !== 'string' || !/^\d+(\.\d+)?$/.test(energy.value)
-        || !Number.isFinite(Number(energy.value)) || !isNonEmpty(energy.sourceId) || !isIsoDate(energy.sourceDate)) {
+        || !Number.isFinite(Number(energy.value)) || typeof energy.sourceId !== 'string'
+        || !(energy.sourceDate === '' || isIsoDate(energy.sourceDate))) {
         throw new RecordValidationError('energyPer100g needs a non-negative value, reference and valid date');
       }
     }
@@ -921,7 +929,7 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
       const source = record.nutritionEntrySource;
       if (!isRecord(source)
         || !['supplier', 'analysis', 'database', 'calculated', 'productLabel', 'user'].includes(String(source.sourceType))
-        || !isNonEmpty(source.sourceId) || !isIsoDate(source.sourceDate)) {
+        || typeof source.sourceId !== 'string' || !(source.sourceDate === '' || isIsoDate(source.sourceDate))) {
         throw new RecordValidationError('Nutrition source needs a source type, reference and valid date');
       }
     }
@@ -930,7 +938,7 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
       if (!isRecord(density) || typeof density.gramsPerMillilitre !== 'string'
         || !/^\d+(\.\d+)?$/.test(density.gramsPerMillilitre)
         || !Number.isFinite(Number(density.gramsPerMillilitre)) || Number(density.gramsPerMillilitre) <= 0
-        || !isNonEmpty(density.evidenceReference) || !isIsoDate(density.sourceDate)) {
+        || typeof density.evidenceReference !== 'string' || !(density.sourceDate === '' || isIsoDate(density.sourceDate))) {
         throw new RecordValidationError('Ingredient density needs a positive g/mL value, reference and valid date');
       }
     }
@@ -944,7 +952,7 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
       const coverage = record.allergenCoverage;
       if (!isRecord(coverage)
         || !['supplier', 'analysis', 'database', 'calculated', 'productLabel', 'user'].includes(String(coverage.sourceType))
-        || !isNonEmpty(coverage.sourceId) || !isIsoDate(coverage.sourceDate)
+        || typeof coverage.sourceId !== 'string' || !(coverage.sourceDate === '' || isIsoDate(coverage.sourceDate))
         || !isRecord(coverage.assessments)
         || Object.values(coverage.assessments).some((status) =>
           !['present', 'absent', 'unknown', 'exemption_review', 'conflict'].includes(String(status)))) {
@@ -954,8 +962,24 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
     if (record.additiveSources !== undefined) {
       validateIngredientAdditiveSources(record.additiveSources, record.id);
     }
+    if (record.directAdditiveSourceId !== undefined
+      && (!isNonEmpty(record.directAdditiveSourceId) || record.kind !== 'atomic'
+        || !Array.isArray(record.additiveSources)
+        || !record.additiveSources.some((source) => isRecord(source)
+          && source.id === record.directAdditiveSourceId && source.additiveName === record.name))) {
+      throw new RecordValidationError('A direct additive must refer to a matching additive source on a single ingredient');
+    }
     if (record.additivesConfirmed !== undefined && typeof record.additivesConfirmed !== 'boolean') {
       throw new RecordValidationError('additivesConfirmed must be a boolean');
+    }
+    if (record.additiveCoverage !== undefined) {
+      const coverage = record.additiveCoverage;
+      if (!isRecord(coverage)
+        || !['supplier', 'analysis', 'database', 'calculated', 'productLabel', 'user'].includes(String(coverage.sourceType))
+        || typeof coverage.sourceId !== 'string' || !(coverage.sourceDate === '' || isIsoDate(coverage.sourceDate))
+        || typeof coverage.sourcesSnapshot !== 'string') {
+        throw new RecordValidationError('Additive coverage needs a source type, dated reference and source snapshot');
+      }
     }
     if (record.coverageSpecification !== undefined
       && (!isRecord(record.coverageSpecification) || !isNonEmpty(record.coverageSpecification.reference)
@@ -1018,7 +1042,8 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
       if (!isRecord(record.nutritionPer100mL) || Object.entries(record.nutritionPer100mL).some(([key, value]) =>
         !['energy', 'protein', 'fat', 'saturatedFat', 'carbohydrate', 'sugars', 'sodium'].includes(key)
         || !isRecord(value) || typeof value.value !== 'string' || !/^\d+(\.\d+)?$/.test(value.value)
-        || !Number.isFinite(Number(value.value)) || !isNonEmpty(value.sourceId) || !isIsoDate(value.sourceDate))) {
+        || !Number.isFinite(Number(value.value)) || typeof value.sourceId !== 'string'
+        || !(value.sourceDate === '' || isIsoDate(value.sourceDate)))) {
         throw new RecordValidationError('Per-100 mL nutrition needs non-negative values and dated sources');
       }
     }
@@ -1029,7 +1054,7 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
           !ids.includes(key) || !isRecord(evidence) || typeof evidence.value !== 'string'
           || !/^\d+(\.\d+)?$/.test(evidence.value) || !Number.isFinite(Number(evidence.value))
           || !['g/100mL', 'mg/100mL'].includes(String(evidence.unit))
-          || !isNonEmpty(evidence.sourceId) || !isIsoDate(evidence.sourceDate)
+          || typeof evidence.sourceId !== 'string' || !(evidence.sourceDate === '' || isIsoDate(evidence.sourceDate))
           || !['supplier', 'analysis', 'database', 'calculated', 'productLabel', 'user'].includes(String(evidence.evidenceType)))) {
         throw new RecordValidationError('Additional per-100 mL nutrition needs supported nutrients, units and dated sources');
       }
@@ -1070,12 +1095,11 @@ function validateDraftRecord(record: WorkspaceDraftRecord): void {
     if (record.supplierComposition !== undefined) {
       const composition = record.supplierComposition;
       if (!isRecord(composition) || !['partial', 'complete'].includes(String(composition.coverage))
-        || !isRecord(composition.specification) || !isNonEmpty(composition.specification.reference)
-        || !isIsoDate(composition.specification.sourceDate)
+        || (composition.specification !== undefined && (!isRecord(composition.specification)
+          || !isNonEmpty(composition.specification.reference) || !isIsoDate(composition.specification.sourceDate)))
         || !Array.isArray(composition.unquantifiedComponents)
-        || (composition.coverage === 'complete' && composition.unquantifiedComponents.length > 0)
-        || (composition.coverage === 'complete' && record.lines.length === 0)) {
-        throw new RecordValidationError('Supplier composition needs dated evidence and complete compositions need quantified lines');
+        || (composition.coverage === 'complete' && record.lines.length === 0 && composition.unquantifiedComponents.length === 0)) {
+        throw new RecordValidationError('Composition needs valid optional evidence and complete compositions need at least one component');
       }
       for (const [index, line] of composition.unquantifiedComponents.entries()) {
         if (!isRecord(line) || !isNonEmpty(line.id) || lineIds.has(line.id)
@@ -1642,6 +1666,25 @@ export async function openLocalFoodStore(options?: {
       formulations: new DexieDraftRepository(database, database.formulations, now, markUsed),
       products: new DexieDraftRepository(database, database.products, now, markUsed),
       approvedVersions: new DexieApprovedVersionRepository(database, tables, markUsed, now),
+      saveIngredientWithComposition: async (ingredient, composition, isNew) => {
+        validateDraftRecord(ingredient);
+        validateDraftRecord(composition);
+        if (ingredient.kind !== 'compound' || ingredient.compoundFormulationId !== composition.id) {
+          throw new RecordValidationError('The ingredient must reference its composition');
+        }
+        await database.transaction('rw', [database.ingredients, database.formulations, database.products], async () => {
+          const current = await database.ingredients.get(ingredient.id);
+          if (isNew && current) throw new RepositoryConflictError('Ingredient already exists');
+          if (!isNew && !current) throw new RepositoryNotFoundError('Ingredient no longer exists');
+          if (await database.formulations.get(composition.id)) {
+            throw new RepositoryConflictError('Composition already exists; existing recipes are not overwritten');
+          }
+          await database.formulations.add(composition);
+          await database.ingredients.put(ingredient);
+          await assertNoCircularReferences(database);
+        });
+        markUsed();
+      },
       workspaceWasPreviouslyUsed,
       workspaceUsageMarkerAvailable: usageMarker !== undefined,
       previousWorkspaceAvailable: empty && await database.recoveryPoints.count() === 0
@@ -1894,6 +1937,8 @@ function validateBackupPayload(value: unknown): asserts value is WorkspaceBackup
       || item.nutritionPer100mL !== undefined || item.supplierFacts !== undefined
       || item.otherSchedule28Statements !== undefined || item.ingredientDensity !== undefined
       || item.allergenCoverage !== undefined || item.nutritionEntrySource !== undefined
+      || item.directAdditiveSourceId !== undefined || item.compoundNutritionBasis !== undefined
+      || item.additiveCoverage !== undefined
       || item.additionalNutritionPer100mL !== undefined
       || (isRecord(item.energyPer100g) && item.energyPer100g.evidenceType !== undefined)
       || Object.values(profile).some((value) => isRecord(value)

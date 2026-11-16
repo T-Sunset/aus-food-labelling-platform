@@ -144,6 +144,17 @@ describe('additive permission evaluation', () => {
     });
   });
 
+  it('does not pass or fail from a calculated concentration with incomplete provenance', () => {
+    expect(reasons({ ...complete, concentrationProvenanceComplete: false })).toContain('EVIDENCE_MISSING');
+    expect(reasons({
+      ...complete, finalConcentration: { value: '101', unit: 'mg/kg', calculatedAs: 'sorbic acid' },
+      concentrationProvenanceComplete: false,
+    })).toContain('EVIDENCE_MISSING');
+    expect(reasons({
+      ...complete, additiveCodeNumber: '330', gmpConfirmed: true, concentrationProvenanceComplete: false,
+    })).toContain('EVIDENCE_MISSING');
+  });
+
   it('returns REVIEW REQUIRED for a conditional row and shows the conditions', () => {
     const result = evaluateAdditivePermission({
       ...complete,

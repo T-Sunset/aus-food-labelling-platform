@@ -106,10 +106,10 @@ function submit(): void {
           <span>What is this formulation?</span>
           <select v-model="draft.compositionCoverage">
             <option value="">My recipe or a composition without confirmed coverage</option>
-            <option value="partial">Supplier composition: information is partial</option>
-            <option value="complete">Supplier composition: supplier confirms it is complete</option>
+            <option value="partial">Composition: information is partial or uncertain</option>
+            <option value="complete">Composition: all components are known</option>
           </select>
-          <small>Partial information is not scaled or treated as a complete recipe. Changing a shared formulation affects every ingredient and product linked to it.</small>
+          <small>Partial lists and unknown amounts cannot be scaled. Changing a shared formulation affects every ingredient and product linked to it.</small>
         </label>
         <template v-if="draft.compositionCoverage">
           <label class="field">
@@ -137,9 +137,9 @@ function submit(): void {
           <div>
             <h3>Ingredients in this recipe</h3>
             <p class="field-hint">
-              <template v-if="draft.compositionCoverage === 'partial'">
+              <template v-if="draft.compositionCoverage">
                 Enter known component amounts on the same basis. Leave an amount blank when unknown;
-                no percentages or full composition will be calculated.
+                no percentages can be calculated until every amount is known.
               </template>
               <template v-else>
                 Use amounts on the same basis. The total can be anything; it doesn't have to add up to 100 g.

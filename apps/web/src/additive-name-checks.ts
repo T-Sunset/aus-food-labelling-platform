@@ -26,6 +26,7 @@ import type {
   ProcessMassBalance,
 } from '@aus-food/domain';
 import type { FormulationRecord, IngredientRecord, ProductRecord } from '@aus-food/storage';
+import { additiveSourcesInRecipe } from './ingredient-additives';
 import {
   nameRuleTrace,
   nameRules,
@@ -63,7 +64,7 @@ export interface AdditiveNameReport {
 // These evaluators exist in the engine but have no entry fields in the workspace yet.
 export const NOT_WIRED_LIMITATIONS: readonly string[] = [
   'Same-purpose mixture, aggregate colour, carry-over and processing-aid checks are not run here. Treat them as REVIEW REQUIRED.',
-  'Per-ingredient density evidence cannot be entered, so per-volume additive sources need review.',
+  'Direct additive ingredients are treated as added; the recipe cannot yet record whether an ingredient was used as a processing aid or carried over.',
   'Concentrations are calculated for a 100 g ingoing formulation and use the declared figures only; nothing is assumed.',
 ];
 
@@ -96,8 +97,12 @@ export function buildAdditiveNameReport(
   }
 
   const ingredientById = new Map(ingredients.map((item) => [item.id, item]));
+  const hasCompoundIngredients = expanded.some((item) => ingredientById.get(item.ingredientId)?.kind === 'compound');
+  const limitations = hasCompoundIngredients
+    ? [...NOT_WIRED_LIMITATIONS, 'Additives inside linked compound ingredients are not included in this report. Concentrations require review and may be incomplete.']
+    : NOT_WIRED_LIMITATIONS;
   const sourcesByIngredient = new Map<string, readonly IngredientAdditiveSource[]>(
-    ingredients.map((item) => [item.id, item.additiveSources ?? []]),
+    ingredients.map((item) => [item.id, additiveSourcesInRecipe(item)]),
   );
   const traced = traceAdditiveSources(expanded, sourcesByIngredient);
   const nameOf = (id: string): string => ingredientById.get(id)?.name ?? id;
@@ -136,15 +141,30 @@ export function buildAdditiveNameReport(
 
   const evidence = inputs?.evidence;
   const additives = [...groupByCode(traced)].map(([codeNumber, group]): AdditiveCheck => {
-    const concentration = calculateAdditiveFinalConcentration({
+    const calculated = calculateAdditiveFinalConcentration({
       additiveCodeNumber: codeNumber,
       foodState,
       outputUnit: inputs?.outputUnit ?? 'mg/kg',
       ingredients: expanded,
       sourcesByIngredient,
       processBalance,
+      ingredientDensities: new Map(ingredients.flatMap((item) =>
+        item.ingredientDensity ? [[item.id, item.ingredientDensity] as const] : [])),
       finalDensity: inputs?.finalDensity,
     });
+    const concentration: AdditiveFinalConcentration = hasCompoundIngredients
+      ? {
+          status: 'review_required',
+          reasons: [
+            ...(calculated.status === 'review_required' ? calculated.reasons : []),
+            'COMPOUND_ADDITIVES_NOT_PROPAGATED',
+          ],
+          detail: [
+            ...(calculated.status === 'review_required' ? calculated.detail : []),
+            'Linked compound ingredient additives are not included in this calculation.',
+          ],
+        }
+      : calculated;
     const purposes = [...new Set(group.flatMap((item) => item.source.technologicalPurposes ?? []))];
     const statuses = [...new Set(group.map((item) => item.source.sourceStatus))];
     const permissionInput: AdditivePermissionEvaluationInput = {
@@ -159,6 +179,8 @@ export function buildAdditiveNameReport(
       finalConcentration: concentration.status === 'calculated'
         ? { value: concentration.value, unit: concentration.unit, calculatedAs: concentration.calculatedAs }
         : undefined,
+      concentrationProvenanceComplete: concentration.status === 'calculated'
+        ? concentration.provenanceWarnings.length === 0 : undefined,
       evidence,
       sourcePath: [product.id],
     };
@@ -201,6 +223,6 @@ export function buildAdditiveNameReport(
     names,
     sweetened,
     ...(illustrative ? { sweetenedPreview: illustrateInfantSweetenedWord(sweetened, sweetenedInput) } : {}),
-    limitations: NOT_WIRED_LIMITATIONS,
+    limitations,
   };
 }

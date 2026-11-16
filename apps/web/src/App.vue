@@ -18,6 +18,7 @@ import LabelExportPanel from './components/LabelExportPanel.vue';
 import ProductBuilder from './components/ProductBuilder.vue';
 import ReviewTracePanel from './components/ReviewTracePanel.vue';
 import { editableIngredientKeys } from './ingredient-form';
+import { additiveSourcesInRecipe } from './ingredient-additives';
 import { seedIllustrativeDemo } from './demo-workspace.js';
 import { workedExampleSet } from './worked-example-data.js';
 import {
@@ -325,14 +326,24 @@ function additiveConcentrationBasisLabel(basis: AdditiveConcentration['basis']):
 
 const ingredientEditor = ref<IngredientRecord | 'new'>();
 
-async function saveIngredient(record: IngredientRecord): Promise<void> {
+async function saveIngredient(record: IngredientRecord, composition?: FormulationRecord): Promise<void> {
   clearMessages();
   if (store.value === undefined) {
     actionError.value = 'Local storage is not available.';
     return;
   }
   try {
-    if (ingredientEditor.value === 'new' || ingredientEditor.value === undefined) {
+    if (composition) {
+      const current = ingredientEditor.value;
+      const changes: Partial<IngredientRecord> = {};
+      if (current && current !== 'new') {
+        for (const key of editableIngredientKeys) {
+          Object.assign(changes, { [key]: record[key] });
+        }
+      }
+      const merged = current && current !== 'new' ? { ...current, ...record, ...changes } : record;
+      await store.value.saveIngredientWithComposition(merged, composition, current === 'new');
+    } else if (ingredientEditor.value === 'new' || ingredientEditor.value === undefined) {
       await store.value.ingredients.create(record);
     } else {
       // Storage merges changes, so a field the person cleared is sent as an explicit undefined.
@@ -394,14 +405,14 @@ function calculateFormulation(formulation: FormulationRecord): void {
       expanded,
       new Map(ingredients.value.map((ingredient) => [
         ingredient.id,
-        ingredient.additiveSources ?? [],
+        additiveSourcesInRecipe(ingredient),
       ])),
     );
     const additiveAllergenEvidence = traceAdditiveAllergenEvidence(
       expanded,
       new Map(ingredients.value.map((ingredient) => [
         ingredient.id,
-        ingredient.additiveSources ?? [],
+        additiveSourcesInRecipe(ingredient),
       ])),
     );
     const formulationById = new Map(
@@ -873,6 +884,7 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 :key="ingredientEditor === 'new' ? 'new' : ingredientEditor.id"
                 :record="ingredientEditor === 'new' ? undefined : ingredientEditor"
                 :formulations="formulations"
+                :ingredients="ingredients"
                 :make-id="makeId"
                 @save="saveIngredient"
                 @cancel="ingredientEditor = undefined"
@@ -932,7 +944,8 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                     <div class="record-main">
                       <strong>{{ record.name }}</strong>
                       <span>{{
-                        record.kind === 'compound' ? 'Compound ingredient' : 'Single ingredient'
+                        record.kind === 'compound' ? 'Compound ingredient'
+                        : record.directAdditiveSourceId ? 'Additive ingredient' : 'Single ingredient'
                       }}<template v-if="record.supplierName">
                         · {{ record.supplierName }}</template></span>
                       <small v-if="record.specification">Spec {{ record.specification.reference }} ·

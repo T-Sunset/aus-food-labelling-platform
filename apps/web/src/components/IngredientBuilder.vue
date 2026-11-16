@@ -10,20 +10,54 @@ import {
   ingredientStepStatuses,
   managedNutrients,
   optionalNutrientLabels,
-  supplierFactTopics,
-  supplierStatements,
 } from '../ingredient-form';
+import { buildFormulationRecord, draftFromFormulation, emptyFormulationDraft } from '../formulation-form';
 import { allergenChoices } from '../rule-data';
 import AppButton from './ui/button/AppButton.vue';
 
 const props = defineProps<{
   record?: IngredientRecord | undefined;
   formulations: readonly FormulationRecord[];
+  ingredients: readonly IngredientRecord[];
   makeId: (prefix: string) => string;
 }>();
-const emit = defineEmits<{ save: [record: IngredientRecord]; cancel: [] }>();
+const emit = defineEmits<{ save: [record: IngredientRecord, composition?: FormulationRecord]; cancel: [] }>();
 
 const draft = reactive(props.record ? draftFromIngredient(props.record) : emptyIngredientDraft());
+const linkedComposition = computed(() => props.formulations.find((item) => item.id === draft.compoundFormulationId));
+const compositionDraft = reactive(linkedComposition.value ? draftFromFormulation(linkedComposition.value) : emptyFormulationDraft());
+if (!linkedComposition.value) compositionDraft.compositionCoverage = 'partial';
+const originalComposition = ref(JSON.stringify(compositionDraft));
+const availableIngredients = computed(() => props.ingredients.filter((item) => item.id !== props.record?.id));
+let selectingComposition = false;
+watch(
+  () => JSON.stringify(compositionDraft.lines),
+  () => {
+    if (!selectingComposition && compositionDraft.compositionCoverage === 'complete') {
+      compositionDraft.compositionCoverage = 'partial';
+    }
+  },
+  { flush: 'sync' },
+);
+
+function addComponent(): void {
+  compositionDraft.lines.push({
+    id: props.makeId('line'), kind: 'ingredient', targetId: '', quantity: '', unit: 'g',
+  });
+}
+function chooseComposition(): void {
+  const selected = linkedComposition.value;
+  selectingComposition = true;
+  try {
+    Object.assign(compositionDraft, selected ? draftFromFormulation(selected) : {
+      ...emptyFormulationDraft(), compositionCoverage: 'partial',
+    });
+  } finally {
+    selectingComposition = false;
+  }
+  originalComposition.value = JSON.stringify(compositionDraft);
+  draft.additivesConfirmed = false;
+}
 const errorMessage = ref('');
 const hasMassNutrition = computed(() => Boolean(draft.energyPer100g.trim())
   || managedNutrients.some(({ key }) => Boolean(draft.nutrients[key].trim()))
@@ -31,6 +65,32 @@ const hasMassNutrition = computed(() => Boolean(draft.energyPer100g.trim())
 const hasVolumeNutrition = computed(() => Object.values(draft.nutritionPer100mL).some((value) => Boolean(value.trim()))
   || draft.additionalNutrientsVolume.some(({ value }) => Boolean(value.trim())));
 const nutritionBasis = ref<'mass' | 'volume'>(hasVolumeNutrition.value && !hasMassNutrition.value ? 'volume' : 'mass');
+const directAdditive = computed(() => draft.additiveSources.find((source) => source.id === draft.directAdditiveSourceId));
+let previousDirectAdditive: ReturnType<typeof emptyAdditiveSourceDraft> | undefined;
+const ingredientType = computed({
+  get: () => draft.directAdditiveSourceId ? 'additive' : draft.kind,
+  set: (type: 'atomic' | 'compound' | 'additive' | '') => {
+    if (type === 'additive') {
+      draft.kind = 'atomic';
+      if (!draft.directAdditiveSourceId) {
+        const name = draft.name.trim().toLowerCase();
+        const existing = name && draft.additiveSources.find((source) => source.additiveName.trim().toLowerCase() === name);
+        const source = existing || previousDirectAdditive || emptyAdditiveSourceDraft(props.makeId('additive-source'));
+        if (!existing) draft.additiveSources.push(source);
+        draft.directAdditiveSourceId = source.id;
+      }
+    } else {
+      const source = draft.additiveSources.find((item) => item.id === draft.directAdditiveSourceId);
+      if (source) {
+        previousDirectAdditive = source;
+        draft.additiveSources.splice(draft.additiveSources.indexOf(source), 1);
+      }
+      draft.directAdditiveSourceId = '';
+      draft.kind = type;
+    }
+    draft.additivesConfirmed = false;
+  },
+});
 const selectedAdditionalNutrient = ref<OptionalNutrientId | ''>('');
 const additionalNutrients = computed(() => nutritionBasis.value === 'mass'
   ? draft.additionalNutrientsMass : draft.additionalNutrientsVolume);
@@ -91,22 +151,18 @@ watch(
   () => { draft.allergensConfirmed = false; },
 );
 watch(
-  () => [draft.specificationReference, draft.specificationDate, JSON.stringify(draft.additiveSources)],
+  () => [draft.specificationReference, draft.specificationDate, draft.additiveCoverageType,
+    draft.additiveCoverageReference, draft.additiveCoverageDate, draft.directAdditiveSourceId,
+    draft.directAdditiveSourceId ? draft.name : '', JSON.stringify(draft.additiveSources)],
   () => { draft.additivesConfirmed = false; },
 );
 watch(
-  () => [draft.specificationReference, draft.specificationDate],
-  () => {
-    draft.confirmCaffeineForCurrentSpec = false;
-    draft.confirmIdentityForCurrentSpec = false;
-    for (const { key } of supplierFactTopics) draft.supplierFacts[key].confirmCurrentSpec = false;
-  },
+  () => [JSON.stringify(compositionDraft.lines), compositionDraft.compositionCoverage],
+  () => { if (!selectingComposition) draft.additivesConfirmed = false; },
 );
-
 const statuses = computed(() => ingredientStepStatuses(draft));
 const steps = computed(() => [
   { id: 'about', title: 'About it', status: statuses.value.about.text, done: statuses.value.about.done },
-  { id: 'spec', title: 'Spec sheet', status: statuses.value.spec.text, done: statuses.value.spec.done },
   { id: 'nutrition', title: 'Nutrition', status: statuses.value.nutrition.text, done: statuses.value.nutrition.done },
   { id: 'allergens', title: 'Allergens', status: statuses.value.allergens.text, done: statuses.value.allergens.done },
   { id: 'additives', title: 'Additives', status: statuses.value.additives.text, done: statuses.value.additives.done },
@@ -116,23 +172,32 @@ const steps = computed(() => [
 const missing = computed(() => {
   const list: string[] = [];
   if (!statuses.value.about.done) list.push('Name and type of ingredient');
-  if (!statuses.value.spec.done) list.push('Supplier spec sheet reference and date');
   if (!statuses.value.nutrition.done) list.push('Some nutrition values (blank means "not supplied", never zero)');
-  if (!statuses.value.allergens.done) list.push('Confirm the supplier allergen information');
-  if (!statuses.value.additives.done) list.push('Confirm the supplier additive information');
+  if (!statuses.value.allergens.done) list.push('Confirm the allergen information');
+  if (!statuses.value.additives.done) list.push('Confirm the additive information');
   return list;
 });
-
-function addAdditive(): void {
-  draft.additiveSources.push(emptyAdditiveSourceDraft(props.makeId('additive-source')));
-}
 
 function submit(): void {
   errorMessage.value = '';
   try {
     const existing = props.record === undefined ? undefined : toRaw(props.record);
-    const record = buildIngredientRecord(draft, existing, props.makeId, new Date().toISOString());
-    emit('save', record);
+    const now = new Date().toISOString();
+    let composition: FormulationRecord | undefined;
+    if (draft.kind === 'compound' && (!linkedComposition.value || JSON.stringify(compositionDraft) !== originalComposition.value)) {
+      if (linkedComposition.value?.processMassProfile) {
+        throw new Error('This linked recipe has processing information. Edit it in Formulations to preserve that information.');
+      }
+      compositionDraft.name = `${draft.name.trim()} components`;
+      if (linkedComposition.value) {
+        compositionDraft.compositionReference = '';
+        compositionDraft.compositionDate = '';
+      }
+      composition = buildFormulationRecord(compositionDraft, undefined, props.makeId, now);
+      draft.compoundFormulationId = composition.id;
+    }
+    const record = buildIngredientRecord(draft, existing, props.makeId, now);
+    emit('save', record, composition);
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'This ingredient could not be saved.';
   }
@@ -166,10 +231,10 @@ function submit(): void {
             draft whenever you like.
           </p>
           <p
-            v-if="record?.ingredientIdentity || record?.caffeineEvidence || record?.supplierFacts || record?.otherSchedule28Statements?.length"
+            v-if="draft.additiveSources.some((source) => source.id !== draft.directAdditiveSourceId)"
             class="field-hint full"
           >
-            This record has existing specialised information. Find it under Source details.
+            This older record has separate additive entries that cannot be edited here. Review or recreate the ingredient using included ingredients before relying on it.
           </p>
           <label class="field full">
             <span>Ingredient name <b aria-hidden="true">*</b></span>
@@ -182,36 +247,33 @@ function submit(): void {
           </label>
           <label class="field">
             <span>Ingredient type</span>
-            <select v-model="draft.kind">
+            <select v-model="ingredientType">
               <option
                 value=""
                 disabled
               >Select ingredient type</option>
               <option value="atomic">Single ingredient (e.g. rolled oats, sugar)</option>
+              <option value="additive">An additive</option>
               <option value="compound">Made from other ingredients (e.g. a sauce with its own recipe)</option>
             </select>
-            <small class="field-hint">
-              Choose "made from other ingredients" only if you have already saved a recipe for it.
-            </small>
           </label>
           <label
             v-if="draft.kind === 'compound'"
             class="field"
           >
-            <span>Composition formulation <b aria-hidden="true">*</b></span>
-            <select v-model="draft.compoundFormulationId">
-              <option
-                value=""
-                disabled
-              >Select a formulation</option>
+            <span>Composition formulation</span>
+            <select
+              v-model="draft.compoundFormulationId"
+              @change="chooseComposition"
+            >
+              <option value="">Enter components below</option>
               <option
                 v-for="item in formulations"
                 :key="item.id"
                 :value="item.id"
-              >
-                {{ item.name }}
-              </option>
+              >{{ item.name }}</option>
             </select>
+            <small>Optional: reuse an existing recipe instead of entering components below.</small>
           </label>
           <label class="field">
             <span>Supplier name</span>
@@ -222,339 +284,356 @@ function submit(): void {
               placeholder="Supplier or manufacturer"
             >
           </label>
-          <label class="field">
-            <span>Supplier product code</span>
-            <input
-              v-model="draft.supplierProductCode"
-              maxlength="80"
-              autocomplete="off"
-              placeholder="Optional"
-            >
-          </label>
         </div>
-      </details>
-      <details class="ingredient-section">
-        <summary>Source details</summary>
-        <fieldset class="field-group">
-          <legend>Source details</legend>
+        <fieldset
+          v-if="directAdditive"
+          class="field-group"
+        >
+          <legend>Additive details</legend>
           <p class="field-hint">
-            You can save the ingredient without a supplier specification. Nutrition and allergen
-            information can also use other dated sources in their respective sections.
-          </p>
-          <details>
-            <summary>Earlier drink-specific information (optional)</summary>
-            <div class="form-grid">
-              <label class="field">
-                <span>Ingredient identity from the specification</span>
-                <select v-model="draft.ingredientIdentity">
-                  <option value="">Not sure yet</option>
-                  <option value="water">Water</option>
-                  <option value="sugar">Sugar</option>
-                  <option value="citric-acid">Citric acid</option>
-                  <option value="caffeine">Caffeine</option>
-                  <option value="lemon-peel-oil">Lemon-peel oil</option>
-                  <option value="flavour-blend">Flavour blend</option>
-                  <option value="unrecognised">Something else / not recognised</option>
-                </select>
-                <small>The selection is separate from the ingredient name and is not a legal classification.</small>
-              </label>
-              <label class="field">
-                <span>What does this specification say about caffeine?</span>
-                <select v-model="draft.caffeineStatus">
-                  <option value="">Not stated or unknown</option>
-                  <option value="present">Caffeine is present</option>
-                  <option value="absent">Supplier confirms no caffeine</option>
-                  <option value="conflicting">Information conflicts</option>
-                </select>
-              </label>
-              <template v-if="draft.caffeineStatus === 'present'">
-                <label class="field">
-                  <span>Caffeine amount in the supplied ingredient</span>
-                  <input
-                    v-model="draft.caffeineAmount"
-                    inputmode="decimal"
-                  >
-                </label>
-                <label class="field">
-                  <span>Caffeine amount unit</span>
-                  <select v-model="draft.caffeineUnit">
-                    <option value="">Choose a unit</option>
-                    <option value="g/100g">g per 100 g</option>
-                    <option value="mg/100g">mg per 100 g</option>
-                    <option value="mg/100mL">mg per 100 mL</option>
-                  </select>
-                </label>
-              </template>
-            </div>
-            <template v-if="draft.caffeineStatus === 'conflicting'">
-              <p class="field-hint">
-                Record both supplier statements and their sources. The disagreement remains unresolved;
-                neither statement is treated as the answer. Keep the original documents.
-              </p>
-              <fieldset
-                v-for="(statement, index) in draft.caffeineStatements"
-                :key="index"
-                class="field-group"
-              >
-                <legend>Caffeine statement {{ index + 1 }}</legend>
-                <div class="form-grid">
-                  <label class="field">
-                    <span>Statement {{ index + 1 }}: caffeine</span>
-                    <select
-                      v-model="statement.status"
-                      :disabled="Boolean(record?.caffeineEvidence?.statements)"
-                    >
-                      <option value="">Choose a statement</option>
-                      <option value="present">Present</option>
-                      <option value="absent">Confirmed absent</option>
-                    </select>
-                  </label>
-                  <template v-if="statement.status === 'present'">
-                    <label class="field">
-                      <span>Statement {{ index + 1 }}: amount</span>
-                      <input
-                        v-model="statement.amount"
-                        inputmode="decimal"
-                        :disabled="Boolean(record?.caffeineEvidence?.statements)"
-                      >
-                    </label>
-                    <label class="field">
-                      <span>Statement {{ index + 1 }}: unit</span>
-                      <select
-                        v-model="statement.unit"
-                        :disabled="Boolean(record?.caffeineEvidence?.statements)"
-                      >
-                        <option value="">Choose a unit</option>
-                        <option value="g/100g">g per 100 g</option>
-                        <option value="mg/100g">mg per 100 g</option>
-                        <option value="mg/100mL">mg per 100 mL</option>
-                      </select>
-                    </label>
-                  </template>
-                  <label class="field">
-                    <span>Statement {{ index + 1 }}: source reference</span>
-                    <input
-                      v-model="statement.reference"
-                      maxlength="120"
-                      :disabled="Boolean(record?.caffeineEvidence?.statements)"
-                    >
-                  </label>
-                  <label class="field">
-                    <span>Statement {{ index + 1 }}: source date</span>
-                    <input
-                      v-model="statement.sourceDate"
-                      type="date"
-                      :disabled="Boolean(record?.caffeineEvidence?.statements)"
-                    >
-                  </label>
-                </div>
-              </fieldset>
-              <p
-                v-if="record?.caffeineEvidence?.statements"
-                class="field-hint"
-              >
-                Saved supplier statements are kept unchanged. If you have checked the disagreement,
-                record your decision below; this does not change calculations yet.
-              </p>
-              <div
-                v-if="record?.caffeineEvidence?.decisions?.length"
-                class="field-group"
-              >
-                <h3>Previous caffeine decisions</h3>
-                <ul class="review-list">
-                  <li
-                    v-for="(decision, index) in record.caffeineEvidence.decisions"
-                    :key="index"
-                  >
-                    {{ decision.choice === 'statement1' ? 'Use statement 1' : decision.choice === 'statement2' ? 'Use statement 2' : 'Still unresolved' }}:
-                    {{ decision.reason }} ({{ decision.recordedAt }})
-                  </li>
-                </ul>
-              </div>
-              <div class="form-grid">
-                <label class="field">
-                  <span>Decision about the caffeine information</span>
-                  <select v-model="draft.caffeineDecision">
-                    <option value="">No new decision</option>
-                    <option value="statement1">Use supplier statement 1</option>
-                    <option value="statement2">Use supplier statement 2</option>
-                    <option value="unresolved">The disagreement is still unresolved</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Why was this decision made?</span>
-                  <textarea
-                    v-model="draft.caffeineDecisionReason"
-                    rows="2"
-                    maxlength="1000"
-                    placeholder="For example, the supplier confirmed which specification applies."
-                  />
-                </label>
-              </div>
-              <p class="field-hint">
-                Both statements and earlier decisions are retained. The selected statement is not yet
-                used in product calculations, so the disagreement remains flagged for now.
-              </p>
-            </template>
-            <label
-              v-if="record?.ingredientIdentity && (record.ingredientIdentity.specification.reference !== draft.specificationReference || record.ingredientIdentity.specification.sourceDate !== draft.specificationDate) && draft.ingredientIdentity"
-              class="field"
-            >
-              <span>
-                <input
-                  v-model="draft.confirmIdentityForCurrentSpec"
-                  type="checkbox"
-                >
-                I checked this identity against the current specification.
-              </span>
-              <small>The saved identity belongs to an earlier specification until reconfirmed.</small>
-            </label>
-            <p class="field-hint">
-              Record only what the supplier states for this ingredient as supplied. Blank is unknown, not zero.
-              Caffeine information is not yet used to calculate product totals.
-              <template v-if="record?.caffeineEvidence && (record.caffeineEvidence.specification.reference !== draft.specificationReference || record.caffeineEvidence.specification.sourceDate !== draft.specificationDate)">
-                The saved caffeine information belongs to an earlier specification; review it before relying on it.
-              </template>
-            </p>
-            <label
-              v-if="record?.caffeineEvidence && (record.caffeineEvidence.specification.reference !== draft.specificationReference || record.caffeineEvidence.specification.sourceDate !== draft.specificationDate) && draft.caffeineStatus && draft.caffeineStatus !== 'conflicting'"
-              class="field"
-            >
-              <span>
-                <input
-                  v-model="draft.confirmCaffeineForCurrentSpec"
-                  type="checkbox"
-                >
-                I checked this caffeine information against the current specification.
-              </span>
-            </label>
-          </details>
-          <p class="field-hint">
-            Where to find it: the document your supplier sent with this ingredient. Its number and date
-            let you, or a consultant, trace information back later. A specification is still needed
-            for the supplier-specific questions and additive confirmation.
+            Enter what you know. A name or number does not establish permission for use.
           </p>
           <div class="form-grid">
             <label class="field">
-              <span>Specification reference</span>
+              <span>Code number (source)</span>
               <input
-                v-model="draft.specificationReference"
-                maxlength="120"
+                v-model="directAdditive.codeNumber"
+                maxlength="40"
                 autocomplete="off"
-                placeholder="Document number or version"
+                placeholder="If known"
               >
             </label>
-            <label class="field">
-              <span>Specification date</span>
-              <input
-                v-model="draft.specificationDate"
-                type="date"
-              >
+            <label class="field full">
+              <span>Technological purpose(s)</span>
+              <textarea
+                v-model="directAdditive.technologicalPurposes"
+                rows="2"
+                maxlength="500"
+                placeholder="For example, preservative or thickener"
+              />
+              <small class="field-hint">Enter one known purpose per line.</small>
             </label>
           </div>
           <details>
-            <summary>Other information stated by this supplier (optional)</summary>
+            <summary>Label wording options (optional)</summary>
             <p class="field-hint">
-              Only record information the supplier actually provides for this ingredient. These entries
-              do not replace the ingredient or additive list, and are not yet used in product checks.
-              Blank means unknown, not absent. Keep supplier documents if statements disagree.
+              If you already know how this additive should be described on the label, you can
+              record it here. Leave it undecided if unsure; the wording still needs review.
             </p>
-            <div
-              v-for="topic in supplierFactTopics"
-              :key="topic.key"
-              class="field-group"
-            >
+            <div class="form-grid">
               <label class="field">
-                <span>{{ topic.label }}</span>
-                <select v-model="draft.supplierFacts[topic.key].status">
-                  <option value="">Not stated or unknown</option>
-                  <option value="present">Supplier says present</option>
-                  <option value="absent">Supplier confirms absent</option>
+                <span>How should this additive be described on the label?</span>
+                <select v-model="directAdditive.declarationRoute">
+                  <option value="unknown">Not sure yet</option>
+                  <option value="schedule7Class">Purpose and name or number (e.g. preservative (200))</option>
+                  <option value="noSchedule7Class">Name only</option>
+                  <option value="enzyme">As an enzyme</option>
+                  <option value="flavouring">As a flavouring</option>
+                  <option value="specifiedFlavouringSubstance">As a named flavouring substance</option>
+                  <option value="addedCaffeine">As added caffeine</option>
                 </select>
-                <small v-if="topic.key === 'otherSchedule28'">
-                  Excludes caffeine, added vitamins and added taurine recorded separately. Use this
-                  only when the supplier explicitly confirms whether any other Schedule 28
-                  substances have been added. This does not establish whether such substances
-                  occur naturally. Do not guess from a name or an incomplete list. If present,
-                  also record the named substances and amounts where supplied.
-                </small>
               </label>
-              <ul
-                v-if="supplierStatements(record, topic.key)?.length"
-                class="review-list"
-              >
-                <li
-                  v-for="(statement, index) in supplierStatements(record, topic.key)"
-                  :key="index"
-                >
-                  {{ statement.status === 'present' ? 'Present' : 'Absent' }}:
-                  {{ statement.specification.reference }}, {{ statement.specification.sourceDate }}
-                </li>
-              </ul>
-              <p
-                v-if="supplierStatements(record, topic.key)?.some((statement) => statement.status === 'present') && supplierStatements(record, topic.key)?.some((statement) => statement.status === 'absent')"
-                class="field-hint"
-              >
-                Supplier statements disagree. Both are retained; do not treat the latest statement as automatically resolving the disagreement.
-              </p>
-              <p
-                v-if="supplierStatements(record, topic.key)?.length && !supplierStatements(record, topic.key)?.some((statement) => statement.status === draft.supplierFacts[topic.key].status && statement.specification.reference === draft.specificationReference && statement.specification.sourceDate === draft.specificationDate)"
-                class="field-hint"
-              >
-                The saved statement is from an earlier specification. Check the current document before relying on it.
-              </p>
               <label
-                v-if="supplierStatements(record, topic.key)?.length && draft.supplierFacts[topic.key].status"
-                class="check-item"
+                v-if="directAdditive.declarationRoute === 'schedule7Class'"
+                class="field"
               >
+                <span>Proposed purpose for the label</span>
                 <input
-                  v-model="draft.supplierFacts[topic.key].confirmCurrentSpec"
-                  type="checkbox"
+                  v-model="directAdditive.schedule7ClassName"
+                  maxlength="120"
+                  autocomplete="off"
                 >
-                <span>Also record this statement against the specification currently shown above.</span>
+              </label>
+              <label
+                v-if="directAdditive.declarationRoute === 'schedule7Class'"
+                class="field"
+              >
+                <span>Use the additive's name or number?</span>
+                <select v-model="directAdditive.substanceChoice">
+                  <option value="">Not selected</option>
+                  <option value="schedule8Name">Name</option>
+                  <option value="schedule8CodeNumber">Code number</option>
+                </select>
+              </label>
+              <label
+                v-if="directAdditive.declarationRoute === 'flavouring'"
+                class="field"
+              >
+                <span>Flavouring wording</span>
+                <select v-model="directAdditive.flavouringWording">
+                  <option value="">Not selected</option>
+                  <option value="flavouring">flavouring</option>
+                  <option value="flavour">flavour</option>
+                  <option value="specificName">Specific name or description</option>
+                </select>
+              </label>
+            </div>
+          </details>
+          <label class="check-item">
+            <input
+              v-model="directAdditive.showAmount"
+              type="checkbox"
+            >
+            <span>I know how much of this ingredient is the additive</span>
+          </label>
+          <div
+            v-if="directAdditive.showAmount"
+            class="form-grid"
+          >
+            <label class="field">
+              <span>Additive concentration</span>
+              <input
+                v-model="directAdditive.concentrationValue"
+                inputmode="decimal"
+                placeholder="Unknown"
+              >
+            </label>
+            <label class="field">
+              <span>Additive concentration unit</span>
+              <select v-model="directAdditive.concentrationUnit">
+                <option value="">Choose a unit</option>
+                <option value="percentByMass">% by mass</option>
+                <option value="percentByVolume">% by volume</option>
+                <option value="mgPerKg">mg/kg</option>
+                <option value="gPerKg">g/kg</option>
+                <option value="mgPerL">mg/L</option>
+                <option value="gPerL">g/L</option>
+                <option value="mgPer100g">mg/100 g</option>
+                <option value="gPer100g">g/100 g</option>
+                <option value="mgPer100mL">mg/100 mL</option>
+                <option value="gPer100mL">g/100 mL</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>What does this concentration describe?</span>
+              <select v-model="directAdditive.concentrationBasis">
+                <option value="unknown">Not sure</option>
+                <option value="asSupplied">Ingredient as supplied</option>
+                <option value="asAdded">Ingredient as added</option>
+                <option value="dryMatter">Dry matter</option>
+                <option value="asPrepared">As prepared</option>
+                <option value="asReconstituted">As reconstituted</option>
+                <option value="asDrained">As drained</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Figure already converted to (optional)</span>
+              <input
+                v-model="directAdditive.concentrationCalculatedAs"
+                maxlength="80"
+                placeholder="e.g. benzoic acid"
+              >
+              <small>The program does not convert between substances; enter a converted figure only if you know it.</small>
+            </label>
+          </div>
+          <details>
+            <summary>Additive source details (optional)</summary>
+            <div class="form-grid">
+              <label class="field">
+                <span>Additive source reference</span>
+                <input
+                  v-model="directAdditive.sourceReference"
+                  maxlength="160"
+                  @input="directAdditive.showEvidence = true"
+                >
+              </label>
+              <label class="field">
+                <span>Additive source date</span>
+                <input
+                  v-model="directAdditive.sourceDate"
+                  type="date"
+                  @input="directAdditive.showEvidence = true"
+                >
+              </label>
+              <label class="field">
+                <span>Additive source type</span>
+                <select
+                  v-model="directAdditive.sourceKind"
+                  @change="directAdditive.showEvidence = true"
+                >
+                  <option value="supplierSpecification">Supplier specification</option>
+                  <option value="certificateOfAnalysis">Certificate of analysis</option>
+                  <option value="formulationRecord">Formulation record</option>
+                  <option value="productPackaging">Product packaging</option>
+                  <option value="processRecord">Process record</option>
+                  <option value="other">Other</option>
+                </select>
               </label>
             </div>
           </details>
         </fieldset>
+        <label
+          v-if="draft.kind === 'atomic'"
+          class="check-item"
+        >
+          <input
+            v-model="draft.additivesConfirmed"
+            type="checkbox"
+          >
+          <span>I have identified all additives in this ingredient. If it contains other ingredients, choose "Made from other ingredients" and list them there.</span>
+        </label>
       </details>
-
-      <details class="ingredient-section">
-        <summary>Nutrition</summary>
+      <details
+        v-if="draft.kind === 'compound'"
+        class="ingredient-section"
+        open
+      >
+        <summary>Included ingredients</summary>
         <fieldset class="field-group">
-          <legend>Nutrient values</legend>
+          <legend>What is in this ingredient?</legend>
           <p class="field-hint">
-            Enter values on the same basis as the source. Blank means unknown, not zero.
-            Record where new or changed values came from. Existing values retain their original source.
+            Choose the ingredients you know about, including additives. Leave an amount blank if
+            you do not know it. Unknown amounts cannot be used to calculate nutrition.
           </p>
-          <div class="form-grid">
+          <p
+            v-if="linkedComposition"
+            class="field-hint"
+          >
+            Changes create a separate composition for this ingredient; the existing shared recipe is not changed.
+          </p>
+          <label class="field">
+            <span>Is this the complete list?</span>
+            <select v-model="compositionDraft.compositionCoverage">
+              <option value="partial">No or not sure</option>
+              <option value="complete">Yes, all included ingredients are listed</option>
+            </select>
+          </label>
+          <label class="check-item">
+            <input
+              v-model="draft.additivesConfirmed"
+              type="checkbox"
+              :disabled="compositionDraft.compositionCoverage !== 'complete'"
+            >
+            <span>I have identified all additives in this ingredient's included ingredients.</span>
+          </label>
+          <div
+            v-for="(line, index) in compositionDraft.lines"
+            :key="line.id"
+            class="form-grid"
+          >
             <label class="field">
-              <span>Nutrition source type</span>
-              <select v-model="draft.nutritionSourceType">
-                <option value="">Use the supplier specification, if supplied</option>
-                <option value="supplier">Supplier</option>
-                <option value="productLabel">Product label</option>
-                <option value="database">Food composition database</option>
-                <option value="analysis">Analysis</option>
-                <option value="calculated">Calculated</option>
-                <option value="user">Own knowledge or other source</option>
+              <span>Component {{ index + 1 }}</span>
+              <select v-model="line.targetId">
+                <option value="">Choose an ingredient</option>
+                <option
+                  v-for="item in line.kind === 'ingredient' ? availableIngredients : formulations"
+                  :key="item.id"
+                  :value="item.id"
+                >
+                  {{ item.name }}
+                </option>
+              </select>
+              <small v-if="line.kind === 'formulation'">Existing linked recipe</small>
+            </label>
+            <label class="field">
+              <span>Amount {{ index + 1 }} (optional)</span>
+              <input
+                v-model="line.quantity"
+                inputmode="decimal"
+                placeholder="Unknown"
+              >
+            </label>
+            <label class="field">
+              <span>Unit {{ index + 1 }}</span>
+              <select v-model="line.unit">
+                <option value="g">g</option>
+                <option value="kg">kg</option>
+                <option value="mg">mg</option>
               </select>
             </label>
-            <label class="field">
-              <span>Nutrition source reference</span>
-              <input
-                v-model="draft.nutritionSourceReference"
-                maxlength="120"
-                placeholder="Describe the source"
-              >
-            </label>
-            <label class="field">
-              <span>Nutrition source date</span>
-              <input
-                v-model="draft.nutritionSourceDate"
-                type="date"
-              >
-            </label>
+            <AppButton
+              type="button"
+              variant="outline"
+              size="sm"
+              @click="compositionDraft.lines.splice(index, 1)"
+            >
+              Remove component {{ index + 1 }}
+            </AppButton>
           </div>
+          <AppButton
+            type="button"
+            variant="outline"
+            size="sm"
+            @click="addComponent"
+          >
+            Add included ingredient
+          </AppButton>
+          <p
+            v-if="!availableIngredients.length"
+            class="field-hint"
+          >
+            Save an ingredient first, then select it here.
+          </p>
+        </fieldset>
+      </details>
+      <div
+        v-else
+        class="ingredient-section disabled-section"
+        aria-disabled="true"
+      >
+        Included ingredients <small>— available for ingredients made from other ingredients</small>
+      </div>
+      <details class="ingredient-section">
+        <summary>Nutrition</summary>
+        <label
+          v-if="draft.kind === 'compound'"
+          class="field"
+        >
+          <span>Which nutrition values should be used?</span>
+          <select v-model="draft.compoundNutritionBasis">
+            <option value="components">Calculate from included ingredients</option>
+            <option value="whole">Use values for the whole ingredient</option>
+          </select>
+          <small>Component calculations require a complete list, known amounts and nutrient values. Existing whole-ingredient values are kept when switching.</small>
+        </label>
+        <p
+          v-if="draft.kind === 'compound' && draft.compoundNutritionBasis === 'components'"
+          class="field-hint"
+        >
+          The included ingredients are used; you do not need to total their nutrition yourself.
+          Missing amounts, values or processing information require review.
+        </p>
+        <fieldset
+          v-show="draft.kind !== 'compound' || draft.compoundNutritionBasis === 'whole'"
+          class="field-group"
+        >
+          <legend>Nutrient values for the whole ingredient</legend>
+          <p class="field-hint">
+            Enter known values on the same basis. Blank means unknown, not zero.
+            Source details are optional; values without them need review.
+          </p>
+          <details>
+            <summary>Nutrition source details (optional)</summary>
+            <div class="form-grid">
+              <label class="field">
+                <span>Nutrition source type</span>
+                <select v-model="draft.nutritionSourceType">
+                  <option value="">Use the supplier specification, if supplied</option>
+                  <option value="supplier">Supplier</option>
+                  <option value="productLabel">Product label</option>
+                  <option value="database">Food composition database</option>
+                  <option value="analysis">Analysis</option>
+                  <option value="calculated">Calculated</option>
+                  <option value="user">Own knowledge or other source</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Nutrition source reference</span>
+                <input
+                  v-model="draft.nutritionSourceReference"
+                  maxlength="120"
+                  placeholder="Describe the source"
+                >
+              </label>
+              <label class="field">
+                <span>Nutrition source date</span>
+                <input
+                  v-model="draft.nutritionSourceDate"
+                  type="date"
+                >
+              </label>
+            </div>
+          </details>
           <details v-if="savedNutritionSources.length">
             <summary>Sources of saved nutrition values</summary>
             <ul>
@@ -721,21 +800,26 @@ function submit(): void {
                   placeholder="Unknown"
                 >
               </label>
-              <label class="field">
-                <span>Density source reference</span>
-                <input
-                  v-model="draft.densityReference"
-                  maxlength="120"
-                >
-              </label>
-              <label class="field">
-                <span>Density source date</span>
-                <input
-                  v-model="draft.densityDate"
-                  type="date"
-                >
-              </label>
             </div>
+            <details>
+              <summary>Density source details (optional)</summary>
+              <div class="form-grid">
+                <label class="field">
+                  <span>Density source reference</span>
+                  <input
+                    v-model="draft.densityReference"
+                    maxlength="120"
+                  >
+                </label>
+                <label class="field">
+                  <span>Density source date</span>
+                  <input
+                    v-model="draft.densityDate"
+                    type="date"
+                  >
+                </label>
+              </div>
+            </details>
           </fieldset>
         </fieldset>
       </details>
@@ -746,36 +830,39 @@ function submit(): void {
           <legend>Allergen information</legend>
           <p class="field-hint">
             Tick known allergens in this ingredient. Ticking nothing without confirmation means
-            "not recorded", not "allergen-free". Provide the source when recording evidence.
+            "not recorded", not "allergen-free". Source details are optional; information without them needs review.
           </p>
-          <div class="form-grid">
-            <label class="field">
-              <span>Allergen source type</span>
-              <select v-model="draft.allergenSourceType">
-                <option value="">Use the supplier specification, if supplied</option>
-                <option value="supplier">Supplier</option>
-                <option value="productLabel">Product label</option>
-                <option value="database">Food composition database</option>
-                <option value="analysis">Analysis</option>
-                <option value="calculated">Calculated</option>
-                <option value="user">Own knowledge or other source</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Allergen source reference</span>
-              <input
-                v-model="draft.allergenSourceReference"
-                maxlength="120"
-              >
-            </label>
-            <label class="field">
-              <span>Allergen source date</span>
-              <input
-                v-model="draft.allergenSourceDate"
-                type="date"
-              >
-            </label>
-          </div>
+          <details>
+            <summary>Allergen source details (optional)</summary>
+            <div class="form-grid">
+              <label class="field">
+                <span>Allergen source type</span>
+                <select v-model="draft.allergenSourceType">
+                  <option value="">Use the supplier specification, if supplied</option>
+                  <option value="supplier">Supplier</option>
+                  <option value="productLabel">Product label</option>
+                  <option value="database">Food composition database</option>
+                  <option value="analysis">Analysis</option>
+                  <option value="calculated">Calculated</option>
+                  <option value="user">Own knowledge or other source</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Allergen source reference</span>
+                <input
+                  v-model="draft.allergenSourceReference"
+                  maxlength="120"
+                >
+              </label>
+              <label class="field">
+                <span>Allergen source date</span>
+                <input
+                  v-model="draft.allergenSourceDate"
+                  type="date"
+                >
+              </label>
+            </div>
+          </details>
           <div class="check-grid">
             <label
               v-for="choice in allergenChoices"
@@ -811,259 +898,6 @@ function submit(): void {
       </details>
 
       <details class="ingredient-section">
-        <summary>Additives and other ingredients</summary>
-        <fieldset class="field-group">
-          <legend>Additive source records</legend>
-          <p class="field-hint">
-            Does the spec sheet list additives such as a preservative, colour, sweetener or thickener? If
-            not, confirm that below. If so, add each one. Enter what the sheet says; we use it to draft the
-            ingredient list and to check amounts, but a consultant must confirm the final wording.
-          </p>
-          <label class="check-item">
-            <input
-              v-model="draft.additivesConfirmed"
-              type="checkbox"
-            >
-            <span>The supplier confirms this ingredient contains no additives, or I have recorded every
-              additive the supplier confirms is present. Do not tick this if the information is incomplete.</span>
-          </label>
-          <fieldset
-            v-for="(source, index) in draft.additiveSources"
-            :key="source.id"
-            class="field-group additive-source-field"
-          >
-            <legend>Additive source {{ index + 1 }}</legend>
-            <div class="form-grid">
-              <label class="field">
-                <span>Additive identity <b aria-hidden="true">*</b></span>
-                <input
-                  v-model="source.additiveName"
-                  maxlength="120"
-                  autocomplete="off"
-                  placeholder="Name from the source record"
-                >
-              </label>
-              <label class="field">
-                <span>Code number (source)</span>
-                <input
-                  v-model="source.codeNumber"
-                  maxlength="40"
-                  autocomplete="off"
-                  placeholder="If recorded by the supplier"
-                >
-                <small class="field-hint">The "E number" or INS number on the sheet, such as 211. Leave blank if there isn't one.</small>
-              </label>
-              <label class="field full">
-                <span>Technological purpose(s)</span>
-                <textarea
-                  v-model="source.technologicalPurposes"
-                  rows="2"
-                  maxlength="500"
-                  placeholder="One source-described purpose per line"
-                />
-                <small class="field-hint">What the additive does, in the sheet's words, such as "preservative" or "thickener".</small>
-              </label>
-              <label class="field">
-                <span>Source status</span>
-                <select v-model="source.sourceStatus">
-                  <option value="unknown">Not sure yet</option>
-                  <option value="added">Added to this ingredient</option>
-                  <option value="carriedOver">Carried over from one of its own ingredients</option>
-                  <option value="processingAid">Processing aid (used in making it, not in the end product)</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Declaration route</span>
-                <select v-model="source.declarationRoute">
-                  <option value="unknown">Not sure yet (a consultant can choose)</option>
-                  <option value="schedule7Class">Schedule 7 class + Schedule 8 identifier</option>
-                  <option value="noSchedule7Class">No Schedule 7 class; Schedule 8 name</option>
-                  <option value="enzyme">Enzyme</option>
-                  <option value="flavouring">Flavouring</option>
-                  <option value="specifiedFlavouringSubstance">Specified flavouring substance</option>
-                  <option value="addedCaffeine">Added caffeine</option>
-                </select>
-              </label>
-              <label
-                v-if="source.declarationRoute === 'schedule7Class'"
-                class="field"
-              >
-                <span>Proposed Schedule 7 class name</span>
-                <input
-                  v-model="source.schedule7ClassName"
-                  maxlength="120"
-                  autocomplete="off"
-                  placeholder="Enter from Schedule 7; mapping remains unverified"
-                >
-              </label>
-              <label
-                v-if="source.declarationRoute === 'schedule7Class'"
-                class="field"
-              >
-                <span>Proposed Schedule 8 identifier</span>
-                <select v-model="source.substanceChoice">
-                  <option value="">Not selected</option>
-                  <option value="schedule8Name">Schedule 8 name</option>
-                  <option value="schedule8CodeNumber">Schedule 8 code number</option>
-                </select>
-              </label>
-              <label
-                v-if="source.declarationRoute === 'flavouring'"
-                class="field"
-              >
-                <span>Flavouring wording</span>
-                <select v-model="source.flavouringWording">
-                  <option value="">Not selected</option>
-                  <option value="flavouring">flavouring</option>
-                  <option value="flavour">flavour</option>
-                  <option value="specificName">Specific name or description</option>
-                </select>
-              </label>
-            </div>
-
-            <label class="check-item">
-              <input
-                v-model="source.showAmount"
-                type="checkbox"
-              >
-              <span>The spec sheet gives an amount for this additive</span>
-            </label>
-            <div
-              v-if="source.showAmount"
-              class="form-grid"
-            >
-              <label class="field">
-                <span>Concentration</span>
-                <input
-                  v-model="source.concentrationValue"
-                  inputmode="decimal"
-                  autocomplete="off"
-                  placeholder="Not supplied"
-                >
-              </label>
-              <label class="field">
-                <span>Concentration unit</span>
-                <select v-model="source.concentrationUnit">
-                  <option value="">Not supplied</option>
-                  <option value="mgPerKg">mg/kg</option>
-                  <option value="gPerKg">g/kg</option>
-                  <option value="mgPerL">mg/L</option>
-                  <option value="gPerL">g/L</option>
-                  <option value="mgPer100g">mg/100 g</option>
-                  <option value="gPer100g">g/100 g</option>
-                  <option value="mgPer100mL">mg/100 mL</option>
-                  <option value="gPer100mL">g/100 mL</option>
-                  <option value="percentByMass">% by mass</option>
-                  <option value="percentByVolume">% by volume</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Concentration basis</span>
-                <select v-model="source.concentrationBasis">
-                  <option value="unknown">Unknown / not supplied</option>
-                  <option value="asSupplied">As supplied</option>
-                  <option value="dryMatter">Dry matter</option>
-                  <option value="asAdded">As added</option>
-                  <option value="asPrepared">As prepared</option>
-                  <option value="asReconstituted">As reconstituted</option>
-                  <option value="asDrained">As drained</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Figure already converted to (optional)</span>
-                <input
-                  v-model="source.concentrationCalculatedAs"
-                  maxlength="80"
-                  autocomplete="off"
-                  placeholder="e.g. benzoic acid"
-                >
-                <small class="field-hint">
-                  Some limits are stated as a substance, such as benzoic acid. Enter the figure already
-                  converted and name that substance here. The system never converts for you.
-                </small>
-              </label>
-            </div>
-
-            <label class="check-item">
-              <input
-                v-model="source.showEvidence"
-                type="checkbox"
-              >
-              <span>Record where this came from (and any allergens it contains)</span>
-            </label>
-            <div
-              v-if="source.showEvidence"
-              class="form-grid"
-            >
-              <label class="field">
-                <span>Evidence reference</span>
-                <input
-                  v-model="source.sourceReference"
-                  maxlength="160"
-                  autocomplete="off"
-                  placeholder="Document and section"
-                >
-              </label>
-              <label class="field">
-                <span>Evidence date</span>
-                <input
-                  v-model="source.sourceDate"
-                  type="date"
-                >
-              </label>
-              <label class="field">
-                <span>Evidence type</span>
-                <select v-model="source.sourceKind">
-                  <option value="supplierSpecification">Supplier specification</option>
-                  <option value="certificateOfAnalysis">Certificate of analysis</option>
-                  <option value="formulationRecord">Formulation record</option>
-                  <option value="productPackaging">Product packaging</option>
-                  <option value="processRecord">Process record</option>
-                  <option value="other">Other</option>
-                </select>
-              </label>
-              <div class="field full">
-                <span>Allergens this additive contains, per the sheet</span>
-                <div class="check-grid">
-                  <label
-                    v-for="choice in allergenChoices"
-                    :key="choice.id"
-                    class="check-item"
-                  >
-                    <input
-                      v-model="source.allergenIdsPresent"
-                      type="checkbox"
-                      :value="choice.id"
-                    >
-                    <span>{{ choice.label }}</span>
-                  </label>
-                </div>
-                <small class="field-hint">Only tick what the sheet says. Nothing ticked means "not recorded".</small>
-              </div>
-            </div>
-
-            <AppButton
-              variant="outline"
-              size="sm"
-              type="button"
-              :aria-label="`Remove additive source ${index + 1}`"
-              @click="draft.additiveSources.splice(index, 1)"
-            >
-              Remove additive source
-            </AppButton>
-          </fieldset>
-          <AppButton
-            variant="outline"
-            size="sm"
-            type="button"
-            @click="addAdditive"
-          >
-            Add additive source
-          </AppButton>
-        </fieldset>
-      </details>
-
-      <details class="ingredient-section">
         <summary>Review</summary>
         <div class="field-group">
           <h3>Review and save</h3>
@@ -1089,7 +923,7 @@ function submit(): void {
           </template>
           <ul class="review-list">
             <li
-              v-for="step in steps.slice(0, 5)"
+              v-for="step in steps.slice(0, 4)"
               :key="step.id"
             >
               <strong>{{ step.title }}:</strong> {{ step.status }}
@@ -1133,6 +967,10 @@ function submit(): void {
 .ingredient-section > summary {
   cursor: pointer;
   font-weight: 600;
+}
+.disabled-section {
+  color: #52525b;
+  background: #f4f4f5;
 }
 .ingredient-actions {
   display: flex;

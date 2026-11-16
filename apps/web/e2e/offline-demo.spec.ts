@@ -22,9 +22,6 @@ test('loads the illustrative workflow and exports a review report while offline'
   await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
   for (const name of ['Illustrative base', 'Illustrative carrier']) {
     await page.getByRole('button', { name: `Edit ingredient ${name}` }).click();
-    await openIngredientSection(page, 'Source details');
-    await page.getByLabel('Specification reference').fill('Illustrative spec');
-    await page.getByLabel('Specification date').fill('2026-01-01');
     await openIngredientSection(page, 'Nutrition');
     await page.getByLabel('Energy').fill('100');
     for (const nutrient of ['Protein', 'Fat, total', 'Saturated fat', 'Carbohydrate', 'Sugars', 'Sodium']) {
@@ -33,8 +30,7 @@ test('loads the illustrative workflow and exports a review report while offline'
     await openIngredientSection(page, 'Allergens');
     if (name === 'Illustrative base') await page.getByLabel('Milk', { exact: true }).check();
     await page.getByLabel(/I confirm that ticked allergens are present/).check();
-    await openIngredientSection(page, 'Additives and other ingredients');
-    await page.getByLabel(/The supplier confirms this ingredient contains no additives/).check();
+    await page.getByLabel(/I have identified all additives in this ingredient/).check();
     await page.getByRole('button', { name: 'Save ingredient draft' }).click();
   }
   await page.getByRole('button', { name: 'Products', exact: true }).click();

@@ -226,6 +226,7 @@ export interface AdditivePermissionEvaluationInput {
     readonly calculatedAs?: string | undefined;
   } | undefined;
   readonly evidence?: { readonly reference: string; readonly sourceDate: string } | undefined;
+  readonly concentrationProvenanceComplete?: boolean | undefined;
   readonly sourcePath?: readonly string[] | undefined;
 }
 
@@ -287,7 +288,7 @@ export type UnquantifiedFormulationComponent =
 
 export interface SupplierCompositionEvidence {
   readonly coverage: 'partial' | 'complete';
-  readonly specification: { readonly reference: string; readonly sourceDate: string };
+  readonly specification?: { readonly reference: string; readonly sourceDate: string };
   readonly unquantifiedComponents: readonly UnquantifiedFormulationComponent[];
   readonly lineOrder?: readonly string[];
 }
@@ -354,6 +355,7 @@ export type AdditiveConcentrationReviewReason =
   | 'CONCENTRATION_MISSING'
   | 'EVIDENCE_MISSING'
   | 'BASIS_NOT_SUPPORTED'
+  | 'COMPOUND_ADDITIVES_NOT_PROPAGATED'
   | 'INGREDIENT_DENSITY_MISSING'
   | 'FINAL_DENSITY_MISSING';
 
@@ -398,6 +400,7 @@ export type AdditiveFinalConcentration =
       // Set only when every contributing source states the same basis; otherwise absent.
       readonly calculatedAs?: string;
       readonly contributions: readonly AdditiveConcentrationContribution[];
+      readonly provenanceWarnings: readonly string[];
     };
 
 export type AdditiveAggregateReviewReason =
