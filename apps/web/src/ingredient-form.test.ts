@@ -25,6 +25,79 @@ function filledDraft() {
 }
 
 describe('buildIngredientRecord', () => {
+  it('edits expanded nutrients on both bases without guessing or losing their forms and evidence', () => {
+    const draft = emptyIngredientDraft();
+    draft.name = 'Example';
+    draft.kind = 'atomic';
+    draft.nutritionSourceType = 'analysis';
+    draft.nutritionSourceReference = 'Lab';
+    draft.nutritionSourceDate = '2026-01-01';
+    draft.additionalNutrientsMass.push(
+      { key: 'vitaminA', value: '10', unit: 'ug', expressionChoice: 'supported' },
+      { key: 'vitaminB12', value: '2', unit: 'ug', expressionChoice: '' },
+      { key: 'calcium', value: '5', unit: 'mg', expression: 'calcium carbonate' },
+    );
+    draft.additionalNutrientsVolume.push(
+      { key: 'vitaminA', value: '3', unit: 'ug', expressionChoice: 'other', expression: 'another form' },
+    );
+    const first = buildIngredientRecord(draft, undefined, makeId, now);
+    expect(first.nutrientProfile?.values.vitaminA).toMatchObject({ expression: 'retinolEquivalents' });
+    expect(first.nutrientProfile?.values.vitaminB12?.expression).toBeUndefined();
+    expect(first.nutrientProfile?.values.calcium?.expression).toBe('calcium carbonate');
+    expect(first.additionalNutritionPer100mL?.vitaminA?.expression).toBe('another form');
+
+    const original: IngredientRecord = {
+      ...first,
+      nutrientProfile: { ...first.nutrientProfile!, values: {
+        ...first.nutrientProfile!.values,
+        vitaminA: { ...first.nutrientProfile!.values.vitaminA!, method: 'Laboratory method' },
+      } },
+      additionalNutritionPer100mL: {
+        vitaminA: { ...first.additionalNutritionPer100mL!.vitaminA!, method: 'Other method' },
+      },
+    };
+    const edit = draftFromIngredient(original);
+    expect(buildIngredientRecord(edit, original, makeId, now).nutrientProfile).toEqual(original.nutrientProfile);
+    expect(buildIngredientRecord(edit, original, makeId, now).additionalNutritionPer100mL)
+      .toEqual(original.additionalNutritionPer100mL);
+    edit.additionalNutrientsMass.find((item) => item.key === 'vitaminA')!.expressionChoice = '';
+    edit.additionalNutrientsVolume[0]!.expressionChoice = 'supported';
+    edit.additionalNutrientsMass.find((item) => item.key === 'vitaminB12')!.value = '';
+    edit.additionalNutrientsMass = edit.additionalNutrientsMass.filter((item) => item.key !== 'calcium');
+    const changed = buildIngredientRecord(edit, original, makeId, now);
+    expect(changed.nutrientProfile?.values.vitaminA).toEqual({
+      value: '10', unit: 'ug/100g', sourceId: 'Lab', sourceDate: '2026-01-01',
+      evidenceType: 'analysis', method: 'Laboratory method',
+    });
+    expect(changed.nutrientProfile?.values.vitaminB12).toBeUndefined();
+    expect(changed.nutrientProfile?.values.calcium).toBeUndefined();
+    expect(changed.additionalNutritionPer100mL?.vitaminA).toMatchObject({
+      value: '3', expression: 'retinolEquivalents', sourceId: 'Lab', method: 'Other method',
+    });
+  });
+
+  it('preserves expanded nutrient evidence during unrelated edits and handles microgram units', () => {
+    const original: IngredientRecord = {
+      ...buildIngredientRecord(filledDraft(), undefined, makeId, now),
+      nutrientProfile: { ingredientId: 'ingredient', values: {
+        protein: { value: '12500000', unit: 'ug/100g', sourceId: 'Lab', sourceDate: '2026-01-01', evidenceType: 'analysis' },
+        vitaminA: { value: '10', unit: 'ug/100g', sourceId: 'Lab', sourceDate: '2026-01-01', evidenceType: 'analysis', expression: 'retinolEquivalents' },
+        dietaryFibre: { value: '2000', unit: 'ug/100g', sourceId: 'Lab', sourceDate: '2026-01-01', evidenceType: 'analysis' },
+      } },
+      additionalNutritionPer100mL: {
+        vitaminB12: { value: '1', unit: 'ug/100mL', sourceId: 'Lab', sourceDate: '2026-01-01', evidenceType: 'analysis', expression: 'cyanocobalamin' },
+        dietaryFibre: { value: '4000', unit: 'ug/100mL', sourceId: 'Lab', sourceDate: '2026-01-01', evidenceType: 'analysis' },
+      },
+    };
+    const draft = draftFromIngredient(original);
+    expect(draft.nutrients.protein).toBe('12.5');
+    expect(draft.additionalNutrientsMass[0]?.unit).toBe('ug');
+    expect(draft.additionalNutrientsVolume[0]?.unit).toBe('ug');
+    draft.name = 'Edited oats';
+    const saved = buildIngredientRecord(draft, original, makeId, now);
+    expect(saved.nutrientProfile?.values).toEqual(original.nutrientProfile?.values);
+    expect(saved.additionalNutritionPer100mL).toEqual(original.additionalNutritionPer100mL);
+  });
   it('records a direct additive once using the ingredient name and preserves its information', () => {
     const draft = emptyIngredientDraft();
     draft.name = 'Example additive';
@@ -53,6 +126,33 @@ describe('buildIngredientRecord', () => {
     edit.kind = 'compound';
     edit.compoundFormulationId = 'recipe';
     expect(() => buildIngredientRecord(edit, record, makeId, now)).toThrow(/direct additive/);
+  });
+
+  it('keeps earlier additive wording and mixture concentration when editing the ingredient', () => {
+    const draft = emptyIngredientDraft();
+    draft.name = 'Example blend';
+    draft.kind = 'atomic';
+    const source = emptyAdditiveSourceDraft('direct');
+    source.declarationRoute = 'schedule7Class';
+    source.schedule7ClassName = 'Preservative';
+    source.substanceChoice = 'schedule8Name';
+    source.showAmount = true;
+    source.concentrationValue = '25';
+    source.concentrationUnit = 'percentByMass';
+    source.concentrationBasis = 'asSupplied';
+    draft.additiveSources.push(source);
+    draft.directAdditiveSourceId = source.id;
+    const record = buildIngredientRecord(draft, undefined, makeId, now);
+    const edit = draftFromIngredient(record);
+    edit.supplierName = 'Updated supplier';
+    const saved = buildIngredientRecord(edit, record, makeId, now);
+    expect(saved.additiveSources?.[0]?.declarationSelection).toEqual(record.additiveSources?.[0]?.declarationSelection);
+    expect(saved.additiveSources?.[0]?.concentration).toEqual({ value: '25', unit: 'percentByMass', basis: 'asSupplied' });
+    const unknown: IngredientRecord = { ...record, additiveSources: [{
+      ...record.additiveSources![0]!, declarationSelection: { route: 'unknown' },
+    }] };
+    expect(buildIngredientRecord(draftFromIngredient(unknown), unknown, makeId, now)
+      .additiveSources?.[0]?.declarationSelection).toEqual({ route: 'unknown' });
   });
   it('round-trips optional nutrients in both bases and retains their original sources', () => {
     const draft = emptyIngredientDraft();
@@ -191,59 +291,22 @@ describe('buildIngredientRecord', () => {
     edit.confirmIdentityForCurrentSpec = true;
     expect(buildIngredientRecord(edit, first, makeId, now).ingredientIdentity?.specification.sourceDate).toBe('2026-02-01');
   });
-  it('records sourced caffeine evidence without treating blank as absence', () => {
-    const draft = filledDraft();
-    expect(buildIngredientRecord(draft, undefined, makeId, now).caffeineEvidence).toBeUndefined();
-    draft.caffeineStatus = 'present';
-    draft.caffeineAmount = '100';
-    draft.caffeineUnit = 'g/100g';
-    const present = buildIngredientRecord(draft, undefined, makeId, now);
-    expect(present.caffeineEvidence).toEqual({
-      status: 'present', amount: '100', unit: 'g/100g',
-      specification: { reference: 'SPEC-1', sourceDate: '2026-01-01' },
-    });
-    const edit = draftFromIngredient(present);
-    edit.specificationDate = '2026-02-01';
-    expect(buildIngredientRecord(edit, present, makeId, now).caffeineEvidence).toEqual(present.caffeineEvidence);
-    edit.confirmCaffeineForCurrentSpec = true;
-    expect(buildIngredientRecord(edit, present, makeId, now).caffeineEvidence?.specification.sourceDate).toBe('2026-02-01');
-    edit.confirmCaffeineForCurrentSpec = false;
-    edit.caffeineStatus = 'conflicting';
-    expect(() => buildIngredientRecord(edit, present, makeId, now)).toThrow(/both caffeine statements/);
-    edit.caffeineStatements[1] = {
-      status: 'absent', amount: '', unit: '', reference: 'SPEC-2', sourceDate: '2026-02-01',
+  it('preserves legacy caffeine evidence during unrelated ingredient edits', () => {
+    const original: IngredientRecord = {
+      ...buildIngredientRecord(filledDraft(), undefined, makeId, now),
+      caffeineEvidence: {
+        status: 'conflicting',
+        specification: { reference: 'Supplier statement', sourceDate: '2026-01-01' },
+        statements: [
+          { status: 'present', amount: '12', unit: 'mg/100g', specification: { reference: 'Supplier statement', sourceDate: '2026-01-01' } },
+          { status: 'absent', specification: { reference: 'Updated supplier statement', sourceDate: '2026-02-01' } },
+        ],
+      },
     };
-    const conflicting = buildIngredientRecord(edit, present, makeId, now);
-    expect(conflicting.caffeineEvidence?.statements).toEqual([
-      present.caffeineEvidence,
-      { status: 'absent', specification: { reference: 'SPEC-2', sourceDate: '2026-02-01' } },
-    ]);
-    const roundTrip = draftFromIngredient(conflicting);
-    expect(buildIngredientRecord(roundTrip, conflicting, makeId, now).caffeineEvidence).toEqual(conflicting.caffeineEvidence);
-    roundTrip.specificationDate = '2026-03-01';
-    expect(buildIngredientRecord(roundTrip, conflicting, makeId, now).caffeineEvidence).toEqual(conflicting.caffeineEvidence);
-    roundTrip.caffeineDecision = 'statement2';
-    expect(() => buildIngredientRecord(roundTrip, conflicting, makeId, now)).toThrow(/explain why/);
-    roundTrip.caffeineDecisionReason = 'Supplier confirmed the second document applies.';
-    const decided = buildIngredientRecord(roundTrip, conflicting, makeId, now);
-    expect(decided.caffeineEvidence?.decisions).toEqual([{
-      choice: 'statement2', reason: 'Supplier confirmed the second document applies.', recordedAt: now,
-    }]);
-    expect(decided.caffeineEvidence?.statements).toEqual(conflicting.caffeineEvidence?.statements);
-    const reconsider = draftFromIngredient(decided);
-    expect(buildIngredientRecord(reconsider, decided, makeId, now).caffeineEvidence).toEqual(decided.caffeineEvidence);
-    reconsider.caffeineDecision = 'unresolved';
-    reconsider.caffeineDecisionReason = 'Supplier withdrew confirmation.';
-    expect(buildIngredientRecord(reconsider, decided, makeId, now).caffeineEvidence?.decisions).toHaveLength(2);
-    reconsider.caffeineStatements[0].amount = '6';
-    expect(() => buildIngredientRecord(reconsider, decided, makeId, now)).toThrow(/cannot be changed/);
-    roundTrip.caffeineStatus = 'absent';
-    expect(() => buildIngredientRecord(roundTrip, conflicting, makeId, now)).toThrow(/cannot yet be removed/);
-    edit.caffeineStatus = 'absent';
-    expect(buildIngredientRecord(edit, present, makeId, now).caffeineEvidence?.status).toBe('absent');
-    edit.caffeineStatus = 'present';
-    edit.caffeineAmount = '0';
-    expect(() => buildIngredientRecord(edit, present, makeId, now)).toThrow(/positive caffeine amount/);
+    const draft = draftFromIngredient(original);
+    expect('caffeineStatus' in draft).toBe(false);
+    draft.name = 'Edited oats';
+    expect(buildIngredientRecord(draft, original, makeId, now).caffeineEvidence).toEqual(original.caffeineEvidence);
   });
   it('builds a record with nutrient evidence from the specification', () => {
     const record = buildIngredientRecord(filledDraft(), undefined, makeId, now);
@@ -285,6 +348,7 @@ describe('buildIngredientRecord', () => {
       draft.allergenSourceReference = 'Ingredient label';
       draft.allergenSourceDate = '2026-01-01';
       draft.knownAllergens = ['wheat'];
+      draft.wheatGlutenStatus = 'present';
       draft.allergensConfirmed = true;
       const record = buildIngredientRecord(draft, undefined, makeId, now);
       expect(record.specification).toBeUndefined();
@@ -472,6 +536,13 @@ describe('ingredientStepStatuses', () => {
     draft.nutritionPer100mL.energy = '0';
     const status = ingredientStepStatuses(draft).nutrition;
     expect(status.done).toBe(false);
-    expect(status.text).toContain('require sourced ingredient density');
+    expect(status.text).toContain('require ingredient density');
+  });
+
+  it('counts volume values when an unsourced density is supplied', () => {
+    const draft = emptyIngredientDraft();
+    draft.nutritionPer100mL.energy = '0';
+    draft.ingredientDensity = '1';
+    expect(ingredientStepStatuses(draft).nutrition.text).toBe('1 of 7 entered per 100 g');
   });
 });

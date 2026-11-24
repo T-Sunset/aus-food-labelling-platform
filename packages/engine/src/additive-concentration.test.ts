@@ -65,6 +65,21 @@ function reasonsOf(overrides: Partial<AdditiveFinalConcentrationInput>): readonl
 }
 
 describe('additive final concentration', () => {
+  it('requires review for an uncertain or special use, without silently calculating a partial total', () => {
+    const direct = source('s1', mgPerKg('500'));
+    const uses: ExpandedIngredient[] = [
+      { ingredientId: 'syrup', mass: { value: '100', unit: 'g' }, sourcePath: ['p', 'one', 'syrup'], additiveUse: 'added' },
+      { ingredientId: 'syrup', mass: { value: '100', unit: 'g' }, sourcePath: ['p', 'two', 'syrup'], additiveUse: 'processingAid' },
+    ];
+    const options = { ingredients: uses, sourcesByIngredient: new Map([['syrup', [direct]]]),
+      directSourceIdByIngredient: new Map([['syrup', 's1']]) };
+    expect(reasonsOf(options)).toContain('SOURCE_NOT_ADDED');
+    expect(reasonsOf({ ...options, directSourceIdByIngredient: new Map() })).toContain('SOURCE_IDENTITY_MISSING');
+    expect(reasonsOf({ ...options, ingredients: [uses[0]!, { ...uses[1]!, additiveUse: 'unknown' }] }))
+      .toContain('SOURCE_NOT_ADDED');
+    expect(calculateAdditiveFinalConcentration(input({ ...options, ingredients: [uses[0]!] })))
+      .toMatchObject({ status: 'calculated', value: '50' });
+  });
   it('sums a direct source over the documented final mass', () => {
     const result = calculateAdditiveFinalConcentration(input());
     // 500 mg/kg x 0.2 kg = 100 mg in 1 kg of final food.
@@ -150,6 +165,9 @@ describe('additive final concentration', () => {
     expect(reasonsOf({ foodState: undefined })).toEqual(['FOOD_STATE_MISSING']);
     expect(reasonsOf({ processBalance: calculateProcessMassBalance({ value: '1', unit: 'kg' }) }))
       .toEqual(['PROCESS_MASS_PROFILE_MISSING']);
+    expect(reasonsOf({ processBalance: calculateProcessMassBalance({ value: '1', unit: 'kg' }, {
+      changes: [{ id: 'loss', kind: 'loss' }], complete: false,
+    }) })).toEqual(['PROCESS_MASS_PROFILE_INCOMPLETE']);
     expect(reasonsOf({ additiveCodeNumber: '330' })).toEqual(['NO_MATCHING_SOURCE']);
     expect(reasonsOf({ sourcesByIngredient: new Map() })).toEqual(['NO_MATCHING_SOURCE']);
     expect(reasonsOf({ sourcesByIngredient: new Map([['syrup', [source('s', undefined)]]]) }))
@@ -160,7 +178,7 @@ describe('additive final concentration', () => {
       .toEqual(['CONCENTRATION_MISSING']);
   });
 
-  it('calculates without a source or date and flags incomplete provenance', () => {
+  it('calculates without source details while preserving any supplied details', () => {
     for (const sourceEvidence of [
       [],
       [{ ...evidence[0]!, sourceDate: '' }],
@@ -171,14 +189,14 @@ describe('additive final concentration', () => {
       }));
       expect(result).toMatchObject({
         status: 'calculated', value: '100',
-        provenanceWarnings: [expect.stringContaining('no complete dated source')],
+        provenanceWarnings: [],
         contributions: [{ evidenceReference: sourceEvidence[0]?.reference ?? '', evidenceDate: sourceEvidence[0]?.sourceDate ?? '' }],
       });
     }
     expect(calculateAdditiveFinalConcentration(input())).toMatchObject({ provenanceWarnings: [] });
   });
 
-  it('uses known unsourced densities with review warnings rather than guessing', () => {
+  it('uses known unsourced densities rather than guessing', () => {
     const unsourced = { gramsPerMillilitre: '1', evidenceReference: '', sourceDate: '' };
     const result = calculateAdditiveFinalConcentration(input({
       outputUnit: 'mg/L', finalDensity: unsourced,
@@ -187,7 +205,7 @@ describe('additive final concentration', () => {
     }));
     expect(result).toMatchObject({
       status: 'calculated', value: '100',
-      provenanceWarnings: [expect.stringContaining('final-food density'), expect.stringContaining('density for ingredient syrup')],
+      provenanceWarnings: [],
     });
   });
 
@@ -206,7 +224,7 @@ describe('additive final concentration', () => {
     })).toEqual(['SOURCE_IDENTITY_MISSING']);
   });
 
-  it('carries a stated calculation basis only when every contribution agrees', () => {
+  it('requires matching calculation bases before summing contributions', () => {
     const as = (value: string, calculatedAs?: string): AdditiveConcentration => ({
       ...mgPerKg(value),
       ...(calculatedAs === undefined ? {} : { calculatedAs }),
@@ -221,8 +239,10 @@ describe('additive final concentration', () => {
       status: 'calculated',
       calculatedAs: 'benzoic acid',
     });
-    expect('calculatedAs' in both(as('500', 'benzoic acid'), as('10', 'sorbic acid'))).toBe(false);
-    expect('calculatedAs' in both(as('500', 'benzoic acid'), as('10'))).toBe(false);
+    expect(both(as('500', 'benzoic acid'), as('10', 'sorbic acid')))
+      .toMatchObject({ status: 'review_required', reasons: ['CALCULATION_BASIS_CONFLICT'] });
+    expect(both(as('500', 'benzoic acid'), as('10')))
+      .toMatchObject({ status: 'review_required', reasons: ['CALCULATION_BASIS_CONFLICT'] });
     expect('calculatedAs' in calculateAdditiveFinalConcentration(input())).toBe(false);
   });
 

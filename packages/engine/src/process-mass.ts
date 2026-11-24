@@ -59,8 +59,19 @@ export function calculateProcessMassBalance(
     };
   }
 
+  if (profile.complete === false || profile.changes.some((change) => change.mass === undefined)) {
+    return {
+      status: 'review_required',
+      reason: 'PROCESS_MASS_PROFILE_INCOMPLETE',
+      ingoingMass: normalizedIngoingMass,
+    };
+  }
+
   let finalMassInGrams = ingoingMassInGrams;
   for (const change of profile.changes) {
+    if (change.mass === undefined) {
+      throw new ProcessMassError('INVALID_PROCESS_CHANGE', `Process mass change "${change.id}" is missing its mass.`);
+    }
     const changeMassInGrams = positiveMassInGrams(
       change.mass,
       'INVALID_PROCESS_CHANGE',

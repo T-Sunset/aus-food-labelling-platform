@@ -54,6 +54,28 @@ function input(overrides: Partial<LabelLayoutInput> = {}): LabelLayoutInput {
 }
 
 describe('layoutLabel', () => {
+  it('can omit a block heading without leaving empty space or losing its safety checks', () => {
+    const hidden = block({ title: 'Internal name', hideTitle: true, lines: ['Oat beverage', 'Second line'] });
+    const result = layoutLabel(input({ blocks: [hidden] }));
+    expect(result.svg).not.toContain('Internal name');
+    expect(result.svg).toMatch(/y="8"[^>]*>Oat beverage<\/text>/);
+    expect(result.svg).toMatch(/y="11.6"[^>]*>Second line<\/text>/);
+    expect(layoutLabel(input({ blocks: [block({ ...hidden, fontSizeMm: 1 })] })).issues)
+      .toContainEqual(expect.objectContaining({ code: 'TEXT_BELOW_MINIMUM' }));
+    expect(layoutLabel(input({ blocks: [block({ ...hidden, lines: ['x'.repeat(100)] })] })).issues)
+      .toContainEqual(expect.objectContaining({ code: 'LINE_OVERFLOW' }));
+  });
+
+  it('preserves physical dimensions beyond four decimal places, including small values', () => {
+    const precise = layoutLabel(input({ widthMm: 80.12345, heightMm: 150.67891 }));
+    expect(precise.svg).toContain('width="80.12345mm" height="150.67891mm" viewBox="0 0 80.12345 150.67891"');
+    const tiny = layoutLabel(input({
+      widthMm: 0.00001, heightMm: 0.00002,
+      margins: { topMm: 0, rightMm: 0, bottomMm: 0, leftMm: 0 }, blocks: [],
+    }));
+    expect(tiny.svg).toContain('width="0.00001mm" height="0.00002mm" viewBox="0 0 0.00001 0.00002"');
+    expect(layoutLabel(input({ blocks: [block({ fontSizeMm: 0.00001 })] })).svg).toContain('font-size="0.00001"');
+  });
   it('renders table cells in separate columns and checks column and vertical overflow', () => {
     const nutrition = block({
       kind: 'nutritionInformation', title: 'Nutrition', lines: ['Serving size: 50 g'],
@@ -72,6 +94,41 @@ describe('layoutLabel', () => {
       expect.objectContaining({ code: 'BLOCK_OVERFLOW' }),
     );
   });
+  it('renders and checks an additional nutrition column without overlapping other columns', () => {
+    const nutrition = block({
+      kind: 'nutritionInformation', title: 'Nutrition', lines: [],
+      table: { rows: [['Protein', '1 g', '2 g', '3 g']] },
+    });
+    const result = layoutLabel(input({ blocks: [nutrition] }));
+    expect(result.svg).toMatch(/x="5"[^>]*>Protein<\/text>/);
+    expect(result.svg).toMatch(/x="38.3"[^>]*>1 g<\/text>/);
+    expect(result.svg).toMatch(/x="57.2"[^>]*>2 g<\/text>/);
+    expect(result.svg).toMatch(/x="76.1"[^>]*>3 g<\/text>/);
+    const tooWide = block({ ...nutrition, table: { rows: [['Protein', '1 g', '2 g', 'very long combined quantity']] } });
+    expect(layoutLabel(input({ blocks: [tooWide] })).issues).toContainEqual(
+      expect.objectContaining({ code: 'LINE_OVERFLOW' }),
+    );
+    const inconsistent = block({ ...nutrition, table: { rows: [['Protein', '1 g', '2 g'], ['Fat', '1 g', '2 g', '3 g']] } });
+    expect(() => layoutLabel(input({ blocks: [inconsistent] }))).toThrow('consistent rows');
+  });
+  it('renders a five-column nutrition table for per-serving %DI and combined-food values', () => {
+    const nutrition = block({
+      kind: 'nutritionInformation', title: 'Nutrition', lines: [],
+      table: { rows: [['Protein', '1 g', '%DI', '2 g', '3 g'], ['Protein', '1 g', '2%', '2 g', '3 g']] },
+    });
+    const result = layoutLabel(input({ blocks: [nutrition] }));
+    expect(result.svg).toMatch(/x="32.9"[^>]*>1 g<\/text>/);
+    expect(result.svg).toMatch(/x="50"[^>]*>%DI<\/text>/);
+    expect(result.svg).toMatch(/x="59.9"[^>]*>2 g<\/text>/);
+    expect(result.svg).toMatch(/x="75.2"[^>]*>3 g<\/text>/);
+    const tooWide = block({
+      ...nutrition,
+      table: { rows: [['Protein', '1 g', '%DI', '2 g', 'long combined amount that will not fit']] },
+    });
+    expect(layoutLabel(input({ blocks: [tooWide] })).issues).toContainEqual(
+      expect.objectContaining({ code: 'LINE_OVERFLOW' }),
+    );
+  });
   it('can render allergen summary lines in bold without changing other blocks', () => {
     const result = layoutLabel(input({
       blocks: [block({ kind: 'allergenDeclaration', title: 'Allergens', lines: ['Contains: milk'], boldLines: true })],
@@ -79,6 +136,19 @@ describe('layoutLabel', () => {
     expect(result.svg).toMatch(/font-weight="700">Contains: milk<\/text>/);
     expect(layoutLabel(input({ blocks: [block({ lines: ['Contains: milk'] })] })).svg)
       .not.toMatch(/font-weight="700">Contains: milk<\/text>/);
+  });
+  it('bolds exact phrases inside a line and leaves longer words untouched', () => {
+    const result = layoutLabel(input({
+      blocks: [block({
+        kind: 'ingredients',
+        lines: ['Milk powder and milk chocolate'],
+        boldPhrases: ['milk'],
+      })],
+    }));
+    expect(result.svg).toContain(
+      '<tspan font-weight="700">Milk</tspan> powder and <tspan font-weight="700">milk</tspan> chocolate',
+    );
+    expect(result.svg).not.toContain('<tspan font-weight="700">Milk</tspan>shake');
   });
   it('emits exact physical SVG dimensions and deterministic escaped text', () => {
     const data = input({

@@ -62,9 +62,6 @@ export function evaluateInfantSweetenedWord(
   } else if (input.sugarsBasisConfirmed !== true) {
     reasons.push('SUGARS_BASIS_NOT_CONFIRMED');
   }
-  if (input.evidence === undefined) {
-    reasons.push('EVIDENCE_MISSING');
-  }
   const name = input.proposedName?.trim() ?? '';
   const wordInName = /(^|[^\p{L}\p{N}])sweetened($|[^\p{L}\p{N}])/iu.test(name);
   const exceeds = sugarsUsable ? compareDecimals(input.addedSugarsPer100g!, THRESHOLD) > 0 : undefined;

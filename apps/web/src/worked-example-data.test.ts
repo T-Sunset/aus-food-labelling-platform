@@ -3,6 +3,7 @@ import { buildAdditiveNameReport } from './additive-name-checks';
 import { buildClaimChecks } from './claim-checks';
 import { workedExampleSet as set } from './worked-example-data';
 import { workedExampleTag } from './worked-examples';
+import { makeNipDraft } from './nip-draft';
 
 function product(id: string) {
   const found = set.products.find((item) => item.id === id);
@@ -17,7 +18,8 @@ function report(id: string, illustrative: boolean) {
 }
 
 function claims(id: string, illustrative: boolean) {
-  return buildClaimChecks(product(id), illustrative);
+  const record = product(id);
+  return buildClaimChecks(record, illustrative, record.claims ?? [], makeNipDraft(record, set.formulations, set.ingredients));
 }
 
 const additive = (id: string, code: string, illustrative: boolean) => {
@@ -79,8 +81,8 @@ describe('worked examples: P1 Example Citrus Boost (good)', () => {
     }
   });
 
-  it('previews Low sugars as meeting the condition', () => {
-    expect(claimNamed(id, 'Low sugars', true).preview).toMatchObject({ eligible: true, illustrativeStatus: 'PASS' });
+  it('does not use the historical manual sugars figure without saved Product nutrition', () => {
+    expect(claimNamed(id, 'Low sugars', true).preview?.eligible).toBe(false);
   });
 
   it('uses the person\'s stated benzoic acid basis for sodium benzoate', () => {
@@ -112,8 +114,8 @@ describe('worked examples: P2 Example Citrus Boost Max (problem)', () => {
     expect(steviol.preview?.blockedBy).toContain('SOURCE_STATUS_NOT_ADDED');
   });
 
-  it('previews Low sugars as not meeting the condition', () => {
-    expect(claimNamed(id, 'Low sugars', true).preview).toMatchObject({ eligible: true, illustrativeStatus: 'FAIL' });
+  it('does not use the historical manual sugars figure without saved Product nutrition', () => {
+    expect(claimNamed(id, 'Low sugars', true).preview?.eligible).toBe(false);
   });
 
   it('blocks Low energy (no figure entered) and the health claim (review-only)', () => {
@@ -139,9 +141,8 @@ describe('worked examples: P3 Example Apple and Oat Puree (good)', () => {
     expect(report(id, true).sweetenedPreview).toMatchObject({ eligible: true, illustrativeStatus: 'PASS' });
   });
 
-  it('previews the fibre claim as meeting the condition', () => {
-    expect(claimNamed(id, 'Good source of dietary fibre', true).preview)
-      .toMatchObject({ eligible: true, illustrativeStatus: 'PASS' });
+  it('does not use the historical manual fibre figure without saved Product nutrition', () => {
+    expect(claimNamed(id, 'Good source of dietary fibre', true).preview?.eligible).toBe(false);
   });
 });
 

@@ -170,23 +170,20 @@ function evaluateCandidate(
 
   for (const requirement of candidate.requirements) {
     const { fact } = requirement;
-    const evidenceIsSufficient = fact.answer === 'conflicting'
-      ? fact.evidence.length >= 2
-      : fact.answer === 'unknown' || fact.evidence.length >= 1;
-
     if (fact.answer === 'conflicting') {
       inconclusive = true;
       reasons.push(`${requirement.label}: evidence conflicts and needs review`);
-    } else if (fact.answer === 'unknown' || !evidenceIsSufficient) {
+    } else if (fact.answer === 'unknown') {
       inconclusive = true;
-      reasons.push(
-        `${requirement.label}: ${fact.answer === 'unknown' ? 'not established' : 'supporting evidence is missing'}`,
-      );
+      reasons.push(`${requirement.label}: not established`);
     } else if (fact.answer !== requirement.expected) {
       notIndicated = true;
-      reasons.push(`${requirement.label}: recorded evidence indicates the opposite`);
+      reasons.push(`${requirement.label}: the recorded answer indicates the opposite`);
     }
 
+    if (fact.evidence.length === 0) {
+      inputs.push({ name: requirement.label, value: fact.answer, sourceId: '', sourceDate: '', sourcePath: [] });
+    }
     for (const evidence of fact.evidence) {
       inputs.push({
         name: requirement.label,
@@ -204,14 +201,14 @@ function evaluateCandidate(
       ? 'inconclusive'
       : 'candidate_indicated';
   if (screeningOutcome === 'candidate_indicated') {
-    reasons.push('All listed screening facts have supporting evidence; human classification confirmation is still required.');
+    reasons.push('All listed screening facts are recorded; human classification confirmation is still required.');
   } else if (screeningOutcome === 'not_indicated') {
     reasons.push('Recorded facts do not support this candidate; this is not a legal classification or a compliance failure.');
   }
 
   return {
     title: candidate.name,
-    whatWasChecked: `Evidence-backed screening prompts for ${candidate.provision}.`,
+    whatWasChecked: `Screening prompts for ${candidate.provision}, using the recorded answers.`,
     rule: {
       id: `candidate.${candidate.id}`,
       name: candidate.name,

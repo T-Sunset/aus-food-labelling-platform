@@ -103,6 +103,14 @@ describe('Schedule 11 energy calculation', () => {
       energyKjPer100g: '170',
       contributions: [{ quantity: '10', contributionKjPer100g: '170' }],
     });
+
+  });
+
+  it('converts micrograms per 100 g before applying an energy factor', () => {
+    expect(calculateSchedule11Energy(
+      [{ ...proteinComponent, quantity: '1000000', unit: 'ug/100g' }],
+      factorSet, true, 'asSold',
+    )).toMatchObject({ status: 'calculated', energyKjPer100g: '17', contributions: [{ quantity: '1' }] });
   });
 
   it('returns review required for incomplete component coverage instead of assuming missing components are zero', () => {

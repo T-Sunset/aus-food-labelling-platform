@@ -112,7 +112,6 @@ describe('illustrative preview (ADR-006)', () => {
   it('never lifts missing facts or unsupported rows', () => {
     const cases: Partial<AdditivePermissionEvaluationInput>[] = [
       { confirmedCategoryId: undefined },
-      { evidence: undefined },
       { finalConcentration: { value: '1', unit: 'mg/L' } },
       { foodState: undefined },
       { sourceStatus: 'carriedOver' },
@@ -138,11 +137,26 @@ describe('illustrative preview (ADR-006)', () => {
     const withWord = sweetenedInput({ proposedName: 'Sweetened apple custard' });
     expect(illustrateInfantSweetenedWord(evaluateInfantSweetenedWord(withWord), withWord).illustrativeStatus).toBe('PASS');
 
-    for (const overrides of [{ confirmedCohorts: [] }, { evidence: undefined }, { addedSugarsPer100g: undefined }, { sugarsBasisConfirmed: false }]) {
+    for (const overrides of [{ confirmedCohorts: [] }, { addedSugarsPer100g: undefined }, { sugarsBasisConfirmed: false }]) {
       const input = sweetenedInput(overrides);
       const result = illustrateInfantSweetenedWord(evaluateInfantSweetenedWord(input), input);
       expect(result.eligible).toBe(false);
     }
+  });
+
+  it('allows an explicitly illustrative result without a user source, never changing the official result', () => {
+    const input = permissionInput({ evidence: undefined });
+    const official = evaluateAdditivePermission(input);
+    expect(official.status).toBe('REVIEW REQUIRED');
+    expect(illustrateAdditivePermission(official, input)).toMatchObject({
+      eligible: true, officialStatus: 'REVIEW REQUIRED', illustrativeStatus: 'PASS',
+    });
+    const infant = sweetenedInput({ evidence: undefined });
+    const infantOfficial = evaluateInfantSweetenedWord(infant);
+    expect(infantOfficial.status).toBe('REVIEW REQUIRED');
+    expect(illustrateInfantSweetenedWord(infantOfficial, infant)).toMatchObject({
+      eligible: true, officialStatus: 'REVIEW REQUIRED', illustrativeStatus: 'FAIL',
+    });
   });
 
   it('has nothing to illustrate when the official result is already determined', () => {

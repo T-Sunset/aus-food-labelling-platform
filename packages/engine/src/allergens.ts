@@ -78,9 +78,6 @@ export function propagateAllergens(
 
     for (const allergen of vocabulary) {
       const status = source.assessments[allergen.id];
-      if (!source.sourceId || !source.sourceDate) {
-        unresolved.push({ allergenId: allergen.id, status: 'missing', sourcePath: source.sourcePath });
-      }
       if (status === undefined) {
         unresolved.push({
           sourceId: source.sourceId,

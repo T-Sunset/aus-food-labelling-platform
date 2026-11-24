@@ -9,11 +9,11 @@ import type {
 } from '@aus-food/domain';
 import {
   addDecimals,
-  divideDecimals,
   isNegativeDecimal,
   multiplyDecimals,
   normalizeDecimal,
 } from './decimal.js';
+import { convertNutrientUnit } from './nutrition.js';
 
 function isNonEmpty(value: string): boolean {
   return value.trim().length > 0;
@@ -94,7 +94,7 @@ export function calculateSchedule11Energy(
       });
       continue;
     }
-    if (component.unit !== 'g/100g' && component.unit !== 'mg/100g') {
+    if (component.unit !== 'g/100g' && component.unit !== 'mg/100g' && component.unit !== 'ug/100g') {
       throw new TypeError(`Unsupported quantity unit for energy component "${component.id}"`);
     }
     if (!sourceIsComplete(component.source)) {
@@ -110,9 +110,7 @@ export function calculateSchedule11Energy(
     if (isNegativeDecimal(quantity)) {
       throw new RangeError(`Energy component "${component.id}" cannot have a negative quantity`);
     }
-    const quantityInGrams = component.unit === 'mg/100g'
-      ? divideDecimals(quantity, '1000')
-      : quantity;
+    const quantityInGrams = convertNutrientUnit(quantity, component.unit, 'g/100g');
 
     const factor = factorSet?.factors[component.category];
     if (factor === undefined) {

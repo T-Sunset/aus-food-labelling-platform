@@ -1,52 +1,39 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef } from 'vue';
+import { computed, onMounted, ref, shallowRef, watch } from 'vue';
 import {
   createEmptyProductClassificationProfile,
-  expandFormulation,
   formatAdditiveDeclarationCandidate,
   screenPrescribedNameCandidate,
   screenProductClassCandidates,
-  sumDecimals,
-  traceAdditiveAllergenEvidence,
-  traceAdditiveSources,
 } from '@aus-food/engine';
 import AppButton from './components/ui/button/AppButton.vue';
 import BackupPanel from './components/BackupPanel.vue';
 import FormulationBuilder from './components/FormulationBuilder.vue';
+import FormulationSummary from './components/FormulationSummary.vue';
 import IngredientBuilder from './components/IngredientBuilder.vue';
 import LabelExportPanel from './components/LabelExportPanel.vue';
 import ProductBuilder from './components/ProductBuilder.vue';
-import ReviewTracePanel from './components/ReviewTracePanel.vue';
 import { editableIngredientKeys } from './ingredient-form';
-import { additiveSourcesInRecipe } from './ingredient-additives';
 import { seedIllustrativeDemo } from './demo-workspace.js';
-import { workedExampleSet } from './worked-example-data.js';
-import {
-  loadWorkedExamples,
-  removeWorkedExamples,
-  workedExampleCount,
-  workedExampleTag,
-} from './worked-examples.js';
 import {
   openLocalFoodStore,
   StorageMarkerWriteError,
   type ApprovedVersionRecord,
   type FormulationRecord,
   type IngredientRecord,
+  type LabelDraftRecord,
   type LocalFoodStore,
   type ProductRecord,
   type WorkspaceDraftRecord,
 } from '@aus-food/storage';
 
 type IngredientAdditiveSource = NonNullable<IngredientRecord['additiveSources']>[number];
-type AdditiveConcentration = NonNullable<IngredientAdditiveSource['concentration']>;
 
 type Section =
   | 'overview'
   | 'ingredients'
   | 'formulations'
   | 'products'
-  | 'review'
   | 'labels'
   | 'backup';
 
@@ -61,20 +48,35 @@ const actionError = ref('');
 const ingredients = ref<IngredientRecord[]>([]);
 const formulations = ref<FormulationRecord[]>([]);
 const products = ref<ProductRecord[]>([]);
+const labelDrafts = ref<LabelDraftRecord[]>([]);
 const productVersions = ref<ApprovedVersionRecord[]>([]);
-const expansion = ref<{
-  productId: string;
-  rows: { name: string; mass: string; path: string }[];
-  additiveSources: (ReturnType<typeof traceAdditiveSources>[number] & { path: string })[];
-  additiveAllergenEvidence: (
-    ReturnType<typeof traceAdditiveAllergenEvidence>[number] & { path: string }
-  )[];
-  totalMass: string;
-}>();
-const expansionError = ref('');
+const expandedFormulationId = ref<string>();
 
 const productEditor = ref<ProductRecord | 'new'>();
 const createdProductId = ref<string>();
+const productEditorDirty = ref(false);
+const labelProductId = ref<string>();
+const productReviewRequest = ref(0);
+const labelsOpened = ref(false);
+watch(activeSection, (section) => { if (section === 'labels') labelsOpened.value = true; });
+
+function editProductFromLabels(id: string, openReview = false): void {
+  const currentId = productEditor.value === 'new' ? createdProductId.value : productEditor.value?.id;
+  if (productEditor.value !== undefined && currentId !== id && productEditorDirty.value
+    && !window.confirm('Discard unsaved product changes and edit another product?')) return;
+  if (currentId !== id) {
+    productEditor.value = products.value.find((item) => item.id === id);
+    createdProductId.value = undefined;
+  }
+  activeSection.value = 'products';
+  labelProductId.value = id;
+  productReviewRequest.value = openReview ? productReviewRequest.value + 1 : 0;
+}
+
+function openLabels(id: string | undefined): void {
+  if (id) labelProductId.value = id;
+  activeSection.value = 'labels';
+}
 
 const sections: { id: Section; label: string }[] = [
   { id: 'overview', label: 'Overview' },
@@ -84,7 +86,6 @@ const sections: { id: Section; label: string }[] = [
   { id: 'labels', label: 'Labels' },
   { id: 'backup', label: 'Backup & restore' },
 ];
-const checkSections: { id: Section; label: string }[] = [{ id: 'review', label: 'Review & trace' }];
 
 const records = computed(() => ({
   ingredients: ingredients.value.length,
@@ -137,10 +138,11 @@ async function refreshRecords(): Promise<void> {
   if (store.value === undefined) {
     return;
   }
-  [ingredients.value, formulations.value, products.value] = await Promise.all([
+  [ingredients.value, formulations.value, products.value, labelDrafts.value] = await Promise.all([
     store.value.ingredients.list(),
     store.value.formulations.list(),
     store.value.products.list(),
+    store.value.labels.list(),
   ]);
   if (productEditor.value && productEditor.value !== 'new') {
     const editingId = productEditor.value.id;
@@ -164,52 +166,6 @@ async function loadIllustrativeDemo(): Promise<void> {
     await refreshRecords();
     actionMessage.value =
       'Illustrative demo data loaded locally. It contains no supplier, nutrient, allergen or regulatory evidence.';
-  } catch (error) {
-    actionError.value = explainError(error);
-  }
-}
-
-const hasWorkedExamplesLoaded = computed(() =>
-  [...ingredients.value, ...formulations.value, ...products.value].some((record) =>
-    record.tags.includes(workedExampleTag),
-  ),
-);
-
-async function loadWorkedExampleRecords(): Promise<void> {
-  clearMessages();
-  if (store.value === undefined) {
-    actionError.value = 'Local storage is not available.';
-    return;
-  }
-  try {
-    const result = await loadWorkedExamples(store.value, workedExampleSet);
-    await refreshRecords();
-    actionMessage.value =
-      result.skipped > 0
-        ? `Worked examples loaded locally: ${result.created} added, ${result.skipped} already present and left unchanged. All figures are invented.`
-        : `Worked examples loaded locally: ${result.created} records added. All figures are invented.`;
-  } catch (error) {
-    actionError.value = explainError(error);
-  }
-}
-
-async function removeWorkedExampleRecords(): Promise<void> {
-  if (
-    store.value === undefined ||
-    !window.confirm(
-      'Remove the worked examples? Only records tagged worked-example are deleted; your own drafts are not touched. This cannot be undone.',
-    )
-  ) {
-    return;
-  }
-  clearMessages();
-  try {
-    const result = await removeWorkedExamples(store.value);
-    await refreshRecords();
-    actionMessage.value =
-      result.kept > 0
-        ? `Worked examples removed: ${result.removed} deleted, ${result.kept} kept because they are in use or have an approved version.`
-        : `Worked examples removed: ${result.removed} records deleted.`;
   } catch (error) {
     actionError.value = explainError(error);
   }
@@ -280,50 +236,6 @@ function additiveSourceStatusLabel(status: IngredientAdditiveSource['sourceStatu
   }
 }
 
-function additiveConcentrationUnitLabel(unit: AdditiveConcentration['unit']): string {
-  switch (unit) {
-    case 'mgPerKg':
-      return 'mg/kg';
-    case 'gPerKg':
-      return 'g/kg';
-    case 'mgPerL':
-      return 'mg/L';
-    case 'gPerL':
-      return 'g/L';
-    case 'mgPer100g':
-      return 'mg/100 g';
-    case 'gPer100g':
-      return 'g/100 g';
-    case 'mgPer100mL':
-      return 'mg/100 mL';
-    case 'gPer100mL':
-      return 'g/100 mL';
-    case 'percentByMass':
-      return '% by mass';
-    case 'percentByVolume':
-      return '% by volume';
-  }
-}
-
-function additiveConcentrationBasisLabel(basis: AdditiveConcentration['basis']): string {
-  switch (basis) {
-    case 'asSupplied':
-      return 'as supplied';
-    case 'dryMatter':
-      return 'dry matter';
-    case 'asAdded':
-      return 'as added';
-    case 'asPrepared':
-      return 'as prepared';
-    case 'asReconstituted':
-      return 'as reconstituted';
-    case 'asDrained':
-      return 'as drained';
-    case 'unknown':
-      return 'basis not supplied';
-  }
-}
-
 const ingredientEditor = ref<IngredientRecord | 'new'>();
 
 async function saveIngredient(record: IngredientRecord, composition?: FormulationRecord): Promise<void> {
@@ -363,10 +275,19 @@ async function saveIngredient(record: IngredientRecord, composition?: Formulatio
 
 const formulationEditor = ref<FormulationRecord | 'new'>();
 
+async function createIngredientInFormulation(record: IngredientRecord, composition?: FormulationRecord): Promise<void> {
+  if (store.value === undefined) throw new Error('Local storage is not available.');
+  if (composition) {
+    await store.value.saveIngredientWithComposition(record, composition, true);
+  } else {
+    await store.value.ingredients.create(record);
+  }
+  await refreshRecords();
+}
+
 async function saveFormulation(record: FormulationRecord): Promise<void> {
   clearMessages();
-  expansion.value = undefined;
-  expansionError.value = '';
+  expandedFormulationId.value = undefined;
   if (store.value === undefined) {
     actionError.value = 'Local storage is not available.';
     return;
@@ -377,7 +298,9 @@ async function saveFormulation(record: FormulationRecord): Promise<void> {
     } else {
       // Only the fields the builder manages are changed; anything else on the record is kept.
       await store.value.formulations.update(record.id, {
-        name: record.name, lines: record.lines,
+        name: record.name, lines: record.lines, processMassProfile: record.processMassProfile,
+        finishedNutrition: record.finishedNutrition, nutrientRetention: record.nutrientRetention,
+        incompleteRecipeLines: record.incompleteRecipeLines,
         ...(record.supplierComposition ? { supplierComposition: record.supplierComposition } : {}),
       });
     }
@@ -386,72 +309,6 @@ async function saveFormulation(record: FormulationRecord): Promise<void> {
     actionMessage.value = 'Formulation draft saved locally.';
   } catch (error) {
     actionError.value = explainError(error);
-  }
-}
-
-function calculateFormulation(formulation: FormulationRecord): void {
-  expansionError.value = '';
-  expansion.value = undefined;
-  try {
-    const expanded = expandFormulation(
-      formulation.id,
-      { value: '100', unit: 'g' },
-      formulations.value,
-    );
-    const ingredientById = new Map(
-      ingredients.value.map((ingredient) => [ingredient.id, ingredient]),
-    );
-    const additiveSources = traceAdditiveSources(
-      expanded,
-      new Map(ingredients.value.map((ingredient) => [
-        ingredient.id,
-        additiveSourcesInRecipe(ingredient),
-      ])),
-    );
-    const additiveAllergenEvidence = traceAdditiveAllergenEvidence(
-      expanded,
-      new Map(ingredients.value.map((ingredient) => [
-        ingredient.id,
-        additiveSourcesInRecipe(ingredient),
-      ])),
-    );
-    const formulationById = new Map(
-      formulations.value.map((item) => [item.id, item]),
-    );
-    const additiveSourceById = new Map(
-      ingredients.value.flatMap((item) =>
-        (item.additiveSources ?? []).map((source) => [source.id, source] as const),
-      ),
-    );
-    expansion.value = {
-      productId: formulation.id,
-      rows: expanded.map((item) => ({
-        name:
-          ingredientById.get(item.ingredientId)?.name ??
-          `Unresolved ingredient ${item.ingredientId}`,
-        mass: item.mass.value,
-        path: item.sourcePath.join(' → '),
-      })),
-      additiveSources: additiveSources.map((source) => ({
-        ...source,
-        path: source.sourcePath
-          .map((id) => ingredientById.get(id)?.name ?? formulationById.get(id)?.name ?? id)
-          .join(' → '),
-      })),
-      additiveAllergenEvidence: additiveAllergenEvidence.map((evidence) => ({
-        ...evidence,
-        path: evidence.sourcePath
-          .map((id) =>
-            ingredientById.get(id)?.name
-            ?? formulationById.get(id)?.name
-            ?? additiveSourceById.get(id)?.additiveName
-            ?? id)
-          .join(' → '),
-      })),
-      totalMass: sumDecimals(expanded.map((item) => item.mass.value)),
-    };
-  } catch (error) {
-    expansionError.value = `Review required: ${explainError(error)}`;
   }
 }
 
@@ -515,26 +372,6 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
         <nav>
           <button
             v-for="section in sections"
-            :key="section.id"
-            type="button"
-            class="nav-link"
-            :class="{ active: activeSection === section.id }"
-            :aria-current="activeSection === section.id ? 'page' : undefined"
-            @click="activeSection = section.id"
-          >
-            <span
-              class="nav-indicator"
-              aria-hidden="true"
-            />
-            {{ section.label }}
-          </button>
-        </nav>
-        <p class="nav-caption">
-          CHECKS
-        </p>
-        <nav aria-label="Checks">
-          <button
-            v-for="section in checkSections"
             :key="section.id"
             type="button"
             class="nav-link"
@@ -644,9 +481,9 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 </p>
                 <h1>Good work starts with good records.</h1>
                 <p class="lede">
-                  Make a draft pack-copy label in three steps: add your ingredients from your supplier spec
-                  sheets, put them together into a recipe, then set up your product. Nothing leaves your
-                  device.
+                  Make a draft pack-copy label in three steps: add your ingredients using the information
+                  you have, put them together into a recipe, then set up your product. Missing information
+                  stays unresolved rather than being guessed. Nothing leaves your device.
                 </p>
               </div>
               <div
@@ -664,7 +501,7 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
               <article class="summary-card">
                 <span class="summary-label">Ingredients</span>
                 <strong>{{ records.ingredients }}</strong>
-                <span class="summary-detail">from your supplier spec sheets</span>
+                <span class="summary-detail">saved on this device</span>
               </article>
               <article class="summary-card">
                 <span class="summary-label">Formulations</span>
@@ -694,7 +531,7 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                     <span class="journey-number">01</span>
                     <div>
                       <strong>Add your ingredients</strong>
-                      <p>Have each supplier spec sheet to hand. Enter what it says: the nutrition figures, allergens and any additives.</p>
+                      <p>Enter each ingredient and the nutrition, allergens or additives you know. Supplier references are optional; missing details stay unknown rather than being guessed.</p>
                     </div>
                     <AppButton
                       variant="link"
@@ -709,7 +546,7 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                     <span class="journey-number">02</span>
                     <div>
                       <strong>Put them into a recipe</strong>
-                      <p>Enter how much of each ingredient goes in. We work out the amounts per 100 g.</p>
+                      <p>Enter how much of each ingredient goes in. Where enough information is available, we calculate nutrition per 100 g; missing amounts stay unavailable.</p>
                     </div>
                     <AppButton
                       variant="link"
@@ -748,8 +585,8 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 <h2>This is a drafting aid, not a clearance.</h2>
                 <p>
                   Everything here is a draft to take to a food consultant. Our rule data has not been
-                  reviewed yet, so no result should be relied on as legal advice. The label page is a
-                  demonstration layout only.
+                  reviewed yet, so no result should be relied on as legal advice. Label exports are
+                  incomplete review copies, not finished food labels.
                 </p>
                 <span class="review-status"><span aria-hidden="true" /> No regulatory release installed</span>
               </aside>
@@ -777,82 +614,6 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
               >
                 Load illustrative demo data
               </AppButton>
-            </section>
-            <section
-              v-if="workedExampleCount(workedExampleSet) > 0"
-              class="panel demo-panel"
-              aria-labelledby="worked-examples-title"
-            >
-              <div>
-                <p class="eyebrow">
-                  OPTIONAL · LOCAL ONLY
-                </p>
-                <h2 id="worked-examples-title">
-                  Worked examples for review
-                </h2>
-                <p>
-                  Adds invented caffeinated beverage and infant food products with additive and claim
-                  inputs so every page can be seen working. Every figure is invented and every result
-                  stays REVIEW REQUIRED. Existing records are never overwritten.
-                </p>
-              </div>
-              <div class="button-row">
-                <AppButton
-                  type="button"
-                  @click="loadWorkedExampleRecords"
-                >
-                  Load worked examples
-                </AppButton>
-                <AppButton
-                  v-if="hasWorkedExamplesLoaded"
-                  type="button"
-                  variant="outline"
-                  @click="removeWorkedExampleRecords"
-                >
-                  Remove worked examples
-                </AppButton>
-              </div>
-            </section>
-            <section
-              v-if="hasWorkedExamplesLoaded"
-              class="panel"
-              aria-labelledby="worked-guide-title"
-            >
-              <h2 id="worked-guide-title">
-                Guide to the worked examples
-              </h2>
-              <p>
-                Open each product on the pages named below. Turn on "Show what each result would be" on
-                Additives &amp; names or Claims to see the illustrative preview. Every official status stays
-                REVIEW REQUIRED, and nothing here certifies compliance.
-              </p>
-              <ul>
-                <li>
-                  <strong>Example Citrus Boost</strong> (caffeinated beverage, good): additives within their
-                  limits, including sodium benzoate stated as benzoic acid, and "Low sugars" would meet its
-                  condition.
-                </li>
-                <li>
-                  <strong>Example Citrus Boost Max</strong> (caffeinated beverage, problem): wood rosin esters
-                  over the limit, a missing concentration, an unknown source status, "Low sugars" not met,
-                  "Low energy" missing its figure, and a health claim that is review-only.
-                </li>
-                <li>
-                  <strong>Example Apple and Oat Puree</strong> (infant food, good): additives within limits,
-                  the "sweetened" word not required, and "Good source of dietary fibre" would meet its
-                  condition.
-                </li>
-                <li>
-                  <strong>Example Honey and Oat Puree</strong> (infant food, problem): carrageenan over the
-                  limit, "sweetened" blocked by an unconfirmed sugars basis, "Low fat" blocked as a prohibited
-                  context, "Low sodium" blocked by an unconfirmed classification, and a sterilised-honey
-                  name candidate.
-                </li>
-              </ul>
-              <p>
-                The Labels page also works for these products. It remains a demonstration
-                layout, not a food label.
-              </p>
             </section>
             <p class="privacy-footnote">
               Your formulation data is stored locally in this browser. Back up important work using
@@ -1039,7 +800,7 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
               <span class="record-count">{{ records.formulations }} saved</span>
             </div>
 
-            <div class="content-grid">
+            <div class="ingredient-content-grid">
               <FormulationBuilder
                 v-if="formulationEditor !== undefined"
                 :key="formulationEditor === 'new' ? 'new' : formulationEditor.id"
@@ -1047,6 +808,7 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 :ingredients="ingredients"
                 :formulations="formulations"
                 :make-id="makeId"
+                :create-ingredient="createIngredientInFormulation"
                 @save="saveFormulation"
                 @cancel="formulationEditor = undefined"
               />
@@ -1107,7 +869,10 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                     >F</span>
                     <div class="record-main">
                       <strong>{{ record.name }}</strong>
-                      <span>{{ record.lines.length + (record.supplierComposition?.unquantifiedComponents.length ?? 0) }} ingoing lines</span>
+                      <span>{{ record.lines.length + (record.supplierComposition?.unquantifiedComponents.length ?? 0) + (record.incompleteRecipeLines?.unquantifiedLines.length ?? 0) }} ingoing lines</span>
+                      <span v-if="record.incompleteRecipeLines">
+                        Some amounts are unknown — proportions cannot yet be calculated.
+                      </span>
                       <span v-if="record.supplierComposition">
                         Supplier composition: {{ record.supplierComposition.coverage }}
                         <template v-if="record.supplierComposition.coverage === 'partial'">
@@ -1124,9 +889,11 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                       variant="outline"
                       size="sm"
                       type="button"
-                      @click="calculateFormulation(record)"
+                      :aria-expanded="expandedFormulationId === record.id"
+                      :aria-label="`${expandedFormulationId === record.id ? 'Collapse' : 'Expand'} ${record.name}`"
+                      @click="expandedFormulationId = expandedFormulationId === record.id ? undefined : record.id"
                     >
-                      Expand
+                      {{ expandedFormulationId === record.id ? 'Collapse' : 'Expand' }}
                     </AppButton>
                     <AppButton
                       variant="outline"
@@ -1146,144 +913,16 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                     >
                       Delete
                     </AppButton>
+                    <FormulationSummary
+                      v-if="expandedFormulationId === record.id"
+                      :recipe="record"
+                      :formulations="formulations"
+                      :ingredients="ingredients"
+                    />
                   </li>
                 </ul>
-                <div
-                  v-if="expansionError"
-                  class="notice notice-error inline-notice"
-                  role="alert"
-                >
-                  {{ expansionError }}
-                </div>
-                <section
-                  v-if="expansion"
-                  class="expansion-result"
-                  aria-live="polite"
-                  aria-labelledby="expansion-title"
-                >
-                  <div class="result-title">
-                    <div>
-                      <p class="eyebrow">
-                        ENGINE EXPANSION
-                      </p>
-                      <h3 id="expansion-title">
-                        100 g requested basis
-                      </h3>
-                    </div>
-                    <span class="result-tag">Calculation only</span>
-                  </div>
-                  <p class="field-hint">
-                    Expanded ingoing amounts total {{ expansion.totalMass }} g. This does not
-                    account for processing or yield.
-                  </p>
-                  <ul class="expansion-list">
-                    <li
-                      v-for="(row, index) in expansion.rows"
-                      :key="`${row.path}-${index}`"
-                    >
-                      <span>{{ row.name }}</span><strong>{{ row.mass }} g</strong><small>{{ row.path }}</small>
-                    </li>
-                  </ul>
-                  <h4>Recorded additive sources along ingredient paths</h4>
-                  <p class="field-hint">
-                    These are captured source records only. No additive permission, limit, carry-over
-                    exemption, or declaration is evaluated here.
-                  </p>
-                  <ul
-                    v-if="expansion.additiveSources.length > 0"
-                    class="expansion-list"
-                  >
-                    <li
-                      v-for="(item, index) in expansion.additiveSources"
-                      :key="`${item.source.id}-${item.path}-${index}`"
-                    >
-                      <span>
-                        <strong>{{ item.source.additiveName }}</strong>
-                        <small>Ingredient path: {{ item.path }}</small>
-                        <small>Source status: {{ additiveSourceStatusLabel(item.source.sourceStatus) }}</small>
-                        <small v-if="item.source.technologicalPurposes?.length">
-                          Purpose(s): {{ item.source.technologicalPurposes.join(', ') }}
-                        </small>
-                        <small v-else>Purpose not supplied</small>
-                        <small v-if="item.source.concentration">
-                          Concentration: {{ item.source.concentration.value }}
-                          {{ additiveConcentrationUnitLabel(item.source.concentration.unit) }}
-                          · {{ additiveConcentrationBasisLabel(item.source.concentration.basis) }}
-                        </small>
-                        <small v-else>Concentration not supplied</small>
-                        <small v-if="item.source.sourceEvidence?.length">
-                          Evidence:
-                          {{ item.source.sourceEvidence.map((evidence) =>
-                            `${evidence.reference} · ${evidence.sourceDate}`).join('; ') }}
-                        </small>
-                        <small v-else>Source evidence not supplied</small>
-                        <small>
-                          Declaration candidate:
-                          {{
-                            additiveDeclarationCandidate(
-                              item.source,
-                              item.ingredientId,
-                              item.sourcePath,
-                            ).text ?? 'not available'
-                          }}
-                          · REVIEW REQUIRED
-                        </small>
-                        <small>
-                          Review reason:
-                          {{
-                            additiveDeclarationCandidate(
-                              item.source,
-                              item.ingredientId,
-                              item.sourcePath,
-                            ).explanation
-                          }}
-                        </small>
-                      </span>
-                    </li>
-                  </ul>
-                  <p
-                    v-else
-                    class="field-hint"
-                  >
-                    No additive source records were supplied for these ingredients.
-                  </p>
-                  <h4>Allergen evidence inherited from additive sources</h4>
-                  <ul
-                    v-if="expansion.additiveAllergenEvidence.length > 0"
-                    class="expansion-list"
-                  >
-                    <li
-                      v-for="evidence in expansion.additiveAllergenEvidence"
-                      :key="evidence.id"
-                    >
-                      <span>
-                        <strong>{{ Object.keys(evidence.assessments).join(', ') }}</strong>
-                        <small>Evidence path: {{ evidence.path }}</small>
-                        <small>Source: {{ evidence.sourceId }} · {{ evidence.sourceDate }}</small>
-                      </span>
-                    </li>
-                  </ul>
-                  <p
-                    v-else
-                    class="field-hint"
-                  >
-                    No additive allergen evidence was recorded for these ingredient sources.
-                  </p>
-                </section>
               </section>
             </div>
-          </section>
-
-          <section
-            v-else-if="activeSection === 'review'"
-            class="page"
-          >
-            <ReviewTracePanel
-              :products="products"
-              :formulations="formulations"
-              :ingredients="ingredients"
-              :versions="productVersions"
-            />
           </section>
 
           <section
@@ -1297,20 +936,33 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
           </section>
 
           <section
-            v-else-if="activeSection === 'labels'"
+            v-show="activeSection === 'labels'"
             class="page"
           >
             <LabelExportPanel
+              v-if="labelsOpened && store"
+              :store="store"
               :products="products"
               :formulations="formulations"
               :ingredients="ingredients"
-              @edit-product="productEditor = products.find((item) => item.id === $event); activeSection = 'products'"
+              :labels="labelDrafts"
+              :active="activeSection === 'labels'"
+              :make-id="makeId"
+              :refresh="refreshRecords"
+              :product-id="labelProductId"
+              :has-unsaved-product-changes="productEditorDirty && labelProductId === (productEditor === 'new' ? createdProductId : productEditor?.id)"
+              @edit-product="editProductFromLabels"
+              @review-product="editProductFromLabels($event, true)"
+              @select-product="labelProductId = $event"
+              @edit-ingredient="ingredientEditor = ingredients.find((item) => item.id === $event); activeSection = 'ingredients'"
+              @edit-recipe="formulationEditor = formulations.find((item) => item.id === $event); activeSection = 'formulations'"
               @go-ingredients="activeSection = 'ingredients'"
+              @go-products="activeSection = 'products'"
             />
           </section>
 
           <section
-            v-else-if="activeSection === 'products'"
+            v-show="activeSection === 'products'"
             class="page"
           >
             <div class="page-heading compact">
@@ -1336,11 +988,16 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                 :products="products"
                 :formulations="formulations"
                 :ingredients="ingredients"
+                :versions="productVersions"
+                :review-request="productReviewRequest"
                 :make-id="makeId"
                 :refresh="refreshRecords"
-                @created="createdProductId = $event"
-                @cancel="productEditor = undefined; createdProductId = undefined"
-                @go="activeSection = $event as Section"
+                @created="createdProductId = $event; labelProductId = $event"
+                @cancel="productEditor = undefined; createdProductId = undefined; productEditorDirty = false"
+                @open-labels="openLabels"
+                @dirty="productEditorDirty = $event"
+                @edit-recipe="formulationEditor = formulations.find((item) => item.id === $event); activeSection = 'formulations'"
+                @edit-ingredient="ingredientEditor = ingredients.find((item) => item.id === $event); activeSection = 'ingredients'"
               />
 
               <section
@@ -1360,7 +1017,7 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                   <span class="count-badge">{{ products.length }}</span>
                   <AppButton
                     type="button"
-                    @click="createdProductId = undefined; productEditor = 'new'"
+                    @click="createdProductId = undefined; productReviewRequest = 0; productEditor = 'new'"
                   >
                     Add product
                   </AppButton>
@@ -1431,7 +1088,7 @@ async function deleteRecord(record: WorkspaceDraftRecord): Promise<void> {
                       size="sm"
                       type="button"
                       :aria-label="`Edit product ${record.name}`"
-                      @click="productEditor = record"
+                      @click="productReviewRequest = 0; labelProductId = record.id; productEditor = record"
                     >
                       Edit
                     </AppButton>
@@ -1912,7 +1569,7 @@ select:focus-visible {
 }
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.85fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 17px;
   align-items: start;
 }
@@ -2166,6 +1823,9 @@ select:focus-visible {
   padding: 13px 0;
   border-top: 1px solid #edf0ec;
 }
+.formulation-item {
+  flex-wrap: wrap;
+}
 .record-avatar {
   flex: 0 0 33px;
   width: 33px;
@@ -2269,6 +1929,9 @@ select:focus-visible {
 .line-row .field {
   gap: 0;
 }
+.line-additive-use {
+  grid-column: 1 / -1;
+}
 .line-row .field input,
 .line-row .field select {
   min-height: 36px;
@@ -2295,65 +1958,6 @@ select:focus-visible {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   clip-path: inset(50%);
-}
-.expansion-result {
-  margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1px solid #e9eee8;
-}
-.result-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-}
-.result-title h3 {
-  margin: 4px 0 0;
-  color: #34473d;
-  font-family: Georgia, serif;
-  font-size: 16px;
-  font-weight: 500;
-}
-.result-tag {
-  padding: 5px 7px;
-  border-radius: 5px;
-  color: #586d5e;
-  background: #f0f5ef;
-  font-size: 9px;
-  font-weight: 650;
-}
-.expansion-result .field-hint {
-  margin-top: 9px;
-}
-.expansion-list {
-  display: grid;
-  gap: 8px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-.expansion-list li {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 3px 8px;
-  padding: 9px 10px;
-  border: 1px solid #edf0ec;
-  border-radius: 7px;
-}
-.expansion-list li > span {
-  color: #44554b;
-  font-size: 10px;
-}
-.expansion-list li > strong {
-  color: #3e604a;
-  font-size: 10px;
-}
-.expansion-list li > small {
-  grid-column: 1 / -1;
-  overflow-wrap: anywhere;
-  color: #8c9890;
-  font-size: 8px;
-  line-height: 1.4;
 }
 .notice {
   display: flex;
@@ -2426,9 +2030,6 @@ select:focus-visible {
   }
   .main-content {
     padding: 34px 26px 42px;
-  }
-  .content-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
   .records-panel {
     order: 2;
@@ -2570,6 +2171,45 @@ select:focus-visible {
   }
   .form-actions {
     align-items: flex-end;
+  }
+}
+
+.pack-copy-review {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+.pack-copy-review li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #dfe7dd;
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+.pack-copy-review strong {
+  min-width: 0;
+  font-size: 11px;
+}
+.pack-copy-review li > span {
+  color: #5b6b60;
+  font-size: 10px;
+  font-weight: 750;
+}
+.pack-copy-review small {
+  grid-column: 1 / -1;
+  color: #657168;
+  font-size: 10px;
+  line-height: 1.45;
+}
+@media (max-width: 700px) {
+  .pack-copy-review {
+    grid-template-columns: 1fr;
   }
 }
 </style>

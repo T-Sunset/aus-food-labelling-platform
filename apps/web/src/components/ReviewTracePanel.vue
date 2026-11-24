@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { expandFormulation } from '@aus-food/engine';
 import type {
   ApprovedVersionRecord,
@@ -7,35 +7,43 @@ import type {
   IngredientRecord,
   ProductRecord,
 } from '@aus-food/storage';
+import { makeLabelDraft } from '../label-draft';
+import { optionalNutrientLabels } from '../ingredient-form';
+import { displaySourcePath } from '../source-path';
+import { caffeineCheckForProduct } from '../caffeine-check';
+import AdditiveNameChecksPanel from './AdditiveNameChecksPanel.vue';
 
 const props = defineProps<{
-  products: readonly ProductRecord[];
+  product: ProductRecord;
   formulations: readonly FormulationRecord[];
   ingredients: readonly IngredientRecord[];
   versions: readonly ApprovedVersionRecord[];
 }>();
 
-const selectedProductId = ref('');
-
-watch(
-  () => props.products,
-  (products) => {
-    if (!products.some((product) => product.id === selectedProductId.value)) {
-      selectedProductId.value = products[0]?.id ?? '';
-    }
-  },
-  { immediate: true },
-);
-
-const selectedProduct = computed(() =>
-  props.products.find((product) => product.id === selectedProductId.value),
-);
 const selectedFormulation = computed(() =>
-  props.formulations.find((formulation) => formulation.id === selectedProduct.value?.formulationId),
+  props.formulations.find((formulation) => formulation.id === props.product.formulationId),
 );
 const selectedVersions = computed(() =>
-  props.versions.filter((version) => version.recordId === selectedProductId.value),
+  props.versions.filter((version) => version.recordType === 'product' && version.recordId === props.product.id),
 );
+const draftEvidence = computed(() => makeLabelDraft(props.product, props.formulations, props.ingredients));
+const caffeineCheck = computed(() =>
+  caffeineCheckForProduct(props.product, new Date().toISOString().slice(0, 10), props.formulations, props.ingredients));
+const technicalDetails = ref<HTMLDetailsElement>();
+const additiveReview = ref<HTMLDetailsElement>();
+
+async function openAdditiveReview(): Promise<void> {
+  if (technicalDetails.value) technicalDetails.value.open = true;
+  if (additiveReview.value) additiveReview.value.open = true;
+  await nextTick();
+  additiveReview.value?.querySelector('summary')?.focus();
+  additiveReview.value?.scrollIntoView({ block: 'start' });
+}
+defineExpose({ openAdditiveReview });
+
+function displayPath(path: readonly string[]): string {
+  return displaySourcePath(path, props.ingredients, props.formulations);
+}
 
 function nutrientEvidence(ingredient: IngredientRecord | undefined) {
   return Object.entries(ingredient?.nutrientProfile?.values ?? {}).flatMap(
@@ -52,10 +60,6 @@ function allergenAssessments(
 }
 
 const trace = computed(() => {
-  const product = selectedProduct.value;
-  if (!product) {
-    return undefined;
-  }
   const formulation = selectedFormulation.value;
   if (!formulation) {
     return {
@@ -92,54 +96,74 @@ const trace = computed(() => {
 </script>
 
 <template>
-  <section class="page">
-    <div class="page-heading compact">
-      <div>
-        <p class="eyebrow">
-          REVIEW WORKSPACE
-        </p>
-        <h1>Review &amp; trace</h1>
-        <p class="lede">
-          Inspect the saved inputs and provenance behind a product draft and any stored evaluation
-          results.
-        </p>
-      </div>
-      <span class="record-count">No certification</span>
-    </div>
-
-    <div
-      class="notice notice-warning review-disclaimer"
-      role="status"
-    >
-      <strong>Draft inputs are not a compliance result.</strong>
-      <span>No active regulatory release is installed in this workspace. The draft trace below does not
-        evaluate legal requirements or imply PASS or FAIL.</span>
-    </div>
-
+  <div>
     <section
-      v-if="products.length === 0"
-      class="panel empty-state"
+      v-if="caffeineCheck"
+      class="panel trace-panel"
+      aria-label="Caffeine concentration check"
     >
-      <h2>No product drafts to review</h2>
-      <p>Create a product and link its formulation to inspect its input trace.</p>
+      <h3>Caffeine concentration</h3>
+      <p><strong>{{ caffeineCheck.status }}</strong> — provisional check. {{ caffeineCheck.explanation }}</p>
+      <details>
+        <summary>Source and limitations</summary>
+        <p>
+          {{ caffeineCheck.resultBasis }}. Source references are optional; inputs and supplied sources are not
+          independently verified. This check does not assess caffeine-source permissions or certify legal compliance.
+        </p>
+        <p>{{ caffeineCheck.nonCertificationStatement }}</p>
+        <p>Rule data are {{ caffeineCheck.ruleReviewStatus }}. This check is not legal clearance.</p>
+        <p>{{ caffeineCheck.rule.provision }}; {{ caffeineCheck.rule.version }}</p>
+        <a :href="caffeineCheck.rule.sourceUrl">View the source provision</a>
+        <h4>Calculation inputs</h4>
+        <ul>
+          <li
+            v-for="input in caffeineCheck.inputs"
+            :key="`${input.name}-${input.sourceId}-${input.sourceDate}`"
+          >
+            {{ input.name }}: {{ input.value }} {{ input.unit ?? '' }};
+            source {{ input.sourceId || 'not supplied (user-entered or calculated)' }};
+            {{ input.sourceDate ? `date ${input.sourceDate}` : 'no source date recorded' }};
+            path {{ displayPath(input.sourcePath) }}.
+          </li>
+        </ul>
+        <ul>
+          <li
+            v-for="limitation in caffeineCheck.limitations"
+            :key="limitation"
+          >
+            {{ limitation }}
+          </li>
+        </ul>
+      </details>
     </section>
 
-    <template v-else>
-      <label class="field review-product-select">
-        <span>Product draft</span>
-        <select v-model="selectedProductId">
-          <option
-            v-for="product in products"
-            :key="product.id"
-            :value="product.id"
-          >
-            {{ product.name }}
-          </option>
-        </select>
-      </label>
-
+    <details
+      ref="technicalDetails"
+      class="technical-details"
+    >
+      <summary>Technical details and review history</summary>
+      <div
+        class="notice notice-warning review-disclaimer"
+        role="status"
+      >
+        <strong>Draft inputs are not a compliance result.</strong>
+        <span>No active regulatory release is installed in this workspace. The draft trace below does not
+          evaluate legal requirements or imply PASS or FAIL.</span>
+      </div>
+      <p class="field-hint">
+        Checks and traces use the saved product and current saved ingredients and recipes.
+        Save product edits to update them. Stored evaluation results below are historical.
+      </p>
+      <slot />
+      <details ref="additiveReview">
+        <summary>Technical additive and name review</summary>
+        <AdditiveNameChecksPanel
+          :product="product"
+          :formulations="formulations"
+          :ingredients="ingredients"
+        />
+      </details>
       <section
-        v-if="selectedProduct"
         class="panel trace-panel"
         aria-labelledby="input-trace-title"
       >
@@ -148,9 +172,9 @@ const trace = computed(() => {
             <p class="eyebrow">
               INPUT TRACE · DRAFT ONLY
             </p>
-            <h2 id="input-trace-title">
-              {{ selectedProduct.name }}
-            </h2>
+            <h3 id="input-trace-title">
+              Input trace: {{ product.name }}
+            </h3>
           </div>
           <span class="status-text">REVIEW REQUIRED</span>
         </div>
@@ -158,11 +182,11 @@ const trace = computed(() => {
         <dl class="trace-summary">
           <div>
             <dt>Product record</dt>
-            <dd>{{ selectedProduct.id }}</dd>
+            <dd>{{ product.id }}</dd>
           </div>
           <div>
             <dt>Food state</dt>
-            <dd>{{ selectedProduct.foodState ?? 'Not supplied' }}</dd>
+            <dd>{{ product.foodState ?? 'Not supplied' }}</dd>
           </div>
           <div>
             <dt>Linked formulation</dt>
@@ -262,7 +286,7 @@ const trace = computed(() => {
                         :key="evidence.id"
                       >
                         {{ allergenAssessments(evidence.assessments) }}
-                        · {{ evidence.sourceId }} · {{ evidence.sourceDate }} · path
+                        · {{ evidence.sourceId }} · {{ evidence.sourceDate }} · stored evidence path
                         {{ evidence.sourcePath.join(' → ') }}
                       </li>
                     </ul>
@@ -275,6 +299,350 @@ const trace = computed(() => {
             </li>
           </ul>
         </template>
+        <details v-if="draftEvidence">
+          <summary>Draft pack and ingredient declaration</summary>
+          <p>Proposed name: {{ draftEvidence.pack.name }}</p>
+          <p>Net contents: {{ draftEvidence.pack.netContents || 'Not supplied — REVIEW REQUIRED' }}</p>
+          <p>Draft ingredient list: {{ draftEvidence.declaration || 'Unavailable — REVIEW REQUIRED' }}</p>
+          <p class="field-hint">
+            These paths identify recorded ingredients, including components with unknown amounts.
+            The ordering and any additive wording still need review.
+          </p>
+          <ul
+            v-if="draftEvidence.declarationInputs.length"
+            class="evidence-list"
+          >
+            <li
+              v-for="(item, index) in draftEvidence.declarationInputs"
+              :key="index"
+            >
+              {{ item.name }} · path {{ displayPath(item.sourcePath) }} ·
+              <template v-if="item.specification">
+                {{ item.specification.reference }} · {{ item.specification.sourceDate }}
+              </template>
+              <template v-else>
+                No ingredient specification recorded
+              </template>
+              <template v-if="item.additiveUse">
+                · recorded use {{ item.additiveUse }}
+              </template>
+            </li>
+          </ul>
+          <p v-else>
+            No ingredient inputs are available — REVIEW REQUIRED.
+          </p>
+          <ul class="evidence-list">
+            <li
+              v-for="direction in draftEvidence.pack.recordedDirections"
+              :key="direction.kind"
+            >
+              {{ direction.kind }} directions (recorded, review required): {{ direction.text }}
+            </li>
+            <li
+              v-for="limitation in draftEvidence.pack.limitations"
+              :key="limitation"
+            >
+              REVIEW REQUIRED — {{ limitation }}
+            </li>
+          </ul>
+        </details>
+        <details v-if="draftEvidence?.drainedNutrition">
+          <summary>Drained food nutrition</summary>
+          <p class="field-hint">
+            Drained food basis · REVIEW REQUIRED. The draft panel uses these values only when the recorded directions and food state support it.
+          </p>
+          <p>Directions: {{ draftEvidence.drainedNutrition.directions || 'Not supplied' }}</p>
+          <p>
+            Drained serving: {{ draftEvidence.drainedNutrition.servingGrams || 'Not supplied' }}<template v-if="draftEvidence.drainedNutrition.servingGrams">
+              g
+            </template>
+          </p>
+          <p>
+            Source: {{ draftEvidence.drainedNutrition.sourceType || 'Not supplied' }} ·
+            {{ draftEvidence.drainedNutrition.sourceReference || 'No reference supplied' }} ·
+            {{ draftEvidence.drainedNutrition.sourceDate || 'No date supplied' }}
+          </p>
+          <ul class="evidence-list">
+            <li
+              v-for="row in draftEvidence.drainedNutrition.rows"
+              :key="row.label"
+            >
+              {{ row.label }}: {{ row.per100g }} per 100 g drained · {{ row.serving }} per drained serving
+              <template v-if="row.input">
+                · Entered value: {{ row.input }}
+              </template>
+            </li>
+          </ul>
+          <ul
+            v-if="draftEvidence.drainedNutrition.missing.length"
+            class="evidence-list"
+          >
+            <li
+              v-for="item in draftEvidence.drainedNutrition.missing"
+              :key="item"
+            >
+              REVIEW REQUIRED — {{ item }}
+            </li>
+          </ul>
+        </details>
+        <details v-if="draftEvidence?.preparedNutrition">
+          <summary>Consumer preparation nutrition</summary>
+          <p class="field-hint">
+            {{ draftEvidence.preparedNutrition.basis === 'reconstituted'
+              ? 'Reconstituted food'
+              : draftEvidence.preparedNutrition.basis === 'withFood'
+                ? 'Product prepared or consumed with another food'
+                : 'Preparation basis not chosen' }} · REVIEW REQUIRED.
+            The draft panel uses these values only when the recorded directions and food state support it.
+          </p>
+          <p>Directions: {{ draftEvidence.preparedNutrition.directions || 'Not supplied' }}</p>
+          <p>
+            Product: {{ draftEvidence.preparedNutrition.productMass ?? 'Unknown' }} g ·
+            {{ draftEvidence.preparedNutrition.addedFood }}:
+            {{ draftEvidence.preparedNutrition.addedMass ?? 'Unknown' }} g
+          </p>
+          <p>
+            Prepared serving:
+            {{ draftEvidence.preparedNutrition.preparedServing
+              ? `${draftEvidence.preparedNutrition.preparedServing.value} ${draftEvidence.preparedNutrition.preparedServing.unit}`
+              : 'Not supplied' }}
+          </p>
+          <ul class="evidence-list">
+            <li
+              v-for="row in draftEvidence.preparedNutrition.rows"
+              :key="row.label"
+            >
+              {{ row.label }}: {{ row.per100g }} per 100 g prepared · {{ row.serving }} per prepared serving
+            </li>
+          </ul>
+          <ul
+            v-if="draftEvidence.preparedNutrition.sources.length"
+            class="evidence-list"
+          >
+            <li
+              v-for="source in draftEvidence.preparedNutrition.sources"
+              :key="source.nutrient"
+            >
+              Added {{ source.nutrient }}: {{ source.value }} {{ source.unit }} ·
+              {{ source.sourceId || 'No source supplied' }} · {{ source.sourceDate || 'No date supplied' }}
+              <template v-if="source.method">
+                · {{ source.method }}
+              </template>
+            </li>
+          </ul>
+          <ul
+            v-if="draftEvidence.preparedNutrition.densities.length"
+            class="evidence-list"
+          >
+            <li
+              v-for="density in draftEvidence.preparedNutrition.densities"
+              :key="density.subject"
+            >
+              {{ density.subject }} density: {{ density.value }} g/mL ·
+              {{ density.sourceId }} · {{ density.sourceDate }}
+            </li>
+          </ul>
+          <ul
+            v-if="draftEvidence.preparedNutrition.missing.length"
+            class="evidence-list"
+          >
+            <li
+              v-for="item in draftEvidence.preparedNutrition.missing"
+              :key="item"
+            >
+              REVIEW REQUIRED — {{ item }}
+            </li>
+          </ul>
+        </details>
+        <details v-if="draftEvidence">
+          <summary>Nutrition calculation inputs and paths</summary>
+          <p class="field-hint">
+            Draft panel basis: {{ draftEvidence.nutritionPanel.basis }} · REVIEW REQUIRED.
+            {{ draftEvidence.nutritionPanel.note }}
+          </p>
+          <p
+            v-if="draftEvidence.nutrition.finishedNutritionSelected"
+            class="field-hint"
+          >
+            Finished-food values are selected for this recipe, rather than ingredient estimates.
+            They describe the recorded finished recipe and need review before use on a label.
+          </p>
+          <p
+            v-else-if="draftEvidence.nutrition.retentionSelected"
+            class="field-hint"
+          >
+            Finished nutrient estimates use the ingoing values, the recorded batch weights and the
+            selected nutrient-specific retention evidence. The evidence and applicability need review.
+          </p>
+          <p
+            v-else
+            class="field-hint"
+          >
+            These are the selected whole-ingredient or component inputs, not both.
+            Values are on a 100 g ingredient basis; calculations and food state still need review.
+          </p>
+          <ul
+            v-if="draftEvidence.nutrition.finishedSources.length"
+            class="evidence-list"
+          >
+            <li
+              v-for="(source, index) in draftEvidence.nutrition.finishedSources"
+              :key="index"
+            >
+              Finished {{ source.nutrient }}: {{ source.value }} {{ source.unit }} ·
+              {{ source.sourceId || 'User-provided value' }}{{ source.sourceDate ? ` · ${source.sourceDate}` : '' }}
+              · {{ source.evidenceType }} · recipe {{ selectedFormulation?.name }}
+              <template v-if="source.method">
+                · {{ source.method }}
+              </template>
+            </li>
+          </ul>
+          <ul
+            v-if="draftEvidence.nutrition.retentionSources.length"
+            class="evidence-list"
+          >
+            <li
+              v-for="source in draftEvidence.nutrition.retentionSources"
+              :key="source.nutrient"
+            >
+              {{ source.nutrient }} retained: {{ source.percentage }}% ·
+              {{ source.startingMass }} g starting batch · {{ source.finishedMass }} g finished batch ·
+              {{ source.sourceId }} · {{ source.sourceDate }} · estimated finished nutrition
+            </li>
+          </ul>
+          <ul
+            v-if="draftEvidence.nutrition.sources.length"
+            class="evidence-list"
+          >
+            <li
+              v-for="(source, index) in draftEvidence.nutrition.sources"
+              :key="index"
+            >
+              {{ source.nutrient }}: {{ source.value }} {{ source.unit }} ·
+              {{ source.ingoingMass }} g / 100 g ingoing ·
+              {{ source.sourceId || 'User-provided value' }}{{ source.sourceDate ? ` · ${source.sourceDate}` : '' }}
+              · path {{ displayPath(source.sourcePath) }}
+              <template v-if="source.method">
+                · {{ source.method }}
+              </template>
+            </li>
+          </ul>
+          <p v-else-if="!draftEvidence.nutrition.finishedSources.length">
+            No calculation inputs available. Check the recipe, composition and nutrition review items.
+          </p>
+          <div v-if="draftEvidence.nutrition.optionalNutrients.length">
+            <p class="field-hint">
+              Additional nutrients below are ingoing estimates only, not label rows or finished-food results.
+              Missing values are not assumed to be zero.
+            </p>
+            <ul class="evidence-list">
+              <li
+                v-for="item in draftEvidence.nutrition.optionalNutrients"
+                :key="item.id"
+              >
+                {{ optionalNutrientLabels[item.id] }}:
+                <template v-if="item.result.status === 'calculated'">
+                  {{ item.result.nutrients[0]?.value }}
+                  {{ item.result.nutrients[0]?.unit.replace('ug/', 'micrograms/').replace('/100g', '/100 g') }}
+                  ingoing estimate · REVIEW REQUIRED
+                </template>
+                <template v-else>
+                  REVIEW REQUIRED —
+                  {{ item.result.reason === 'INCOMPATIBLE_NUTRIENT_EXPRESSION'
+                    ? 'nutrient expression needs review at'
+                    : item.result.reason === 'INSUFFICIENT_NUTRIENT_PRECISION'
+                      ? 'calculation precision needs review at'
+                      : 'missing evidence at' }}
+                  {{ item.result.missing.map((entry) => displayPath(entry.sourcePath)).join('; ') }}
+                </template>
+              </li>
+            </ul>
+          </div>
+          <div v-if="draftEvidence.nutrition.finishedOptionalNutrients.length">
+            <p class="field-hint">
+              Additional values describe the finished recipe; they are not automatically label rows.
+            </p>
+            <ul class="evidence-list">
+              <li
+                v-for="item in draftEvidence.nutrition.finishedOptionalNutrients"
+                :key="item.id"
+              >
+                {{ optionalNutrientLabels[item.id] }}:
+                <template v-if="item.result.status === 'available'">
+                  {{ item.result.value }} {{ item.result.unit.replace('ug/', 'micrograms/').replace('/100g', '/100 g') }}
+                  finished food · REVIEW REQUIRED
+                </template>
+                <template v-else>
+                  REVIEW REQUIRED —
+                  {{ item.result.reason === 'INCOMPATIBLE_NUTRIENT_EXPRESSION'
+                    ? 'nutrient form needs review'
+                    : item.result.reason === 'MISSING_RETENTION_EVIDENCE'
+                      ? 'a retention figure is needed'
+                      : item.result.reason === 'INSUFFICIENT_NUTRIENT_PRECISION'
+                        ? 'calculation precision needs review'
+                        : 'source or value needs review' }}
+                </template>
+              </li>
+            </ul>
+          </div>
+          <ul
+            v-if="draftEvidence.nutrition.missing.length"
+            class="evidence-list"
+          >
+            <li
+              v-for="message in draftEvidence.nutrition.missing"
+              :key="message"
+            >
+              REVIEW REQUIRED — {{ message }}
+            </li>
+          </ul>
+        </details>
+        <details v-if="draftEvidence">
+          <summary>Allergen evidence and paths</summary>
+          <p v-if="draftEvidence.pendingAllergens.length">
+            Also needing final-food review: {{ draftEvidence.pendingAllergens.join(', ') }}.
+          </p>
+          <p class="field-hint">
+            Known evidence is retained even when amounts or composition are incomplete.
+            An absent assessment on a compound does not override a component recorded as present.
+          </p>
+          <ul
+            v-if="draftEvidence.allergenTrace.length"
+            class="evidence-list"
+          >
+            <li
+              v-for="item in draftEvidence.allergenTrace"
+              :key="item.id"
+            >
+              Candidate {{ item.summaryName }} · ingredient-list name {{ item.ingredientListName }} ·
+              paths {{ item.sourcePaths.map(displayPath).join('; ') }} · REVIEW REQUIRED
+            </li>
+          </ul>
+          <ul
+            v-if="draftEvidence.allergenEvidence.length"
+            class="evidence-list"
+          >
+            <li
+              v-for="source in draftEvidence.allergenEvidence"
+              :key="source.id"
+            >
+              {{ allergenAssessments(source.assessments) || 'No assessments recorded' }} ·
+              {{ source.sourceId || 'User-provided information' }}{{ source.sourceDate ? ` · ${source.sourceDate}` : '' }}
+              · path {{ displayPath(source.sourcePath) }}
+            </li>
+          </ul>
+          <p v-else>
+            No allergen evidence available — REVIEW REQUIRED.
+          </p>
+          <ul class="evidence-list">
+            <li
+              v-for="message in draftEvidence.missing.filter((item) => item.includes('allergen') || item.includes('included ingredient records it present'))"
+              :key="message"
+            >
+              REVIEW REQUIRED — {{ message }}
+            </li>
+          </ul>
+        </details>
       </section>
 
       <section
@@ -286,9 +654,9 @@ const trace = computed(() => {
             <p class="eyebrow">
               STORED REVIEW HISTORY
             </p>
-            <h2 id="saved-results-title">
+            <h3 id="saved-results-title">
               Evaluation results and rule traces
-            </h2>
+            </h3>
           </div>
           <span class="count-badge">{{ selectedVersions.length }}</span>
         </div>
@@ -360,17 +728,13 @@ const trace = computed(() => {
           </section>
         </article>
       </section>
-    </template>
-  </section>
+    </details>
+  </div>
 </template>
 
 <style scoped>
 .review-disclaimer {
   margin-bottom: 20px;
-}
-.review-product-select {
-  max-width: 440px;
-  margin-bottom: 18px;
 }
 .trace-panel,
 .saved-results-panel {

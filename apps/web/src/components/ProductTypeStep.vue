@@ -18,22 +18,30 @@ import {
 } from '../label-builder';
 
 const props = defineProps<{ store: LocalFoodStore; product: ProductRecord }>();
-const emit = defineEmits<{ saved: [] }>();
+const emit = defineEmits<{ saved: []; dirty: [value: boolean] }>();
 
 const productType = ref<ProductType>('');
 const sourceKind = ref<EvidenceKind | ''>('');
 const otherSource = ref('');
+const sourceDate = ref('');
 const errorMessage = ref('');
 const message = ref('');
 
 // Working copy, so quick successive answers build on each other instead of on the last saved record.
 const profile = shallowRef(createEmptyProductClassificationProfile());
-let pendingSaves = 0;
+const pendingSaves = ref(0);
+const typeSaveFailed = ref(false);
+const answerSaveFailed = ref(false);
+const sourceSnapshot = computed(() => JSON.stringify([sourceKind.value, otherSource.value, sourceDate.value]));
+const usedSourceSnapshot = ref(sourceSnapshot.value);
+const dirty = computed(() => pendingSaves.value > 0 || typeSaveFailed.value || answerSaveFailed.value
+  || sourceSnapshot.value !== usedSourceSnapshot.value);
+watch(dirty, (value) => emit('dirty', value), { immediate: true });
 let saveChain: Promise<void> = Promise.resolve();
 watch(
   () => props.product,
   (current) => {
-    if (pendingSaves === 0) {
+    if (pendingSaves.value === 0) {
       const saved = current.classificationProfile;
       profile.value = saved === undefined ? createEmptyProductClassificationProfile() : toRaw(saved);
     }
@@ -48,7 +56,6 @@ const screening = computed(() => screenProductClassCandidates(profile.value));
 const typeHint = computed(
   () => productTypeOptions.find((option) => option.value === productType.value)?.hint ?? '',
 );
-const sourceChosen = computed(() => sourceKind.value !== '');
 
 function onTypeChange(event: Event): void {
   const target = event.currentTarget;
@@ -57,18 +64,19 @@ function onTypeChange(event: Event): void {
   if (type !== 'caffeinatedBeverage' && type !== 'infantFood' && type !== 'other') return;
   const previous = productType.value;
   productType.value = type;
-  pendingSaves += 1;
+  pendingSaves.value += 1;
   errorMessage.value = '';
   saveChain = saveChain
     .then(() => props.store.products.update(props.product.id, { builderProductType: type }))
-    .then(() => { message.value = 'Saved on this device.'; })
+    .then(() => { typeSaveFailed.value = false; message.value = 'Saved on this device.'; })
     .catch((error: unknown) => {
+      typeSaveFailed.value = true;
       if (productType.value === type) productType.value = previous;
       errorMessage.value = error instanceof Error ? error.message : 'The product type could not be saved.';
     })
     .finally(() => {
-      pendingSaves -= 1;
-      if (pendingSaves === 0) emit('saved');
+      pendingSaves.value -= 1;
+      if (pendingSaves.value === 0) emit('saved');
     });
 }
 
@@ -83,10 +91,6 @@ function answerOf(question: BuilderQuestion): string {
   return factOf(profile.value, question).answer;
 }
 
-function hasEvidence(question: BuilderQuestion): boolean {
-  return factOf(profile.value, question).evidence.length > 0;
-}
-
 function onAnswer(question: BuilderQuestion, event: Event): void {
   const target = event.currentTarget;
   if (!(target instanceof HTMLSelectElement)) {
@@ -98,22 +102,26 @@ function onAnswer(question: BuilderQuestion, event: Event): void {
     const evidence =
       sourceKind.value === ''
         ? undefined
-        : makeBuilderEvidence(sourceKind.value, otherSource.value, new Date().toISOString().slice(0, 10));
+        : makeBuilderEvidence(sourceKind.value, otherSource.value, sourceDate.value);
     const next = applyAnswer(profile.value, question, target.value as SimpleAnswer, evidence);
     profile.value = next;
-    pendingSaves += 1;
+    const usedSource = sourceSnapshot.value;
+    pendingSaves.value += 1;
     const productId = props.product.id;
     saveChain = saveChain
       .then(() => props.store.products.update(productId, { classificationProfile: next }))
       .then(() => {
+        answerSaveFailed.value = false;
+        usedSourceSnapshot.value = usedSource;
         message.value = 'Saved on this device.';
       })
       .catch((error: unknown) => {
+        answerSaveFailed.value = true;
         errorMessage.value = error instanceof Error ? error.message : 'The answer could not be saved.';
       })
       .finally(() => {
-        pendingSaves -= 1;
-        if (pendingSaves === 0) {
+        pendingSaves.value -= 1;
+        if (pendingSaves.value === 0) {
           emit('saved');
         }
       });
@@ -136,6 +144,10 @@ function outcomeText(outcome: 'candidate_indicated' | 'not_indicated' | 'inconcl
 
 <template>
   <div class="type-step">
+    <p class="field-hint">
+      Choose the closest option to show the relevant questions. Your choice is a starting point,
+      not confirmation of a legal category. You can change it without deleting earlier answers.
+    </p>
     <label class="field">
       <span>What kind of product is this?</span>
       <select
@@ -165,40 +177,52 @@ function outcomeText(outcome: 'candidate_indicated' | 'not_indicated' | 'inconcl
     </p>
 
     <template v-if="questions.length > 0">
-      <label class="field">
-        <span>Where is your information coming from?</span>
-        <select
-          :value="sourceKind"
-          @change="onSourceChange"
-        >
-          <option value="">
-            Choose a source
-          </option>
-          <option
-            v-for="option in evidenceSourceOptions"
-            :key="option.value"
-            :value="option.value"
+      <details>
+        <summary>Source details (optional)</summary>
+        <label class="field">
+          <span>Where is your information coming from?</span>
+          <select
+            :value="sourceKind"
+            @change="onSourceChange"
           >
-            {{ option.label }}
-          </option>
-        </select>
-      </label>
-      <label
-        v-if="sourceKind === 'other'"
-        class="field"
-      >
-        <span>Describe the source</span>
-        <input
-          v-model="otherSource"
-          type="text"
-          autocomplete="off"
-          placeholder="For example: email from supplier, 3 Nov"
+            <option value="">
+              Choose a source
+            </option>
+            <option
+              v-for="option in evidenceSourceOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <label
+          v-if="sourceKind === 'other'"
+          class="field"
         >
-      </label>
-      <p class="field-hint">
-        A consultant will want to know where each answer came from. We record this source and today's date
-        against each Yes or No answer.
-      </p>
+          <span>Describe the source</span>
+          <input
+            v-model="otherSource"
+            type="text"
+            autocomplete="off"
+            placeholder="For example: email from supplier, 3 Nov"
+          >
+        </label>
+        <label
+          v-if="sourceKind"
+          class="field"
+        >
+          <span>Source date (optional)</span>
+          <input
+            v-model="sourceDate"
+            type="date"
+          >
+        </label>
+        <p class="field-hint">
+          Optional source details are recorded with each answer.
+        </p>
+      </details>
 
       <fieldset
         v-for="question in questions"
@@ -219,16 +243,10 @@ function outcomeText(outcome: 'candidate_indicated' | 'not_indicated' | 'inconcl
             <option value="unknown">
               Not sure yet
             </option>
-            <option
-              value="yes"
-              :disabled="!sourceChosen && !hasEvidence(question)"
-            >
+            <option value="yes">
               Yes
             </option>
-            <option
-              value="no"
-              :disabled="!sourceChosen && !hasEvidence(question)"
-            >
+            <option value="no">
               No
             </option>
             <option
@@ -240,15 +258,14 @@ function outcomeText(outcome: 'candidate_indicated' | 'not_indicated' | 'inconcl
             </option>
           </select>
         </label>
+        <p
+          v-if="factOf(profile, question).previousEvidence?.length"
+          class="field-hint"
+        >
+          Earlier source details (not attached to this answer):
+          {{ factOf(profile, question).previousEvidence?.map((item) => [item.reference, item.sourceDate].filter(Boolean).join(' - ')).join('; ') }}
+        </p>
       </fieldset>
-
-      <p
-        v-if="!sourceChosen"
-        class="field-hint"
-      >
-        Choose a source above to unlock the Yes and No answers. "Not sure yet" is always available and is
-        shown as still needed.
-      </p>
 
       <div
         class="notice"
@@ -276,8 +293,8 @@ function outcomeText(outcome: 'candidate_indicated' | 'not_indicated' | 'inconcl
       v-if="productType === 'other'"
       class="field-hint"
     >
-      No product questions are needed for this version. We will draft a basic label and add a note for your
-      consultant.
+      No specialised questions are available for this choice yet. This does not mean your product
+      has no specific requirements; review them before relying on the label.
     </p>
     <p
       v-if="message"

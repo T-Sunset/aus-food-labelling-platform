@@ -14,6 +14,7 @@ import {
   sumDecimals,
 } from './decimal.js';
 import { convertMass } from './mass.js';
+import { additiveSourceForUse } from './additive-sources.js';
 
 // Milligrams of additive per kilogram (mass units) or per litre (volume units) of the
 // ingredient for one stated unit. Percent by volume is g per 100 mL.
@@ -49,12 +50,6 @@ function usableDensity(density: AdditiveDensityEvidence | undefined): density is
   );
 }
 
-function completeEvidence(reference: string | undefined, sourceDate: string | undefined): boolean {
-  if (!reference?.trim() || !sourceDate || !/^\d{4}-\d{2}-\d{2}$/.test(sourceDate)) return false;
-  const date = new Date(`${sourceDate}T00:00:00Z`);
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === sourceDate;
-}
-
 const normaliseCode = (code: string | undefined): string => (code ?? '').trim().toLowerCase();
 
 export function calculateAdditiveFinalConcentration(
@@ -62,7 +57,6 @@ export function calculateAdditiveFinalConcentration(
 ): AdditiveFinalConcentration {
   const reasons = new Set<AdditiveConcentrationReviewReason>();
   const detail: string[] = [];
-  const provenanceWarnings = new Set<string>();
   const flag = (reason: AdditiveConcentrationReviewReason, message: string): void => {
     reasons.add(reason);
     detail.push(message);
@@ -76,20 +70,30 @@ export function calculateAdditiveFinalConcentration(
     flag('FOOD_STATE_MISSING', 'The food state the concentration applies to is missing.');
   }
   if (input.processBalance.status === 'review_required') {
-    flag('PROCESS_MASS_PROFILE_MISSING', 'No documented process mass profile (yield) was supplied.');
+    if (input.processBalance.reason === 'PROCESSING_EFFECTS_UNSUPPORTED') {
+      flag('PROCESSING_EFFECTS_UNSUPPORTED', 'The effect of the recorded processing change on additives needs review.');
+    } else if (input.processBalance.reason === 'PROCESS_MASS_PROFILE_INCOMPLETE') {
+      flag('PROCESS_MASS_PROFILE_INCOMPLETE', 'The recorded process changes are incomplete or not confirmed complete.');
+    } else {
+      flag('PROCESS_MASS_PROFILE_MISSING', 'No documented process mass profile (yield) was supplied.');
+    }
   }
   if (input.outputUnit === 'mg/L' && !usableDensity(input.finalDensity)) {
     flag('FINAL_DENSITY_MISSING', 'A mg/L result needs the density of the final food.');
-  } else if (input.outputUnit === 'mg/L' && input.finalDensity
-    && !completeEvidence(input.finalDensity.evidenceReference, input.finalDensity.sourceDate)) {
-    provenanceWarnings.add('The final-food density has no complete dated source; review the entered value.');
   }
 
   const contributions: AdditiveConcentrationContribution[] = [];
   let matched = 0;
 
   for (const ingredient of input.ingredients) {
-    for (const source of input.sourcesByIngredient.get(ingredient.ingredientId) ?? []) {
+    const directId = input.directSourceIdByIngredient?.get(ingredient.ingredientId);
+    if (ingredient.additiveUse && (!directId
+      || !(input.sourcesByIngredient.get(ingredient.ingredientId) ?? []).some((source) => source.id === directId))) {
+      flag('SOURCE_IDENTITY_MISSING', `The direct additive identity is missing for ingredient ${ingredient.ingredientId}.`);
+      continue;
+    }
+    for (const savedSource of input.sourcesByIngredient.get(ingredient.ingredientId) ?? []) {
+      const source = additiveSourceForUse(ingredient, savedSource, input.directSourceIdByIngredient);
       const label = `${source.id} (${ingredient.sourcePath.join(' > ')})`;
       if (normaliseCode(source.codeNumber) === '') {
         // A source the person identified as added caffeine is a known, different substance.
@@ -115,9 +119,6 @@ export function calculateAdditiveFinalConcentration(
         flag('CONCENTRATION_MISSING', `Additive source ${label} has no valid concentration.`);
         continue;
       }
-      if (!completeEvidence(evidence?.reference, evidence?.sourceDate)) {
-        provenanceWarnings.add(`Additive source ${label} has no complete dated source; review the entered concentration.`);
-      }
       if (concentration.basis !== 'asSupplied' && concentration.basis !== 'asAdded') {
         flag('BASIS_NOT_SUPPORTED', `Additive source ${label} uses basis "${concentration.basis}", which is not converted.`);
         continue;
@@ -138,9 +139,6 @@ export function calculateAdditiveFinalConcentration(
         if (!usableDensity(density)) {
           flag('INGREDIENT_DENSITY_MISSING', `Additive source ${label} is per volume and needs ingredient density.`);
           continue;
-        }
-        if (!completeEvidence(density.evidenceReference, density.sourceDate)) {
-          provenanceWarnings.add(`The density for ingredient ${ingredient.ingredientId} has no complete dated source; review the entered value.`);
         }
         // g/mL equals kg/L, so mass in kg divided by density gives litres.
         const litres = divideDecimals(ingredientKg, density.gramsPerMillilitre);
@@ -163,6 +161,10 @@ export function calculateAdditiveFinalConcentration(
   if (target !== '' && matched === 0) {
     flag('NO_MATCHING_SOURCE', 'No source for this additive was found; absence is not treated as zero.');
   }
+  const bases = new Set(contributions.map(({ calculatedAs }) => (calculatedAs ?? '').trim().toLowerCase()));
+  if (bases.size > 1) {
+    flag('CALCULATION_BASIS_CONFLICT', 'Additive sources use different or unspecified calculation bases and cannot be summed safely.');
+  }
 
   if (
     reasons.size > 0 ||
@@ -181,7 +183,6 @@ export function calculateAdditiveFinalConcentration(
       ? multiplyDecimals(perKilogram, finalDensity.gramsPerMillilitre)
       : perKilogram;
 
-  const bases = new Set(contributions.map(({ calculatedAs }) => (calculatedAs ?? '').toLowerCase()));
   const sharedBasis = bases.size === 1 ? contributions[0]?.calculatedAs : undefined;
 
   return {
@@ -196,6 +197,6 @@ export function calculateAdditiveFinalConcentration(
     ...(input.outputUnit === 'mg/L' && finalDensity !== undefined ? { finalDensity } : {}),
     ...(sharedBasis === undefined ? {} : { calculatedAs: sharedBasis }),
     contributions,
-    provenanceWarnings: [...provenanceWarnings],
+    provenanceWarnings: [],
   };
 }

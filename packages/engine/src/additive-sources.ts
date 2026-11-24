@@ -5,15 +5,36 @@ import type {
   IngredientAdditiveSource,
 } from '@aus-food/domain';
 
+type AdditiveIngredientReference = Pick<ExpandedIngredient, 'ingredientId' | 'sourcePath' | 'additiveUse'>;
+
+export function additiveSourceForUse(
+  ingredient: AdditiveIngredientReference,
+  source: IngredientAdditiveSource,
+  directSourceIdByIngredient?: ReadonlyMap<string, string>,
+): IngredientAdditiveSource {
+  if (ingredient.additiveUse && directSourceIdByIngredient?.get(ingredient.ingredientId) === source.id) {
+    return { ...source, sourceStatus: ingredient.additiveUse };
+  }
+  return source;
+}
+
 export function traceAdditiveSources(
-  expandedIngredients: readonly ExpandedIngredient[],
+  expandedIngredients: readonly AdditiveIngredientReference[],
   sourcesByIngredient: ReadonlyMap<string, readonly IngredientAdditiveSource[]>,
+  directSourceIdByIngredient?: ReadonlyMap<string, string>,
 ): readonly ExpandedAdditiveSource[] {
+  for (const ingredient of expandedIngredients) {
+    const directId = directSourceIdByIngredient?.get(ingredient.ingredientId);
+    if (ingredient.additiveUse && (!directId
+      || !(sourcesByIngredient.get(ingredient.ingredientId) ?? []).some((source) => source.id === directId))) {
+      throw new Error(`The direct additive source is missing for ingredient "${ingredient.ingredientId}".`);
+    }
+  }
   return expandedIngredients.flatMap((ingredient) =>
     (sourcesByIngredient.get(ingredient.ingredientId) ?? []).map((source) => ({
       ingredientId: ingredient.ingredientId,
       sourcePath: [...ingredient.sourcePath],
-      source,
+      source: additiveSourceForUse(ingredient, source, directSourceIdByIngredient),
     })),
   );
 }

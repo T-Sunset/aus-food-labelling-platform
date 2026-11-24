@@ -22,8 +22,7 @@ is a snapshot: subsequent changes in the two workspaces do not sync.
 
 The previous workspace must already have the supported schema. If it does
 not, the app reports the problem and directs the user to export a backup
-with the previous app and restore it here. Continue supporting version-1
-backup imports and version-2 backup exports. Users should maintain separate
+with the previous app and restore it here. Users should maintain separate
 backups; workspace isolation does not protect against browser data removal.
 
 The product owner approved this approach on 2026-11-11. It does not make
@@ -74,6 +73,24 @@ missing reference or date information, not evidence. Current plaintext and
 encrypted backups preserve these values; older v2 readers have not been tested
 and may reject them or interpret them differently. Do not edit or restore these
 records with an older application.
+
+## N12c label drafts and compatibility
+
+Schema 4 adds a separate label-draft table and records a pre-migration
+recovery point for non-empty workspaces, including approved versions and
+review decisions. Current exports use backup format 3, including drafts and
+their Product links. Version-1 and version-2 backups remain importable; their
+missing label collection is explicitly treated as empty after integrity
+verification. Inspection warns that replacing a workspace from an older
+backup removes its current label drafts, and replacement requires confirmation.
+Copying a previous workspace includes labels if present and does not modify
+the source.
+
+Older applications have not been tested with the schema-4 live workspace;
+do not use them to edit it or assume they can preserve labels. Format 3 is
+versioned so earlier backup readers should reject it rather than silently
+drop labels, but their actual behaviour has not been verified. Retain a
+current-format backup. Label drafts are not version-pinned approved results.
 
 The additive calculation also accepts a final-food density without a complete
 source reference and date. Current storage retains the supplied fields; older

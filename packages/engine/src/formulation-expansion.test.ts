@@ -3,6 +3,54 @@ import type { Formulation } from '@aus-food/domain';
 import { expandFormulation, FormulationExpansionError } from './formulation-expansion.js';
 
 describe('formulation expansion', () => {
+  it('requires review rather than rounding a non-zero ingredient allocation to zero', () => {
+    const formulations: Formulation[] = [{
+      id: 'root', lines: [
+        { id: 'tiny', kind: 'ingredient', ingredientId: 'A', quantity: { value: '0.00000000000000000000000000000000000000000000000001', unit: 'g' } },
+        { id: 'other', kind: 'ingredient', ingredientId: 'B', quantity: { value: '100', unit: 'g' } },
+      ],
+    }];
+    expect(() => expandFormulation('root', { value: '100', unit: 'g' }, formulations))
+      .toThrow(expect.objectContaining({ code: 'INSUFFICIENT_MASS_PRECISION', referencePath: ['root', 'tiny'] }));
+  });
+  it('rejects unknown recipe amounts on direct and nested paths and still detects cycles', () => {
+    const incomplete: Formulation = {
+      id: 'inner', lines: [{ id: 'known', kind: 'ingredient', ingredientId: 'flour', quantity: { value: '1', unit: 'g' } }],
+      incompleteRecipeLines: {
+        unquantifiedLines: [{ id: 'unknown', kind: 'ingredient', ingredientId: 'milk' }],
+        lineOrder: ['unknown', 'known'],
+      },
+    };
+    const outer: Formulation = {
+      id: 'outer', lines: [{ id: 'nested', kind: 'formulation', formulationId: 'inner', quantity: { value: '1', unit: 'g' } }],
+    };
+    for (const id of ['inner', 'outer']) {
+      expect(() => expandFormulation(id, { value: '100', unit: 'g' }, [outer, incomplete])).toThrow(/unknown amounts/);
+    }
+    const cycle: Formulation = {
+      ...incomplete, incompleteRecipeLines: {
+        unquantifiedLines: [{ id: 'unknown', kind: 'formulation', formulationId: 'outer' }],
+        lineOrder: ['unknown', 'known'],
+      },
+    };
+    expect(() => expandFormulation('outer', { value: '100', unit: 'g' }, [outer, cycle]))
+      .toThrow(/Circular formulation reference/);
+  });
+  it('carries a distinct additive use along each nested source path', () => {
+    const recipes: Formulation[] = [
+      { id: 'outer', lines: [
+        { id: 'direct', kind: 'ingredient', ingredientId: 'additive', quantity: { value: '1', unit: 'g' }, additiveUse: 'added' },
+        { id: 'nested', kind: 'formulation', formulationId: 'inner', quantity: { value: '1', unit: 'g' } },
+      ] },
+      { id: 'inner', lines: [
+        { id: 'aid', kind: 'ingredient', ingredientId: 'additive', quantity: { value: '1', unit: 'g' }, additiveUse: 'processingAid' },
+      ] },
+    ];
+    expect(expandFormulation('outer', { value: '2', unit: 'g' }, recipes)).toMatchObject([
+      { sourcePath: ['outer', 'direct', 'additive'], additiveUse: 'added' },
+      { sourcePath: ['outer', 'nested', 'inner', 'aid', 'additive'], additiveUse: 'processingAid' },
+    ]);
+  });
   it('rejects partial supplier compositions at the root and on nested paths', () => {
     const partial: Formulation = {
       id: 'partial',

@@ -2,6 +2,7 @@ import {
   additivePermissionCatalog,
   allergenVocabulary,
   claimRuleCatalog,
+  dailyIntakeReferenceSet as rawDailyIntakeReferenceSet,
   prescribedNameCandidateCatalog,
   sources,
 } from '@aus-food/rules/release-0.1.0-draft.json';
@@ -12,24 +13,35 @@ import type {
   PrescribedNameRuleView,
   RuleTraceMetadata,
 } from '@aus-food/domain';
+import type { DailyIntakeReferenceSet } from '@aus-food/rules';
 
 // Draft rule data shipped with the app. It is not reviewed and is never presented as an approved release.
 export const RULE_RELEASE_LABEL = 'Draft rule data 0.1.0-draft (not reviewed)';
 
+function allergenEvaluation(value: string): NonNullable<AllergenVocabularyEntry['evaluation']> {
+  if (value === 'presence' || value === 'condition-dependent' || value === 'final-food-concentration') {
+    return value;
+  }
+  throw new TypeError(`Unsupported allergen evaluation "${value}"`);
+}
+
 export const draftAllergenVocabulary: readonly AllergenVocabularyEntry[] =
-  allergenVocabulary.entries.map((entry) => ({
-    id: entry.id,
-    ingredientListName: entry.ingredientListName,
-    summaryName: entry.summaryName,
-    ...('evaluation' in entry && entry.evaluation === 'final-food-concentration'
-      ? { requiresFinalFoodEvaluation: true }
-      : {}),
-  }));
+  allergenVocabulary.entries.map((entry) => {
+    const evaluation = allergenEvaluation(entry.evaluation);
+    return {
+      id: entry.id,
+      ingredientListName: entry.ingredientListName,
+      summaryName: entry.summaryName,
+      evaluation,
+      ...('conditionNote' in entry && entry.conditionNote ? { conditionNote: entry.conditionNote } : {}),
+      ...(evaluation === 'final-food-concentration' ? { requiresFinalFoodEvaluation: true } : {}),
+    };
+  });
 
 export const allergenChoices: readonly { id: string; label: string }[] = draftAllergenVocabulary.map((entry) => ({
   id: entry.id,
   label: entry.ingredientListName.charAt(0).toUpperCase() + entry.ingredientListName.slice(1)
-    + (entry.summaryName === entry.ingredientListName ? '' : ` (${entry.summaryName})`),
+    + (entry.evaluation === 'condition-dependent' ? ' (only when it contains gluten)' : ''),
 }));
 
 export const permissionCatalog = additivePermissionCatalog as unknown as AdditivePermissionCatalogView;
@@ -46,13 +58,16 @@ export interface ClaimRuleEntry extends ClaimRuleView {
 
 export const claimRules = claimRuleCatalog.rules as unknown as readonly ClaimRuleEntry[];
 export const claimCatalogReviewed = claimRuleCatalog.status === 'reviewed';
+export const dailyIntakeReferenceSet = rawDailyIntakeReferenceSet as DailyIntakeReferenceSet;
 
 interface SourceEntry {
   readonly id: string;
   readonly instrument: string;
   readonly sourceUrl: string;
   readonly jurisdiction: string;
+  readonly referenceVersion: string;
   readonly effectiveFrom: string;
+  readonly checkedOn: string;
 }
 
 function source(id: string): SourceEntry {
@@ -62,6 +77,11 @@ function source(id: string): SourceEntry {
   }
   return found;
 }
+
+export const dailyIntakeSources = [...new Set([
+  ...dailyIntakeReferenceSet.sourceIds,
+  ...dailyIntakeReferenceSet.scopeExclusionSourceIds,
+])].map(source);
 
 function trace(
   id: string,

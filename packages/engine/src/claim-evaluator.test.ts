@@ -122,7 +122,6 @@ describe('nutrition content claim evaluation', () => {
       { nutrientAmount: { value: '1', unit: 'mg' } },
       { foodForm: undefined },
       { formOfFoodConfirmed: undefined },
-      { evidence: undefined },
       { exclusionsConfirmedNotApplicable: undefined },
       { ruleApproved: false },
       { rule: { ...rule, mappingConfidence: 'Standard' } },
@@ -163,8 +162,13 @@ describe('nutrition content claim evaluation', () => {
   it('is only CANDIDATE when the sole gap is the draft rule', () => {
     const result = evaluateNutritionContentClaim(sugarsInput({ ruleApproved: false }));
     expect(result.applicationMode).toBe('CANDIDATE');
-    const missing = evaluateNutritionContentClaim(sugarsInput({ ruleApproved: false, evidence: undefined }));
+    const missing = evaluateNutritionContentClaim(sugarsInput({ ruleApproved: false, nutrientAmount: undefined }));
     expect(missing.applicationMode).toBe('UNDETERMINABLE');
+  });
+
+  it('uses a recorded claim figure without a source without bypassing rule approval', () => {
+    expect(evaluateNutritionContentClaim(sugarsInput({ evidence: undefined })).status).toBe('PASS');
+    expect(evaluateNutritionContentClaim(sugarsInput({ evidence: undefined, ruleApproved: false })).status).toBe('REVIEW REQUIRED');
   });
 
   it('never returns PASS or FAIL from an unapproved or below-Provision rule, whatever the figures', () => {

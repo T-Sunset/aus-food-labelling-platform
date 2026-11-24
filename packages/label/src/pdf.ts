@@ -121,6 +121,7 @@ function assertAllowedSvg(svg: SVGSVGElement): void {
     svg: new Set(['xmlns', 'width', 'height', 'viewBox']),
     g: new Set(['fill', 'font-family', 'data-block-id', 'data-block-kind']),
     text: new Set(['x', 'y', 'font-size', 'font-weight']),
+    tspan: new Set(['font-weight']),
   };
   const elements = [svg, ...Array.from(svg.querySelectorAll('*'))];
 
@@ -137,7 +138,12 @@ function assertAllowedSvg(svg: SVGSVGElement): void {
           ? element.parentElement?.localName === 'svg'
             ? ['fill', 'font-family']
             : ['data-block-id', 'data-block-kind']
-          : ['x', 'y', 'font-size'];
+          : tagName === 'text'
+            ? ['x', 'y', 'font-size']
+            : ['font-weight'];
+    if (tagName === 'tspan' && element.parentElement?.localName !== 'text') {
+      throw new RangeError('SVG emphasis must be directly inside a text element');
+    }
     if (requiredAttributes.some((name) => !element.hasAttribute(name))) {
       throw new RangeError(`SVG "${tagName}" is missing a required attribute`);
     }
@@ -173,7 +179,9 @@ function assertAllowedSvg(svg: SVGSVGElement): void {
     Array.from(svg.children[0].children).some(
       (block) =>
         block.localName !== 'g' ||
-        Array.from(block.children).some((line) => line.localName !== 'text'),
+        Array.from(block.children).some((line) =>
+          line.localName !== 'text' || Array.from(line.children).some((run) =>
+            run.localName !== 'tspan' || run.children.length > 0)),
     )
   ) {
     throw new RangeError('SVG structure does not match the supported label layout');
@@ -201,8 +209,8 @@ function parseLabelSvg(layout: LabelLayoutResult): {
 
   const widthMm = parseSvgDimension(svg.getAttribute('width'), 'width');
   const heightMm = parseSvgDimension(svg.getAttribute('height'), 'height');
-  const expectedWidthMm = Number(layout.widthMm.toFixed(4));
-  const expectedHeightMm = Number(layout.heightMm.toFixed(4));
+  const expectedWidthMm = layout.widthMm;
+  const expectedHeightMm = layout.heightMm;
   const viewBox = svg.getAttribute('viewBox')?.trim().split(/\s+/u).map(Number);
   if (
     widthMm !== expectedWidthMm ||
@@ -273,7 +281,7 @@ function writeReportPage(
     ...(metadata.consultantNotes?.length ? [
       '',
       'Notes for your consultant',
-      'Official results and limitations only. No illustrative preview is included.',
+      'Recorded draft inputs and official results; no illustrative rule results are included.',
       ...metadata.consultantNotes.flatMap((section) => ['', section.heading, ...section.lines]),
     ] : []),
   ];
@@ -289,6 +297,30 @@ function writeReportPage(
       pdf.text(wrappedLine, 15, cursorY);
       cursorY += 6;
     }
+  }
+}
+
+function writeReviewCover(pdf: JsPDF): void {
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(18);
+  pdf.text('INCOMPLETE REVIEW COPY', 15, 25);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(11);
+  const lines = [
+    'For testing and reviewer feedback only.',
+    'This is not a finished or approved label and must not be used on food packaging.',
+    'The next page contains the label artwork at its selected physical size.',
+    'The following report identifies known gaps, unresolved checks and layout issues.',
+    nonCertificationStatement,
+  ];
+  let cursorY = 40;
+  for (const line of lines) {
+    const wrapped = pdf.splitTextToSize(line, reportWidthMm - 30) as string[];
+    for (const part of wrapped) {
+      pdf.text(part, 15, cursorY);
+      cursorY += 7;
+    }
+    cursorY += 3;
   }
 }
 
@@ -339,20 +371,22 @@ export async function createLabelPdf(
   const { jsPDF, svg2pdf } = await preloadLabelPdfRenderer();
   const pdf = new jsPDF({
     unit: 'mm',
-    format: [widthMm, heightMm],
-    orientation: layout.orientation,
+    format: [reportWidthMm, reportHeightMm],
+    orientation: 'portrait',
     compress: false,
     precision: 16,
     putOnlyUsedFonts: true,
     floatPrecision: 16,
   });
   pdf.setProperties({
-    title: 'Food label draft',
+    title: 'Incomplete review copy',
     subject: `Product version ${metadata.productVersion}; rule release ${metadata.ruleRelease}`,
     creator: '@aus-food/label',
   });
   pdf.setCreationDate(pdfDate(metadata.exportedAt));
   pdf.setFileId(await stableFileId(layout.svg, metadata));
+  writeReviewCover(pdf);
+  pdf.addPage([widthMm, heightMm], layout.orientation);
   await svg2pdf(element, pdf, { x: 0, y: 0, width: widthMm, height: heightMm });
   writeReportPage(pdf, metadata, report);
 

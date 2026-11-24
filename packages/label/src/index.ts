@@ -10,7 +10,8 @@ export type LabelBlockKind =
   | 'allergenDeclaration'
   | 'warnings'
   | 'advisoryStatements'
-  | 'nutritionInformation';
+  | 'nutritionInformation'
+  | 'claims';
 
 export interface LabelMargins {
   readonly topMm: number;
@@ -23,11 +24,17 @@ export interface LabelBlockInput {
   readonly id: string;
   readonly kind: LabelBlockKind;
   readonly title: string;
+  readonly hideTitle?: boolean;
   readonly lines: readonly string[];
   readonly fontSizeMm: number;
   readonly boldLines?: boolean;
+  readonly boldPhrases?: readonly string[];
   readonly table?: {
-    readonly rows: readonly (readonly [string, string, string])[];
+    readonly rows: readonly (
+      | readonly [string, string, string]
+      | readonly [string, string, string, string]
+      | readonly [string, string, string, string, string]
+    )[];
   };
   readonly minimumFontSizeMm?: number;
   readonly minimumSizeStatus: 'approved' | 'review_required';
@@ -114,6 +121,7 @@ const labelBlockKinds = new Set<LabelBlockKind>([
   'warnings',
   'advisoryStatements',
   'nutritionInformation',
+  'claims',
 ]);
 
 function assertPositiveFinite(value: number, name: string): void {
@@ -132,6 +140,16 @@ function formatMillimetres(value: number): string {
   return Number(value.toFixed(4)).toString();
 }
 
+function formatPhysicalDimension(value: number): string {
+  const [coefficient, exponent] = value.toString().split('e');
+  if (exponent === undefined) return coefficient!;
+  const digits = coefficient!.replace('.', '');
+  const decimalPosition = (coefficient!.indexOf('.') < 0 ? coefficient!.length : coefficient!.indexOf('.')) + Number(exponent);
+  if (decimalPosition <= 0) return `0.${'0'.repeat(-decimalPosition)}${digits}`;
+  if (decimalPosition >= digits.length) return `${digits}${'0'.repeat(decimalPosition - digits.length)}`;
+  return `${digits.slice(0, decimalPosition)}.${digits.slice(decimalPosition)}`;
+}
+
 function escapeXml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -141,7 +159,56 @@ function escapeXml(value: string): string {
     .replaceAll("'", '&apos;');
 }
 
-function estimatedLineWidthMm(text: string, fontSizeMm: number): number {
+export interface LabelTextRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+function isWordCharacter(character: string | undefined): boolean {
+  return character !== undefined && /[\p{L}\p{N}]/u.test(character);
+}
+
+export function findBoldPhraseRanges(text: string, phrases: readonly string[]): readonly LabelTextRange[] {
+  const lowered = text.toLowerCase();
+  const ranges: LabelTextRange[] = [];
+  for (const phrase of new Set(phrases.map((item) => item.trim()).filter(Boolean))) {
+    const search = phrase.toLowerCase();
+    let offset = 0;
+    while (offset < lowered.length) {
+      const start = lowered.indexOf(search, offset);
+      if (start < 0) break;
+      const end = start + search.length;
+      if (!isWordCharacter(text[start - 1]) && !isWordCharacter(text[end])) {
+        ranges.push({ start, end });
+      }
+      offset = end;
+    }
+  }
+  ranges.sort((left, right) => left.start - right.start || right.end - left.end);
+  return ranges.reduce<LabelTextRange[]>((merged, range) => {
+    const previous = merged.at(-1);
+    if (previous && range.start <= previous.end) {
+      merged[merged.length - 1] = { start: previous.start, end: Math.max(previous.end, range.end) };
+    } else {
+      merged.push(range);
+    }
+    return merged;
+  }, []);
+}
+
+function renderBoldPhrases(text: string, phrases: readonly string[]): string {
+  const ranges = findBoldPhraseRanges(text, phrases);
+  if (ranges.length === 0) return escapeXml(text);
+  let cursor = 0;
+  return ranges.map((range) => {
+    const before = escapeXml(text.slice(cursor, range.start));
+    const bold = `<tspan font-weight="700">${escapeXml(text.slice(range.start, range.end))}</tspan>`;
+    cursor = range.end;
+    return before + bold;
+  }).join('') + escapeXml(text.slice(cursor));
+}
+
+export function estimatedLineWidthMm(text: string, fontSizeMm: number): number {
   const emWidth = [...text].reduce((total, character) => {
     if (/\p{Mark}/u.test(character)) {
       return total;
@@ -205,10 +272,15 @@ function validateInput(input: LabelLayoutInput): void {
     if (!Array.isArray(block.lines) || block.lines.some((line) => typeof line !== 'string')) {
       throw new RangeError(`Label block "${block.id}" lines must be a list of strings`);
     }
+    if (block.boldPhrases !== undefined && (!Array.isArray(block.boldPhrases)
+      || block.boldPhrases.some((phrase) => typeof phrase !== 'string' || !phrase.trim()))) {
+      throw new RangeError(`Label block "${block.id}" bold phrases must be non-empty text`);
+    }
     if (block.table !== undefined && (!Array.isArray(block.table.rows)
-      || block.table.rows.some((row) => !Array.isArray(row) || row.length !== 3
+      || block.table.rows.some((row) => !Array.isArray(row) || ![3, 4, 5].includes(row.length)
+        || row.length !== block.table?.rows[0]?.length
         || row.some((cell) => typeof cell !== 'string')))) {
-      throw new RangeError(`Label block "${block.id}" table must contain rows of three strings`);
+      throw new RangeError(`Label block "${block.id}" table must contain consistent rows of three, four or five strings`);
     }
     assertPositiveFinite(block.fontSizeMm, `blocks.${block.id}.fontSizeMm`);
     if (block.minimumFontSizeMm !== undefined) {
@@ -284,7 +356,8 @@ export function layoutLabel(input: LabelLayoutInput): LabelLayoutResult {
   let cursorY = input.margins.topMm;
   const renderedBlocks = input.blocks.map((block) => {
     const lineHeight = block.fontSizeMm * lineHeightRatio;
-    const blockHeight = lineHeight * (block.lines.length + 1 + (block.table?.rows.length ?? 0));
+    const titleLines = block.hideTitle ? 0 : 1;
+    const blockHeight = lineHeight * (block.lines.length + titleLines + (block.table?.rows.length ?? 0));
     const y = cursorY;
     if (y + blockHeight > contentBottom) {
       issues.push({
@@ -293,7 +366,7 @@ export function layoutLabel(input: LabelLayoutInput): LabelLayoutResult {
         message: `Block "${block.title}" extends beyond the available label area. Content was not shrunk or clipped.`,
       });
     }
-    if (estimatedLineWidthMm(block.title, block.fontSizeMm) > contentWidth) {
+    if (!block.hideTitle && estimatedLineWidthMm(block.title, block.fontSizeMm) > contentWidth) {
       issues.push({
         code: 'TITLE_OVERFLOW',
         blockId: block.id,
@@ -310,8 +383,13 @@ export function layoutLabel(input: LabelLayoutInput): LabelLayoutResult {
         });
       }
     });
-    const columnOffsets = [0, 0.48, 0.74];
-    const columnWidths = [0.46, 0.24, 0.26];
+    const columnCount = block.table?.rows[0]?.length ?? 0;
+    const columnOffsets = columnCount === 5
+      ? [0, 0.31, 0.5, 0.61, 0.78]
+      : columnCount === 4 ? [0, 0.37, 0.58, 0.79] : [0, 0.48, 0.74];
+    const columnWidths = columnCount === 5
+      ? [0.31, 0.19, 0.11, 0.17, 0.22]
+      : columnCount === 4 ? [0.35, 0.19, 0.19, 0.21] : [0.46, 0.24, 0.26];
     block.table?.rows.forEach((row, rowIndex) => {
       row.forEach((cell, column) => {
         if (estimatedLineWidthMm(cell, block.fontSizeMm) > contentWidth * (columnWidths[column] ?? 0)) {
@@ -325,23 +403,24 @@ export function layoutLabel(input: LabelLayoutInput): LabelLayoutResult {
       });
     });
     cursorY += blockHeight + gap;
-    const title = `<text x="${formatMillimetres(input.margins.leftMm)}" y="${formatMillimetres(y + block.fontSizeMm)}" font-size="${formatMillimetres(block.fontSizeMm)}" font-weight="700">${escapeXml(block.title)}</text>`;
+    const title = block.hideTitle ? '' : `<text x="${formatPhysicalDimension(input.margins.leftMm)}" y="${formatMillimetres(y + block.fontSizeMm)}" font-size="${formatPhysicalDimension(block.fontSizeMm)}" font-weight="700">${escapeXml(block.title)}</text>`;
     const lines = block.lines
       .map((line, index) => {
-        const lineY = y + block.fontSizeMm + lineHeight * (index + 1);
-        return `<text x="${formatMillimetres(input.margins.leftMm)}" y="${formatMillimetres(lineY)}" font-size="${formatMillimetres(block.fontSizeMm)}"${block.boldLines ? ' font-weight="700"' : ''}>${escapeXml(line)}</text>`;
+        const lineY = y + block.fontSizeMm + lineHeight * (index + titleLines);
+        const content = block.boldLines ? escapeXml(line) : renderBoldPhrases(line, block.boldPhrases ?? []);
+        return `<text x="${formatPhysicalDimension(input.margins.leftMm)}" y="${formatMillimetres(lineY)}" font-size="${formatPhysicalDimension(block.fontSizeMm)}"${block.boldLines ? ' font-weight="700"' : ''}>${content}</text>`;
       })
       .join('');
     const table = block.table?.rows.map((row, rowIndex) => row.map((cell, column) => {
       const x = input.margins.leftMm + contentWidth * (columnOffsets[column] ?? 0);
-      const lineY = y + block.fontSizeMm + lineHeight * (block.lines.length + rowIndex + 1);
-      return `<text x="${formatMillimetres(x)}" y="${formatMillimetres(lineY)}" font-size="${formatMillimetres(block.fontSizeMm)}">${escapeXml(cell)}</text>`;
+      const lineY = y + block.fontSizeMm + lineHeight * (block.lines.length + rowIndex + titleLines);
+      return `<text x="${formatMillimetres(x)}" y="${formatMillimetres(lineY)}" font-size="${formatPhysicalDimension(block.fontSizeMm)}">${escapeXml(cell)}</text>`;
     }).join('')).join('') ?? '';
     return `<g data-block-id="${escapeXml(block.id)}" data-block-kind="${block.kind}">${title}${lines}${table}</g>`;
   });
 
   const svg = [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${formatMillimetres(input.widthMm)}mm" height="${formatMillimetres(input.heightMm)}mm" viewBox="0 0 ${formatMillimetres(input.widthMm)} ${formatMillimetres(input.heightMm)}">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${formatPhysicalDimension(input.widthMm)}mm" height="${formatPhysicalDimension(input.heightMm)}mm" viewBox="0 0 ${formatPhysicalDimension(input.widthMm)} ${formatPhysicalDimension(input.heightMm)}">`,
     '<g fill="#000" font-family="sans-serif">',
     ...renderedBlocks,
     '</g>',

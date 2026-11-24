@@ -4,6 +4,8 @@ import {
   divideDecimals,
   multiplyDecimals,
   normalizeDecimal,
+  plainDecimal,
+  roundDecimalHalfUp,
   subtractDecimals,
   sumDecimals,
 } from './decimal.js';
@@ -19,6 +21,8 @@ describe('decimal arithmetic', () => {
 
   it('normalizes decimal and exponent notation without converting through number', () => {
     expect(normalizeDecimal('1.250e2')).toBe('125');
+    expect(plainDecimal('1e-10')).toBe('0.0000000001');
+    expect(plainDecimal('1e21')).toBe('1000000000000000000000');
   });
 
   it('supports exact multiplication and subtraction', () => {
@@ -28,6 +32,14 @@ describe('decimal arithmetic', () => {
 
   it('uses explicit precision for repeating intermediate divisions', () => {
     expect(divideDecimals('1', '3')).toBe('0.3333333333333333333333333333333333333333');
+  });
+
+  it('rounds decimal ties half up without floating-point conversion', () => {
+    expect(roundDecimalHalfUp('4.5')).toBe('5');
+    expect(roundDecimalHalfUp('5.5')).toBe('6');
+    expect(roundDecimalHalfUp('1.235', 2)).toBe('1.24');
+    expect(roundDecimalHalfUp('0.004', 2)).toBe('0.00');
+    expect(() => roundDecimalHalfUp('1', -1)).toThrow(RangeError);
   });
 
   it('sums an empty collection as zero', () => {

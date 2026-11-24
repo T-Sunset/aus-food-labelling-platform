@@ -108,7 +108,7 @@ describe('product classification candidate screening', () => {
     expect(result?.explanation).toContain('not a legal classification');
   });
 
-  it('keeps a criterion with a missing source or conflicting sources inconclusive', () => {
+  it('screens unsourced answers but keeps conflicts inconclusive', () => {
     const profile = supportedCaffeinatedBeverage();
     const missingEvidence = {
       ...profile.formulatedCaffeinatedBeverage,
@@ -127,8 +127,9 @@ describe('product classification candidate screening', () => {
       formulatedCaffeinatedBeverage: conflicting,
     });
 
-    expect(missing?.value?.screeningOutcome).toBe('inconclusive');
-    expect(missing?.explanation).toContain('supporting evidence is missing');
+    expect(missing?.status).toBe('REVIEW REQUIRED');
+    expect(missing?.value?.screeningOutcome).toBe('candidate_indicated');
+    expect(missing?.inputs.some((input) => input.value === 'yes' && input.sourceId === '')).toBe(true);
     expect(conflict?.value?.screeningOutcome).toBe('inconclusive');
     expect(conflict?.explanation).toContain('evidence conflicts');
   });

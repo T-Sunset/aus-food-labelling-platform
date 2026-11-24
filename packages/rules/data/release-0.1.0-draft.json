@@ -23,8 +23,8 @@
       "jurisdiction": "Australia and New Zealand",
       "referenceVersion": "Requirements register records compilation 6, 2024-10-29",
       "effectiveFrom": "2024-10-29",
-      "checkedOn": "2026-11-09",
-      "verificationStatus": "needs-primary-source-recheck"
+      "checkedOn": "2026-11-20",
+      "verificationStatus": "primary-source-verified"
     },
     {
       "id": "SRC-005",
@@ -117,14 +117,44 @@
       "verificationStatus": "needs-primary-source-recheck"
     },
     {
+      "id": "SRC-NIP-DI-001",
+      "instrument": "Australia New Zealand Food Standards Code - Standard 1.2.8",
+      "sourceUrl": "https://www.legislation.gov.au/F2015L00395/2026-04-30/2026-04-30/text/original/epub/OEBPS/document_1/document_1.html",
+      "jurisdiction": "Australia and New Zealand",
+      "referenceVersion": "F2026C00411, Compilation 6 (2026-04-30); section 1.2.8-8 read 2026-11-19",
+      "effectiveFrom": "2026-04-30",
+      "checkedOn": "2026-11-19",
+      "verificationStatus": "primary-source-verified"
+    },
+    {
+      "id": "SRC-NIP-DI-002",
+      "instrument": "Australia New Zealand Food Standards Code - Schedule 12",
+      "sourceUrl": "https://www.legislation.gov.au/F2015L00482/2017-04-13/2017-04-13/text/original/epub/OEBPS/document_1/document_1.html",
+      "jurisdiction": "Australia and New Zealand",
+      "referenceVersion": "F2017C00342, Compilation 2 (2017-04-13); sections S12-4 and S12-6 read 2026-11-19",
+      "effectiveFrom": "2017-04-13",
+      "checkedOn": "2026-11-19",
+      "verificationStatus": "primary-source-verified"
+    },
+    {
+      "id": "SRC-NIP-DI-003",
+      "instrument": "Australia New Zealand Food Standards Code - Standard 2.9.2 - Food for infants",
+      "sourceUrl": "https://www.legislation.gov.au/F2015L00417/2024-09-13/2024-09-13/text/original/epub/OEBPS/document_1/document_1.html",
+      "jurisdiction": "Australia and New Zealand",
+      "referenceVersion": "F2024C00903, Compilation 4 (2024-09-13); sections 2.9.2-1 and 2.9.2-11 read 2026-11-19",
+      "effectiveFrom": "2024-09-13",
+      "checkedOn": "2026-11-19",
+      "verificationStatus": "primary-source-verified"
+    },
+    {
       "id": "SRC-016",
       "instrument": "Australia New Zealand Food Standards Code - Schedule 9",
       "sourceUrl": "https://www.legislation.gov.au/F2015L00479/latest/text",
       "jurisdiction": "Australia and New Zealand",
       "referenceVersion": "Requirements register records compilation 2, 2021-02-25",
       "effectiveFrom": "2021-02-25",
-      "checkedOn": "2026-11-09",
-      "verificationStatus": "needs-primary-source-recheck"
+      "checkedOn": "2026-11-20",
+      "verificationStatus": "primary-source-verified"
     },
     {
       "id": "SRC-NAME-001",
@@ -332,7 +362,7 @@
     "status": "draft",
     "sourceIds": ["SRC-004", "SRC-016"],
     "entries": [
-      { "id": "wheat", "ingredientListName": "wheat", "summaryName": "wheat", "reviewStatus": "draft", "evaluation": "condition-dependent", "conditionNote": "Confirm the exact Schedule 9 name and gluten condition before enabling." },
+      { "id": "wheat", "ingredientListName": "wheat", "summaryName": "wheat", "reviewStatus": "draft", "evaluation": "presence", "conditionNote": "Wheat is required in both declaration contexts; if gluten is present, also list gluten in the summary." },
       { "id": "fish", "ingredientListName": "fish", "summaryName": "fish", "reviewStatus": "draft", "evaluation": "presence" },
       { "id": "crustacean", "ingredientListName": "crustacean", "summaryName": "crustacean", "reviewStatus": "draft", "evaluation": "presence" },
       { "id": "mollusc", "ingredientListName": "mollusc", "summaryName": "mollusc", "reviewStatus": "draft", "evaluation": "presence" },
@@ -351,9 +381,9 @@
       { "id": "pistachio", "ingredientListName": "pistachio", "summaryName": "pistachio", "reviewStatus": "draft", "evaluation": "presence" },
       { "id": "pine-nut", "ingredientListName": "pine nut", "summaryName": "pine nut", "reviewStatus": "draft", "evaluation": "presence" },
       { "id": "walnut", "ingredientListName": "walnut", "summaryName": "walnut", "reviewStatus": "draft", "evaluation": "presence" },
-      { "id": "barley", "ingredientListName": "barley", "summaryName": "gluten", "reviewStatus": "draft", "evaluation": "condition-dependent", "conditionNote": "Candidate cereal entry; apply only when containing gluten, subject to reviewer verification." },
-      { "id": "oats", "ingredientListName": "oats", "summaryName": "gluten", "reviewStatus": "draft", "evaluation": "condition-dependent", "conditionNote": "Candidate cereal entry; apply only when containing gluten, subject to reviewer verification." },
-      { "id": "rye", "ingredientListName": "rye", "summaryName": "gluten", "reviewStatus": "draft", "evaluation": "condition-dependent", "conditionNote": "Candidate cereal entry; apply only when containing gluten, subject to reviewer verification." },
+      { "id": "barley", "ingredientListName": "barley", "summaryName": "gluten", "reviewStatus": "draft", "evaluation": "condition-dependent", "conditionNote": "Declare barley in the ingredient list and gluten in the summary only when the barley contains gluten." },
+      { "id": "oats", "ingredientListName": "oats", "summaryName": "gluten", "reviewStatus": "draft", "evaluation": "condition-dependent", "conditionNote": "Declare oats in the ingredient list and gluten in the summary only when the oats contain gluten." },
+      { "id": "rye", "ingredientListName": "rye", "summaryName": "gluten", "reviewStatus": "draft", "evaluation": "condition-dependent", "conditionNote": "Declare rye in the ingredient list and gluten in the summary only when the rye contains gluten." },
       { "id": "sulphites", "ingredientListName": "sulphites", "summaryName": "sulphites", "reviewStatus": "draft", "evaluation": "final-food-concentration" }
     ]
   },
@@ -11482,6 +11512,37 @@
       "Protein, saturated fat, carbohydrate, comparative, health, 'no added', 'free' and unregulated claims are deliberately absent. They remain review-only (see docs/mvp-regulatory-research.md section 23).",
       "Standard 2.6.4-5 declarations and advisory statements apply to formulated caffeinated beverages independently of any claim. Nutrition claims on food for infants may also meet Standard 2.9.2 conditions, which this catalog does not evaluate.",
       "All entries are draft. This catalog holds claim conditions only; it performs no claim evaluation or compliance assessment."
+    ]
+  },
+  "dailyIntakeReferenceSet": {
+    "version": "2026-11-19",
+    "checkedOn": "2026-11-19",
+    "effectiveFrom": "2026-04-30",
+    "status": "draft",
+    "provision": "Standard 1.2.8-8(1)-(3); Schedule 12 S12-4",
+    "mappingConfidence": "Provision",
+    "sourceIds": ["SRC-NIP-DI-001", "SRC-NIP-DI-002"],
+    "scopeExclusionSourceIds": ["SRC-NIP-DI-003", "SRC-NIP-DI-002"],
+    "calculationNote": "Implementation interpretation: per-serving nutrient amount divided by its associated reference value, multiplied by 100. The Code specifies the reference values but does not state this formula or a percentage rounding rule.",
+    "statements": [
+      "based on an average adult diet of 8 700 kJ",
+      "Percentage daily intakes are based on an average adult diet of 8 700 kJ"
+    ],
+    "entries": [
+      { "nutrientId": "energy", "referenceValue": "8700", "unit": "kJ", "inclusion": "whenIncluded", "reviewStatus": "draft" },
+      { "nutrientId": "protein", "referenceValue": "50", "unit": "g", "inclusion": "whenIncluded", "reviewStatus": "draft" },
+      { "nutrientId": "fat", "referenceValue": "70", "unit": "g", "inclusion": "whenIncluded", "reviewStatus": "draft" },
+      { "nutrientId": "saturatedFat", "referenceValue": "24", "unit": "g", "inclusion": "whenIncluded", "reviewStatus": "draft" },
+      { "nutrientId": "carbohydrate", "referenceValue": "310", "unit": "g", "inclusion": "whenIncluded", "reviewStatus": "draft" },
+      { "nutrientId": "sugars", "referenceValue": "90", "unit": "g", "inclusion": "whenIncluded", "reviewStatus": "draft" },
+      { "nutrientId": "sodium", "referenceValue": "2300", "unit": "mg", "inclusion": "whenIncluded", "reviewStatus": "draft" },
+      { "nutrientId": "dietaryFibre", "referenceValue": "30", "unit": "g", "inclusion": "ifDeclared", "reviewStatus": "draft" }
+    ],
+    "reviewNotes": [
+      "Standard 1.2.8-8 makes percentage daily intake information optional. If included, section 1.2.8-8(3) requires per-serving percentages for its listed nutrients and one of the specified 8 700 kJ statements.",
+      "The ordinary adult %DI set is not applied to the app's food-for-infants category: Standard 2.9.2-11(1)(c) provides that food for infants need not comply with Standard 1.2.8-8, and 2.9.2-11(3) requires the S12-6 format. Infant formula products are outside this catalog.",
+      "Current FSANZ NPC guidance reviewed 2026-11-19 did not prescribe %DI display precision or tie-breaking. The selected nearest-whole-percent, half-up display is product policy, not a Code or FSANZ requirement.",
+      "Dietary fibre is included only if declared. The current supported panel does not add claim-related or additional nutrient rows automatically."
     ]
   }
 }

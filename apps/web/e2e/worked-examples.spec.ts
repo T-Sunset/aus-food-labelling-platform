@@ -1,20 +1,18 @@
 import AxeBuilder from '@axe-core/playwright';
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import { openProductStep } from './helpers';
+import { openAdditiveReview, openLabelTab, seedWorkedExamples } from './helpers';
 
-test('worked examples load, stay REVIEW REQUIRED, preview when asked, show labels and remove cleanly', async ({
+test('existing worked examples remain accessible without Overview controls', async ({
   page,
 }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Load worked examples' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Worked examples loaded locally' })).toBeVisible();
+  await seedWorkedExamples(page);
+  await expect(page.getByRole('button', { name: 'Load worked examples' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Remove worked examples' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Guide to the worked examples' })).toHaveCount(0);
 
-  // Loading twice never overwrites: everything is reported as already present.
-  await page.getByRole('button', { name: 'Load worked examples' }).click();
-  await expect(page.getByRole('status').filter({ hasText: /0 added, \d+ already present/ })).toBeVisible();
-
-  await openProductStep(page, 'Example Citrus Boost Max', 'Additives & names');
+  await openAdditiveReview(page, 'Example Citrus Boost Max');
 
   const rosin = page.getByRole('article', { name: /Additive permission: 445/ });
   await expect(rosin.getByText('Status: REVIEW REQUIRED')).toBeVisible();
@@ -33,30 +31,37 @@ test('worked examples load, stay REVIEW REQUIRED, preview when asked, show label
   await expect(page.getByText('Status: PASS')).toHaveCount(0);
   await expect(page.getByText('Status: FAIL')).toHaveCount(0);
 
-  await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Claims' }).click();
-  await expect(page.getByRole('article', { name: 'Claim: Low sugars' }).getByText(/would be FAIL/)).toBeVisible();
-  await expect(
-    page.getByRole('article', { name: 'Claim: Supports concentration' }).getByText(/HEALTH_REVIEW_ONLY/).first(),
-  ).toBeVisible();
+  await page.getByRole('button', { name: 'Labels', exact: true }).click();
+  await page.getByLabel('Product draft').selectOption({ label: 'Example Citrus Boost Max' });
+  await openLabelTab(page, 'Claims');
+  await page.getByRole('button', { name: 'Add copies of existing Product claims to this Label' }).click();
+  const lowSugarClaim = page.getByRole('article', { name: 'Claim: Low sugars' });
+  const concentrationClaim = page.getByRole('article', { name: 'Claim: Supports concentration' });
+  await expect(lowSugarClaim.getByText('Status: REVIEW REQUIRED')).toBeVisible();
+  await expect(concentrationClaim.getByText('Status: REVIEW REQUIRED')).toBeVisible();
+  await expect(lowSugarClaim.getByText('ILLUSTRATIVE ONLY', { exact: true })).toHaveCount(0);
+  await expect(concentrationClaim.getByText('ILLUSTRATIVE ONLY', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Save label draft', exact: true }).click();
 
-  await openProductStep(page, 'Example Citrus Boost', 'Claims');
-  await expect(page.getByRole('article', { name: 'Claim: Low sugars' }).getByText(/would be PASS/)).toBeVisible();
-  await expect(page.getByRole('article', { name: 'Claim: Low sugars' }).getByText(/Entered information looks fine!/)).toBeVisible();
-  await expect(page.getByRole('article', { name: 'Claim: Low sugars' }).getByText(/not legal advice or a clearance/)).toBeVisible();
+  await page.getByLabel('Product draft').selectOption({ label: 'Example Citrus Boost' });
+  await page.getByRole('button', { name: 'Add copies of existing Product claims to this Label' }).click();
+  await expect(page.getByRole('article', { name: 'Claim: Low sugars' }).getByText('Status: REVIEW REQUIRED')).toBeVisible();
+  await page.getByRole('button', { name: 'Save label draft', exact: true }).click();
 
-  await openProductStep(page, 'Example Honey and Oat Puree', 'Claims');
+  await page.getByLabel('Product draft').selectOption({ label: 'Example Honey and Oat Puree' });
+  await page.getByRole('button', { name: 'Add copies of existing Product claims to this Label' }).click();
+  await page.getByRole('article', { name: 'Claim: Low fat' }).getByText('Condition checklist, rule and source').click();
   await expect(
     page.getByRole('article', { name: 'Claim: Low fat' }).getByText(/PROHIBITED_CONTEXT/).first(),
   ).toBeVisible();
   await expect(page.getByRole('article', { name: 'Claim: Low fat' }).getByText(/would be (PASS|FAIL)/)).toHaveCount(0);
 
-  await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Additives & names' }).click();
+  await openAdditiveReview(page, 'Example Honey and Oat Puree');
   await expect(
     page.getByRole('article', { name: /Additive permission: 407/ }).getByText(/would be FAIL/),
   ).toBeVisible();
 
   await page.getByRole('button', { name: 'Overview' }).click();
-  await expect(page.getByRole('heading', { name: 'Guide to the worked examples' })).toBeVisible();
   for (const name of ['Example Citrus Boost', 'Example Apple and Oat Puree', 'Example Honey and Oat Puree']) {
     await page.getByRole('button', { name: 'Labels', exact: true }).click();
     await page.getByLabel('Product draft').selectOption({ label: name });
@@ -66,7 +71,7 @@ test('worked examples load, stay REVIEW REQUIRED, preview when asked, show label
   }
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
   await page.getByLabel('Product draft').selectOption({ label: 'Example Apple and Oat Puree' });
-  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Export Incomplete Review Copy PDF' })).toBeEnabled();
   const reportDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download review report' }).click();
   const report = await reportDownload;
@@ -84,10 +89,7 @@ test('worked examples load, stay REVIEW REQUIRED, preview when asked, show label
     .analyze();
   expect(axe.violations.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
 
-  // Removal deletes only the tagged examples, after a confirmation.
-  await page.getByRole('button', { name: 'Overview' }).click();
-  page.once('dialog', (dialog) => void dialog.accept());
-  await page.getByRole('button', { name: 'Remove worked examples' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Worked examples removed' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Remove worked examples' })).toHaveCount(0);
+  await page.reload();
+  await page.getByRole('button', { name: 'Products', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Edit product Example Citrus Boost', exact: true })).toBeVisible();
 });

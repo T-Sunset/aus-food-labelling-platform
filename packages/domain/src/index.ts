@@ -1,3 +1,5 @@
+export { findCircularReferencePath } from './reference-graph.js';
+
 export type FormulationReferenceGraph = ReadonlyMap<string, readonly string[]>;
 
 export type MassUnit = 'mg' | 'g' | 'kg';
@@ -29,6 +31,7 @@ export interface ProductClassificationEvidence {
 export interface ProductClassificationFact {
   readonly answer: ClassificationAnswer;
   readonly evidence: readonly ProductClassificationEvidence[];
+  readonly previousEvidence?: readonly ProductClassificationEvidence[];
 }
 
 export interface ProductClassificationProfile {
@@ -226,6 +229,7 @@ export interface AdditivePermissionEvaluationInput {
     readonly calculatedAs?: string | undefined;
   } | undefined;
   readonly evidence?: { readonly reference: string; readonly sourceDate: string } | undefined;
+  // Retained for older callers; missing user-source details do not gate the calculation.
   readonly concentrationProvenanceComplete?: boolean | undefined;
   readonly sourcePath?: readonly string[] | undefined;
 }
@@ -266,11 +270,14 @@ export interface MassQuantity {
   readonly unit: MassUnit;
 }
 
+export type DirectAdditiveUse = 'added' | 'processingAid' | 'unknown';
+
 export interface IngredientLine {
   readonly id: string;
   readonly kind: 'ingredient';
   readonly ingredientId: string;
   readonly quantity: MassQuantity;
+  readonly additiveUse?: DirectAdditiveUse;
 }
 
 export interface FormulationLine {
@@ -283,8 +290,13 @@ export interface FormulationLine {
 export type FormulationComponent = IngredientLine | FormulationLine;
 
 export type UnquantifiedFormulationComponent =
-  | { readonly id: string; readonly kind: 'ingredient'; readonly ingredientId: string }
-  | { readonly id: string; readonly kind: 'formulation'; readonly formulationId: string };
+  | { readonly id: string; readonly kind: 'ingredient'; readonly ingredientId: string; readonly additiveUse?: DirectAdditiveUse; readonly unit?: MassUnit }
+  | { readonly id: string; readonly kind: 'formulation'; readonly formulationId: string; readonly unit?: MassUnit };
+
+export interface IncompleteRecipeLines {
+  readonly unquantifiedLines: readonly UnquantifiedFormulationComponent[];
+  readonly lineOrder: readonly string[];
+}
 
 export interface SupplierCompositionEvidence {
   readonly coverage: 'partial' | 'complete';
@@ -297,12 +309,14 @@ export interface Formulation {
   readonly id: string;
   readonly lines: readonly FormulationComponent[];
   readonly supplierComposition?: SupplierCompositionEvidence;
+  readonly incompleteRecipeLines?: IncompleteRecipeLines | undefined;
 }
 
 export interface ExpandedIngredient {
   readonly ingredientId: string;
   readonly mass: MassQuantity;
   readonly sourcePath: readonly string[];
+  readonly additiveUse?: DirectAdditiveUse;
 }
 
 export interface IngoingIngredientPercentage {
@@ -315,18 +329,22 @@ export interface IngoingIngredientPercentage {
 export interface ProcessMassChange {
   readonly id: string;
   readonly kind: 'addition' | 'gain' | 'loss';
-  readonly mass: MassQuantity;
+  readonly mass?: MassQuantity;
+  readonly description?: string;
+  readonly material?: 'water' | 'other';
 }
 
 export interface ProcessMassProfile {
   readonly changes: readonly ProcessMassChange[];
   readonly declaredFinalMass?: MassQuantity;
+  readonly complete?: boolean;
+  readonly entryMethod?: 'finalMass' | 'changes';
 }
 
 export type ProcessMassBalance =
   | {
       readonly status: 'review_required';
-      readonly reason: 'PROCESS_MASS_PROFILE_MISSING';
+      readonly reason: 'PROCESS_MASS_PROFILE_MISSING' | 'PROCESS_MASS_PROFILE_INCOMPLETE' | 'PROCESSING_EFFECTS_UNSUPPORTED';
       readonly ingoingMass: MassQuantity;
     }
   | {
@@ -349,13 +367,19 @@ export type AdditiveConcentrationReviewReason =
   | 'ADDITIVE_CODE_MISSING'
   | 'FOOD_STATE_MISSING'
   | 'PROCESS_MASS_PROFILE_MISSING'
+  | 'PROCESS_MASS_PROFILE_INCOMPLETE'
+  | 'PROCESSING_EFFECTS_UNSUPPORTED'
   | 'NO_MATCHING_SOURCE'
   | 'SOURCE_IDENTITY_MISSING'
   | 'SOURCE_NOT_ADDED'
   | 'CONCENTRATION_MISSING'
   | 'EVIDENCE_MISSING'
   | 'BASIS_NOT_SUPPORTED'
+  | 'CALCULATION_BASIS_CONFLICT'
   | 'COMPOUND_ADDITIVES_NOT_PROPAGATED'
+  | 'FORMULATION_AMOUNTS_MISSING'
+  | 'ADDITIVE_COVERAGE_INCOMPLETE'
+  | 'COMPOUND_ADDITIVE_EVIDENCE_OVERLAP'
   | 'INGREDIENT_DENSITY_MISSING'
   | 'FINAL_DENSITY_MISSING';
 
@@ -376,6 +400,7 @@ export interface AdditiveFinalConcentrationInput {
   readonly outputUnit: AdditiveConcentrationOutputUnit;
   readonly ingredients: readonly ExpandedIngredient[];
   readonly sourcesByIngredient: ReadonlyMap<string, readonly IngredientAdditiveSource[]>;
+  readonly directSourceIdByIngredient?: ReadonlyMap<string, string>;
   readonly processBalance: ProcessMassBalance;
   readonly ingredientDensities?: ReadonlyMap<string, AdditiveDensityEvidence> | undefined;
   readonly finalDensity?: AdditiveDensityEvidence | undefined;
@@ -645,16 +670,30 @@ export type ClaimClassification =
 
 // A claim exactly as the person typed it. `classification` is absent until a person sets it, and
 // `supportedClaimId` (a claim-rule id, added in C4) may only accompany a nutrition content claim.
-export interface ProductClaim {
+export interface LabelClaim {
   readonly id: string;
   readonly text: string;
+  // Links a claim check to one detected occurrence without taking ownership of its source text.
+  readonly sourceCandidateKey?: string | undefined;
   readonly classification?: ClaimClassification | undefined;
   readonly classificationConfirmed?: boolean | undefined;
   readonly supportedClaimId?: string | undefined;
-  // Entered figure for the linked rule's nutrient, in the rule's unit, with dated evidence.
+  // Entered figure for the linked rule's nutrient, in the rule's unit.
   readonly nutrientAmount?: ClaimQuantityView | undefined;
   readonly evidence?: { readonly reference: string; readonly sourceDate: string } | undefined;
 }
+
+export type ClaimCandidateResolution = 'claim' | 'not_claim' | 'unsure';
+
+export interface LabelClaimCandidateDecision {
+  readonly candidateKey: string;
+  readonly text: string;
+  readonly location: string;
+  readonly resolution: ClaimCandidateResolution;
+}
+
+// Product-level claims are retained for existing records; new claims belong to a Label draft.
+export type ProductClaim = LabelClaim;
 
 // Product-level facts shared by every claim on a product. Nothing here is inferred.
 export interface ProductClaimFacts {
@@ -721,7 +760,7 @@ export interface ClaimEvaluationInput {
   // True only when the claim rule has reviewStatus 'reviewed'.
   readonly ruleApproved: boolean;
   readonly claimRule: ClaimRuleView;
-  readonly claim: ProductClaim;
+  readonly claim: LabelClaim;
   // Person-confirmed: liquid or solid food (Schedule 4 conditions differ). Never inferred.
   readonly foodForm?: 'liquid' | 'solid' | undefined;
   // Person-confirmed: the figures are for the form of the food required by Standard 1.2.7-7.
@@ -761,39 +800,46 @@ export interface ClaimEvaluationValue {
   readonly reasons: readonly ClaimReason[];
 }
 
-export type NutrientId =
-  | 'protein'
-  | 'fat'
-  | 'saturatedFat'
-  | 'carbohydrate'
-  | 'availableCarbohydrate'
-  | 'unavailableCarbohydrate'
-  | 'sugars'
-  | 'sodium'
-  | 'dietaryFibre'
-  | 'organicAcids'
-  | 'alcohol'
-  | 'polyols'
-  | 'erythritol'
-  | 'glycerol'
-  | 'dAllulose'
-  | 'isomalt'
-  | 'lactitol'
-  | 'maltitol'
-  | 'mannitol'
-  | 'polydextrose'
-  | 'sorbitol'
-  | 'dTagatose'
-  | 'xylitol';
-
 export const optionalNutrientIds = [
   'availableCarbohydrate', 'unavailableCarbohydrate', 'dietaryFibre', 'organicAcids',
   'alcohol', 'polyols', 'erythritol', 'glycerol', 'dAllulose', 'isomalt', 'lactitol',
   'maltitol', 'mannitol', 'polydextrose', 'sorbitol', 'dTagatose', 'xylitol',
-] as const satisfies readonly NutrientId[];
+] as const;
 export type OptionalNutrientId = (typeof optionalNutrientIds)[number];
 
-export type NutrientUnit = 'g/100g' | 'mg/100g';
+export const additionalNutrientIds = [
+  ...optionalNutrientIds,
+  'transFat', 'monounsaturatedFat', 'polyunsaturatedFat', 'cholesterol', 'potassium',
+  'lactose', 'galactose', 'omega3', 'omega6', 'omega9', 'alphaLinolenicAcid',
+  'docosahexaenoicAcid', 'eicosapentaenoicAcid', 'phytosterols', 'phytostanols',
+  'phytosterolEsters', 'phytostanolEsters', 'totalPlantSterolEquivalents',
+  'water', 'ash', 'starch', 'availableSugars', 'availableOligosaccharides', 'glycogen',
+  'maltodextrins', 'caffeine', 'taurine', 'glucuronolactone', 'inositol',
+  'vitaminA', 'thiamin', 'riboflavin', 'niacin', 'folate', 'vitaminB6', 'vitaminB12',
+  'biotin', 'pantothenicAcid', 'vitaminC', 'vitaminD', 'vitaminE', 'vitaminK',
+  'calcium', 'chromium', 'copper', 'iodine', 'iron', 'magnesium', 'manganese',
+  'molybdenum', 'phosphorus', 'selenium', 'zinc',
+] as const;
+export type AdditionalNutrientId = (typeof additionalNutrientIds)[number];
+export const nutrientIds = [
+  'protein', 'fat', 'saturatedFat', 'carbohydrate', 'sugars', 'sodium',
+  ...additionalNutrientIds,
+] as const;
+export type NutrientId = (typeof nutrientIds)[number];
+
+export type NutrientUnit = 'g/100g' | 'mg/100g' | 'ug/100g';
+export type VolumeNutrientUnit = 'g/100mL' | 'mg/100mL' | 'ug/100mL';
+
+export const requiredNutrientExpressions: Readonly<Partial<Record<NutrientId, string>>> = {
+  vitaminA: 'retinolEquivalents',
+  niacin: 'niacinExcludingTryptophan',
+  vitaminB6: 'pyridoxine',
+  vitaminB12: 'cyanocobalamin',
+  vitaminC: 'ascorbicAndDehydroascorbicAcid',
+  vitaminD: 'cholecalciferol',
+  vitaminE: 'alphaTocopherolEquivalents',
+  vitaminK: 'phylloquinone',
+};
 
 export type NutrientEvidenceType =
   | 'supplier'
@@ -810,7 +856,12 @@ export interface NutrientEvidence {
   readonly sourceDate: string;
   readonly evidenceType: NutrientEvidenceType;
   readonly method?: string;
+  readonly expression?: string;
 }
+
+export type VolumeNutrientEvidence = Omit<NutrientEvidence, 'unit'> & {
+  readonly unit: VolumeNutrientUnit;
+};
 
 export interface IngredientNutrientProfile {
   readonly ingredientId: string;
@@ -828,6 +879,7 @@ export interface NutrientContributionSource {
   readonly sourceDate: string;
   readonly evidenceType: NutrientEvidenceType;
   readonly method?: string;
+  readonly expression?: string;
 }
 
 export interface AggregatedNutrient {
@@ -841,6 +893,26 @@ export type NutrientAggregationResult =
   | {
       readonly status: 'review_required';
       readonly reason: 'MISSING_NUTRIENT_EVIDENCE';
+      readonly missing: readonly {
+        readonly ingredientId: string;
+        readonly sourcePath: readonly string[];
+        readonly nutrient: NutrientId;
+      }[];
+    }
+  | {
+      readonly status: 'review_required';
+      readonly reason: 'INCOMPATIBLE_NUTRIENT_EXPRESSION';
+      readonly missing: readonly {
+        readonly ingredientId: string;
+        readonly sourcePath: readonly string[];
+        readonly nutrient: NutrientId;
+        readonly expectedExpression: string;
+        readonly actualExpression?: string;
+      }[];
+    }
+  | {
+      readonly status: 'review_required';
+      readonly reason: 'INSUFFICIENT_NUTRIENT_PRECISION';
       readonly missing: readonly {
         readonly ingredientId: string;
         readonly sourcePath: readonly string[];
@@ -1004,11 +1076,12 @@ export interface ProvisionalCaffeineInput {
     readonly mentalPerformancePurpose: ProductClassificationFact;
   };
   readonly concentration?: {
-    readonly value: string;
+    readonly value?: string;
     readonly unit: 'mg/L';
     readonly foodState: 'readyToDrinkAsSold' | 'other' | 'unknown';
     readonly completeness: 'complete' | 'unknown' | 'conflicting';
     readonly evidence: readonly EvaluationInputTrace[];
+    readonly issues?: readonly string[];
   };
 }
 
@@ -1093,6 +1166,8 @@ export interface AllergenVocabularyEntry {
   readonly id: string;
   readonly ingredientListName: string;
   readonly summaryName: string;
+  readonly evaluation?: 'presence' | 'condition-dependent' | 'final-food-concentration';
+  readonly conditionNote?: string;
   readonly requiresFinalFoodEvaluation?: boolean;
 }
 

@@ -20,6 +20,7 @@ import {
   type ApprovedVersionRecord,
   type FormulationRecord,
   type IngredientRecord,
+  type LabelDraftRecord,
   type ProductRecord,
 } from './index.js';
 
@@ -81,6 +82,167 @@ const product: ProductRecord = {
   createdAt: '2026-11-09T10:00:00.000Z',
   updatedAt: '2026-11-09T10:00:00.000Z',
 };
+
+const labelDraft: LabelDraftRecord = {
+  id: 'label-1', name: 'Oat label', productId: product.id,
+  createdAt: '2026-11-09T10:00:00.000Z', updatedAt: '2026-11-09T10:00:00.000Z',
+  dependencySignature: 'saved inputs',
+  layout: {
+    widthMm: 100, heightMm: 150, orientation: 'portrait',
+    margins: { topMm: 6, rightMm: 6, bottomMm: 6, leftMm: 6 }, gapMm: 2,
+    textSizes: {
+      foodName: 3, netQuantity: 2.5, ingredients: 2.5, allergenDeclaration: 2.5,
+      preparationDirections: 2.5, nutritionInformation: 2.2, advisoryStatements: 2.5,
+    },
+  },
+};
+
+describe('label drafts', () => {
+  it('validates layout and preserves separate drafts and their product association', async () => {
+    const store = await openTestStore();
+    await expect(store.labels.create(labelDraft)).rejects.toBeInstanceOf(RepositoryNotFoundError);
+    await store.products.create(product);
+    const first = { ...labelDraft, claims: [{ id: 'claim-1', text: 'Low sugars' }] };
+    const second = { ...labelDraft, id: 'label-2', name: 'Second format', claims: [{ id: 'claim-2', text: 'No added sugar' }] };
+    await store.labels.create(first);
+    await store.labels.create(second);
+    await expect(store.labels.update(labelDraft.id, {
+      name: labelDraft.name, dependencySignature: labelDraft.dependencySignature,
+      layout: { ...labelDraft.layout, widthMm: 200 },
+    })).rejects.toThrow(/dimensions, orientation/);
+    expect(await store.labels.get(labelDraft.id)).toEqual(first);
+    const saved = await store.labels.update(labelDraft.id, {
+      name: 'Updated layout', dependencySignature: 'new inputs',
+      layout: { ...labelDraft.layout, gapMm: 0 },
+    });
+    expect(saved).toMatchObject({
+      productId: product.id, name: 'Updated layout', dependencySignature: 'new inputs',
+      claims: first.claims,
+    });
+    expect(await store.labels.get('label-2')).toEqual(second);
+    expect(await store.labels.list()).toHaveLength(2);
+  });
+
+  it.each(['none', 'passphrase'] as const)('restores label drafts in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    await source.products.create(product);
+    const withWording: LabelDraftRecord = { ...labelDraft, additiveWording: [{
+      ingredientId: 'ing-1', additiveSourceId: 'source-1',
+      selection: { route: 'schedule7Class', schedule7ClassName: 'Preservative', substanceChoice: 'schedule8Name' },
+    }], packCopy: {
+      supplierName: 'Local Foods Ltd',
+      supplierAddress: '1 Market Road\nMelbourne VIC',
+      lotIdentification: 'Lot A17',
+      dateMarking: 'Best before 12 MAY 2027',
+      storageInstructions: 'Keep refrigerated.',
+      warningAdvisoryStatements: 'Keep chilled.',
+      precautionaryAllergenStatement: 'May contain peanuts.',
+      precautionaryAllergenBasis: 'Recorded cross-contact assessment on 2026-01-01.',
+    }, claims: [{
+      id: 'label-claim-1',
+      text: 'Low sugars',
+      sourceCandidateKey: '["product","product-1","name","0"]',
+      classification: 'nutrition_content',
+      classificationConfirmed: true,
+      supportedClaimId: 'claim.low-sugars',
+      nutrientAmount: { value: '1', unit: 'g' },
+      evidence: { reference: 'lab-1', sourceDate: '2026-11-10' },
+    }], claimCandidateDecisions: [{
+      candidateKey: '["product","product-1","name","0"]',
+      text: 'Low sugars',
+      location: 'Product name',
+      resolution: 'claim',
+    }], includeDailyIntake: true };
+    await source.labels.create(withWording);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'label test' });
+    const target = await openTestStore();
+    const passphrase = encryption === 'none' ? undefined : 'label test';
+    const inspection = await target.inspectBackup(backup, passphrase);
+    expect(inspection.backupCounts.labels).toBe(1);
+    await target.restoreBackup(backup, passphrase ? { passphrase } : {});
+    expect(await target.labels.get(labelDraft.id)).toEqual(withWording);
+  });
+
+  it('rejects malformed or duplicate label additive choices without changing saved labels', async () => {
+    const store = await openTestStore();
+    await store.products.create(product);
+    await store.labels.create(labelDraft);
+    const choice = { ingredientId: 'ing-1', additiveSourceId: 'source-1', selection: { route: 'unknown' as const } };
+    await expect(store.labels.update(labelDraft.id, {
+      name: labelDraft.name, layout: labelDraft.layout, dependencySignature: labelDraft.dependencySignature,
+      additiveWording: [choice, choice],
+    })).rejects.toThrow(/duplicate/);
+    const invalid: LabelDraftRecord = {
+      ...labelDraft, id: 'invalid', additiveWording: [{ ...choice, selection: { route: 'unknown' } }],
+    };
+    Reflect.set(invalid.additiveWording![0]!.selection, 'route', 'invalid');
+    await expect(store.labels.create(invalid)).rejects.toThrow(/malformed/);
+    await expect(store.labels.create({
+      ...labelDraft, id: 'overlong-pack-copy', packCopy: { supplierName: 'x'.repeat(301) },
+    })).rejects.toThrow(/supplierName/);
+    await expect(store.labels.create({
+      ...labelDraft, id: 'overlong-pal-basis', packCopy: { precautionaryAllergenBasis: 'x'.repeat(2001) },
+    })).rejects.toThrow(/precautionaryAllergenBasis/);
+    await expect(store.labels.create({
+      ...labelDraft, id: 'invalid-label-claims', claims: [{ id: 'claim', text: ' ' }],
+    })).rejects.toThrow(/Label claims/);
+    const invalidDailyIntake = { ...labelDraft, id: 'invalid-daily-intake' };
+    Reflect.set(invalidDailyIntake, 'includeDailyIntake', 'yes');
+    await expect(store.labels.create(invalidDailyIntake)).rejects.toThrow(/daily-intake choice/);
+    expect(await store.labels.get(labelDraft.id)).toEqual(labelDraft);
+  });
+
+  it.each([1, 2] as const)('inspects v%s backups without labels and requires confirmation before replacing drafts', async (version) => {
+    const source = await openTestStore();
+    await source.products.create(product);
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    envelope.formatVersion = version;
+    envelope.payload.formatVersion = version;
+    delete envelope.payload.labels;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(envelope.payload)));
+    envelope.sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const backup = JSON.stringify(envelope);
+    const target = await openTestStore();
+    await target.products.create(product);
+    await target.labels.create(labelDraft);
+    const inspection = await target.inspectBackup(backup);
+    expect(inspection).toMatchObject({ backupFormatVersion: version, backupCounts: { labels: 0 }, existingCounts: { labels: 1 }, requiresExplicitReplace: true });
+    await expect(target.restoreBackup(backup)).rejects.toBeInstanceOf(RestoreConflictError);
+    expect(await target.labels.get(labelDraft.id)).toEqual(labelDraft);
+    await target.restoreBackup(backup, { replaceExisting: true });
+    expect(await target.labels.list()).toEqual([]);
+  });
+
+  it('restores a label with a missing product without substituting another product', async () => {
+    const source = await openTestStore();
+    await source.products.create(product);
+    await source.labels.create(labelDraft);
+    await source.products.delete(product.id);
+    const backup = await source.exportBackup({ encryption: 'none' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup);
+    expect(await target.labels.get(labelDraft.id)).toEqual(labelDraft);
+    expect(await target.products.list()).toEqual([]);
+    await expect(target.labels.update(labelDraft.id, {
+      name: labelDraft.name, layout: labelDraft.layout, dependencySignature: labelDraft.dependencySignature,
+    })).rejects.toBeInstanceOf(RepositoryNotFoundError);
+  });
+
+  it('rejects invalid label data in a backup without changing the workspace', async () => {
+    const source = await openTestStore();
+    await source.products.create(product);
+    await source.labels.create(labelDraft);
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    envelope.payload.labels[0].layout.margins.leftMm = 100;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(envelope.payload)));
+    envelope.sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const target = await openTestStore();
+    await expect(target.restoreBackup(JSON.stringify(envelope))).rejects.toThrow();
+    expect(await target.labels.list()).toEqual([]);
+    expect(await target.products.list()).toEqual([]);
+  });
+});
 
 function emptyClassificationProfile(): ProductClassificationProfile {
   const unknownFact = () => ({ answer: 'unknown' as const, evidence: [] });
@@ -168,6 +330,291 @@ function approvedVersion(
 }
 
 describe('local draft repositories', () => {
+  it.each(['none', 'passphrase'] as const)('restores incomplete recipe lines from %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const incomplete: FormulationRecord = {
+      ...formulation, incompleteRecipeLines: {
+        unquantifiedLines: [{ id: 'unknown', kind: 'ingredient', ingredientId: 'other', unit: 'kg', additiveUse: 'unknown' }],
+        lineOrder: ['unknown', 'line-1'],
+      },
+    };
+    await source.formulations.create(incomplete);
+    const invalid = structuredClone(incomplete.incompleteRecipeLines!);
+    Reflect.set(invalid.unquantifiedLines[0]!, 'unit', 'L');
+    await expect(source.formulations.update(incomplete.id, { incompleteRecipeLines: invalid })).rejects.toBeInstanceOf(RecordValidationError);
+    await expect(source.formulations.update(incomplete.id, {
+      incompleteRecipeLines: { ...incomplete.incompleteRecipeLines!, lineOrder: ['line-1', 'line-1'] },
+    })).rejects.toBeInstanceOf(RecordValidationError);
+    await expect(source.formulations.update(incomplete.id, {
+      incompleteRecipeLines: {
+        unquantifiedLines: [{ id: 'unknown', kind: 'formulation', formulationId: incomplete.id }],
+        lineOrder: ['unknown', 'line-1'],
+      },
+    })).rejects.toBeInstanceOf(RepositoryCycleError);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
+    expect(await target.formulations.get(incomplete.id)).toEqual(incomplete);
+  });
+
+  it('rejects a restored cycle through an unknown recipe amount', async () => {
+    const source = await openTestStore();
+    await source.formulations.create({
+      ...formulation, incompleteRecipeLines: {
+        unquantifiedLines: [{ id: 'unknown', kind: 'ingredient', ingredientId: 'other' }],
+        lineOrder: ['line-1', 'unknown'],
+      },
+    });
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    envelope.payload.formulations[0].incompleteRecipeLines.unquantifiedLines[0] = {
+      id: 'unknown', kind: 'formulation', formulationId: formulation.id,
+    };
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(envelope.payload)));
+    envelope.sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const target = await openTestStore();
+    await expect(target.restoreBackup(JSON.stringify(envelope))).rejects.toThrow(/circular/);
+    expect(await target.formulations.list()).toEqual([]);
+  });
+
+  it('reports the full compound cycle and rolls back edits and restores', async () => {
+    const source = await openTestStore();
+    const first = { ...formulation, id: 'a', name: 'Cake' };
+    const second: FormulationRecord = {
+      ...formulation, id: 'b', name: 'Sauce recipe', lines: [],
+      incompleteRecipeLines: {
+        unquantifiedLines: [{ id: 'nested', kind: 'formulation', formulationId: first.id }],
+        lineOrder: ['nested'],
+      },
+    };
+    const compound: IngredientRecord = {
+      ...ingredient, id: 'b', name: 'Sauce', kind: 'compound', compoundFormulationId: second.id,
+    };
+    await source.formulations.create(first);
+    await source.formulations.create(second);
+    await source.ingredients.create(compound);
+    const incompleteRecipeLines = {
+      unquantifiedLines: [{ id: 'blend', kind: 'ingredient' as const, ingredientId: compound.id }],
+      lineOrder: ['line-1', 'blend'],
+    };
+    const path = 'Recipe "Cake" -> Ingredient "Sauce" -> Recipe "Sauce recipe" -> Recipe "Cake"';
+    await expect(source.formulations.update(first.id, { incompleteRecipeLines }))
+      .rejects.toThrow(path);
+    expect(await source.formulations.get(first.id)).toEqual(first);
+
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    envelope.payload.formulations.find((record: FormulationRecord) => record.id === first.id).incompleteRecipeLines = incompleteRecipeLines;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(envelope.payload)));
+    envelope.sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const target = await openTestStore();
+    await target.ingredients.create(ingredient);
+    await expect(target.restoreBackup(JSON.stringify(envelope))).rejects.toThrow(path);
+    expect(await target.ingredients.list()).toEqual([ingredient]);
+    expect(await target.formulations.list()).toEqual([]);
+  });
+  it.each(['none', 'passphrase'] as const)('saves per-use additive details through %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const direct: IngredientRecord = {
+      ...ingredient, id: 'direct', name: 'Example additive', directAdditiveSourceId: 'direct-source',
+      additiveSources: [{ id: 'direct-source', additiveName: 'Example additive', sourceStatus: 'unknown' }],
+    };
+    await source.ingredients.create(direct);
+    const record: FormulationRecord = {
+      ...formulation,
+      lines: [{ id: 'one', kind: 'ingredient', ingredientId: direct.id, quantity: { value: '5', unit: 'g' }, additiveUse: 'added' }],
+      supplierComposition: {
+        coverage: 'partial',
+        unquantifiedComponents: [{ id: 'two', kind: 'ingredient', ingredientId: direct.id, additiveUse: 'processingAid' }],
+      },
+    };
+    await source.formulations.create(record);
+    const invalid = structuredClone(record);
+    Reflect.set(invalid.lines[0]!, 'additiveUse', 'carriedOver');
+    await expect(source.formulations.update(record.id, { lines: invalid.lines })).rejects.toBeInstanceOf(RecordValidationError);
+    const invalidComponent = structuredClone(record.supplierComposition!);
+    Reflect.set(invalidComponent.unquantifiedComponents![0]!, 'additiveUse', 'carriedOver');
+    await expect(source.formulations.update(record.id, { supplierComposition: invalidComponent })).rejects.toBeInstanceOf(RecordValidationError);
+    const wrongKind = { id: 'nested', kind: 'formulation' as const, formulationId: 'other', quantity: { value: '1', unit: 'g' as const }, additiveUse: 'added' };
+    await expect(source.formulations.update(record.id, { lines: [wrongKind] })).rejects.toBeInstanceOf(RecordValidationError);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'test-passphrase' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'test-passphrase' });
+    expect(await target.formulations.get(record.id)).toEqual(record);
+  });
+  it.each(['none', 'passphrase'] as const)('validates and round-trips processing details in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const processed: FormulationRecord = {
+      ...formulation,
+      processMassProfile: {
+        changes: [{ id: 'loss', kind: 'loss', mass: { value: '20', unit: 'g' } }],
+        declaredFinalMass: { value: '80', unit: 'g' },
+      },
+    };
+    await source.formulations.create(processed);
+    await expect(source.formulations.update(processed.id, {
+      processMassProfile: { changes: [{ id: 'invalid', kind: 'loss', mass: { value: '0', unit: 'g' } }] },
+    })).rejects.toBeInstanceOf(RecordValidationError);
+    const incomplete: FormulationRecord = {
+      ...formulation, id: 'incomplete-process',
+      processMassProfile: {
+        entryMethod: 'changes', complete: false,
+        changes: [{ id: 'unknown-loss', kind: 'loss', description: 'Baking', material: 'water' }],
+        declaredFinalMass: { value: '80', unit: 'g' },
+      },
+    };
+    await source.formulations.create(incomplete);
+    await expect(source.formulations.update(incomplete.id, {
+      processMassProfile: { ...incomplete.processMassProfile!, complete: true },
+    })).rejects.toBeInstanceOf(RecordValidationError);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'test-passphrase' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'test-passphrase' });
+    expect(await target.formulations.get(processed.id)).toEqual(processed);
+    expect(await target.formulations.get(incomplete.id)).toEqual(incomplete);
+  });
+  it.each(['none', 'passphrase'] as const)('validates and restores finished nutrition in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const record: FormulationRecord = {
+      ...formulation, finishedNutrition: {
+        selected: true, recipeSnapshot: 'recipe snapshot',
+        energyPer100g: { value: '200', sourceId: 'Lab', sourceDate: '2026-01-01', evidenceType: 'analysis' },
+        nutrientProfile: { ingredientId: formulation.id, values: {
+          vitaminA: { value: '5', unit: 'ug/100g', sourceId: 'Lab', sourceDate: '2026-01-01', evidenceType: 'analysis', expression: 'retinolEquivalents' },
+        } },
+      },
+    };
+    await source.formulations.create(record);
+    await expect(source.formulations.update(record.id, {
+      finishedNutrition: { ...record.finishedNutrition!, nutrientProfile: { ingredientId: 'wrong', values: {} } },
+    })).rejects.toBeInstanceOf(RecordValidationError);
+    await expect(source.formulations.update(record.id, {
+      finishedNutrition: { ...record.finishedNutrition!, energyPer100g: { value: '-1', sourceId: 'Lab', sourceDate: '2026-01-01' } },
+    })).rejects.toBeInstanceOf(RecordValidationError);
+    await source.approvedVersions.create(approvedVersion(record));
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'test-passphrase' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'test-passphrase' });
+    expect(await target.formulations.get(record.id)).toEqual(record);
+    expect((await target.approvedVersions.get(approvedVersion(record).id))?.snapshot).toEqual(record);
+  });
+  it.each(['none', 'passphrase'] as const)('validates and restores nutrient retention in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const record: FormulationRecord = {
+      ...formulation, nutrientRetention: { selected: true, recipeSnapshot: 'recipe snapshot', factors: {
+        protein: { percentage: '80', sourceId: 'Evidence', sourceDate: '2026-01-01' },
+        vitaminC: { percentage: '', sourceId: '', sourceDate: '' },
+      } },
+    };
+    await source.formulations.create(record);
+    await expect(source.formulations.update(record.id, { nutrientRetention: {
+      ...record.nutrientRetention!, factors: { protein: { percentage: '100.1', sourceId: 'Evidence', sourceDate: '2026-01-01' } },
+    } })).rejects.toBeInstanceOf(RecordValidationError);
+    await expect(source.formulations.update(record.id, { nutrientRetention: {
+      ...record.nutrientRetention!, factors: { protein: { percentage: '100.00000000000000001', sourceId: 'Evidence', sourceDate: '2026-01-01' } },
+    } })).rejects.toBeInstanceOf(RecordValidationError);
+    await expect(source.formulations.update(record.id, { nutrientRetention: {
+      ...record.nutrientRetention!, factors: { protein: { percentage: '50', sourceId: 'Evidence', sourceDate: '2026-02-31' } },
+    } })).rejects.toBeInstanceOf(RecordValidationError);
+    await expect(source.formulations.update(record.id, { finishedNutrition: { selected: true } }))
+      .rejects.toBeInstanceOf(RecordValidationError);
+    await source.approvedVersions.create(approvedVersion(record));
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'test-passphrase' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'test-passphrase' });
+    expect(await target.formulations.get(record.id)).toEqual(record);
+    expect((await target.approvedVersions.get(approvedVersion(record).id))?.snapshot).toEqual(record);
+  });
+  it.each(['none', 'passphrase'] as const)('validates and restores preparation details in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const record: ProductRecord = { ...product, preparation: {
+      enabled: true, kind: 'reconstituted', directions: 'Mix with water',
+      productAmount: { value: '25', unit: 'g' }, addedIngredientId: ingredient.id,
+      addedAmount: { value: '75', unit: 'mL' }, preparedServing: { value: '100', unit: 'g' },
+      preparedDensity: { gramsPerMillilitre: '1', evidenceReference: '', sourceDate: '' },
+      mixingConfirmed: true, confirmationSnapshot: 'preparation snapshot',
+    } };
+    await source.products.create(record);
+    await expect(source.products.update(record.id, { preparation: {
+      ...record.preparation!, addedAmount: { value: '0', unit: 'g' },
+    } })).rejects.toBeInstanceOf(RecordValidationError);
+    await expect(source.products.update(record.id, { preparation: {
+      ...record.preparation!, preparedDensity: { gramsPerMillilitre: '1', evidenceReference: '', sourceDate: '2026-02-31' },
+    } })).rejects.toBeInstanceOf(RecordValidationError);
+    await source.approvedVersions.create(approvedVersion(record));
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'test-passphrase' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'test-passphrase' });
+    expect(await target.products.get(record.id)).toEqual(record);
+    expect((await target.approvedVersions.get(approvedVersion(record).id))?.snapshot).toEqual(record);
+  });
+  it.each(['none', 'passphrase'] as const)('validates and restores drained nutrition in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const record: ProductRecord = { ...product, draining: {
+      enabled: true, directions: 'Drain before eating.', servingGrams: '40',
+      sourceType: 'analysis', sourceReference: 'Drained analysis', sourceDate: '2026-01-01',
+      values: { protein: '12', sodium: '0' }, confirmationSnapshot: 'drained snapshot',
+    } };
+    await source.products.create(record);
+    await expect(source.products.update(record.id, { draining: {
+      ...record.draining!, values: { protein: '-1' },
+    } })).rejects.toBeInstanceOf(RecordValidationError);
+    await expect(source.products.update(record.id, { draining: {
+      ...record.draining!, servingGrams: '0',
+    } })).rejects.toBeInstanceOf(RecordValidationError);
+    await source.approvedVersions.create(approvedVersion(record));
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'test-passphrase' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'test-passphrase' });
+    expect(await target.products.get(record.id)).toEqual(record);
+    expect((await target.approvedVersions.get(approvedVersion(record).id))?.snapshot).toEqual(record);
+  });
+  it.each(['none', 'passphrase'] as const)('validates and restores consumer directions in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const record: ProductRecord = { ...product, consumerDirections: 'present', otherConsumerDirections: true,
+      otherConsumerDirectionsText: 'Warm before serving.' };
+    await source.products.create(record);
+    await expect(source.products.update(record.id, { consumerDirections: 'invalid' as NonNullable<ProductRecord['consumerDirections']> }))
+      .rejects.toBeInstanceOf(RecordValidationError);
+    await expect(source.products.update(record.id, { otherConsumerDirectionsText: 'x'.repeat(1001) }))
+      .rejects.toBeInstanceOf(RecordValidationError);
+    await source.approvedVersions.create(approvedVersion(record));
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'test-passphrase' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'test-passphrase' });
+    expect(await target.products.get(record.id)).toEqual(record);
+    expect((await target.approvedVersions.get(approvedVersion(record).id))?.snapshot).toEqual(record);
+  });
+  it('rejects consumer directions disguised as a version 1 backup', async () => {
+    const source = await openTestStore();
+    await source.products.create({ ...product, consumerDirections: 'none' });
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    envelope.formatVersion = 1;
+    envelope.payload.formatVersion = 1;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(envelope.payload)));
+    envelope.sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const target = await openTestStore();
+    await expect(target.restoreBackup(JSON.stringify(envelope))).rejects.toThrow(/Version 1 backups cannot contain preparation or draining/);
+    expect(await target.products.list()).toEqual([]);
+  });
+  it('rejects drained evidence disguised as a version 1 backup', async () => {
+    const source = await openTestStore();
+    await source.products.create({ ...product, draining: { enabled: true, values: { protein: '12' } } });
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    envelope.formatVersion = 1;
+    envelope.payload.formatVersion = 1;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(envelope.payload)));
+    envelope.sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const target = await openTestStore();
+    await expect(target.restoreBackup(JSON.stringify(envelope))).rejects.toThrow(/Version 1 backups cannot contain preparation or draining/);
+    expect(await target.products.list()).toEqual([]);
+  });
   it('creates, reads, lists, updates and deletes ingredient, formulation and product records', async () => {
     const store = await openTestStore();
     await store.ingredients.create(ingredient);
@@ -361,7 +808,6 @@ describe('local draft repositories', () => {
       { confirmedCohorts: [], addedSugarsPer100g: '-1' },
       { confirmedCohorts: [], addedSugarsPer100g: 'abc' },
       { confirmedCohorts: [], outputUnit: 'g/kg' },
-      { confirmedCohorts: [], evidence: { reference: '', sourceDate: '2026-11-10' } },
       { confirmedCohorts: [], evidence: { reference: 'x', sourceDate: 'tomorrow' } },
       { confirmedCohorts: [], finalDensity: { gramsPerMillilitre: '0', evidenceReference: 'x', sourceDate: '2026-11-10' } },
       { confirmedCohorts: [], gmpConfirmed: 'yes' },
@@ -442,7 +888,6 @@ describe('local draft repositories', () => {
       [{ id: 'a', text: 'x', nutrientAmount: { value: '-1', unit: 'g' } }],
       [{ id: 'a', text: 'x', nutrientAmount: { value: '', unit: 'g' } }],
       [{ id: 'a', text: 'x', nutrientAmount: { value: '1', unit: '' } }],
-      [{ id: 'a', text: 'x', evidence: { reference: '', sourceDate: '2026-11-10' } }],
       [{ id: 'a', text: 'x', evidence: { reference: 'r', sourceDate: 'yesterday' } }],
     ];
     for (const claims of badClaims) {
@@ -482,7 +927,7 @@ describe('local draft repositories', () => {
       { nutritionFoodForm: 'unknown' },
       { nutritionRecipeSignature: '' },
       { nutritionDensity: { gramsPerMillilitre: '0', evidenceReference: 'test', sourceDate: '2026-01-01' } },
-      { nutritionDensity: { gramsPerMillilitre: '1', evidenceReference: '', sourceDate: '2026-01-01' } },
+      { nutritionDensity: { gramsPerMillilitre: '1', evidenceReference: '', sourceDate: '2026-02-31' } },
       { nutritionDensity: { gramsPerMillilitre: '1', evidenceReference: 'test', sourceDate: 'yesterday' } },
     ];
     for (const value of bad) {
@@ -490,6 +935,9 @@ describe('local draft repositories', () => {
         RecordValidationError,
       );
     }
+    const unsourcedDensity = { gramsPerMillilitre: '1', evidenceReference: '', sourceDate: '' };
+    await store.products.update(product.id, { packDetails: { nutritionDensity: unsourcedDensity } });
+    expect((await store.products.get(product.id))?.packDetails?.nutritionDensity).toEqual(unsourcedDensity);
     await expect(store.products.update(product.id, { builderProductType: 'unknown' } as never))
       .rejects.toBeInstanceOf(RecordValidationError);
   });
@@ -638,8 +1086,8 @@ describe('schema migrations and recovery points', () => {
     const store = await openLocalFoodStore({ name, usageMarker: marker });
     stores.push({ name, close: store.close });
     const recoveryPoints = await store.recoveryPoints.list();
-    expect(recoveryPoints).toHaveLength(1);
-    expect(recoveryPoints[0]?.records.ingredients).toEqual([ingredient]);
+    expect(recoveryPoints.find((point) => point.id === 'migration-1-2')?.records.ingredients).toEqual([ingredient]);
+    expect(recoveryPoints.find((point) => point.id === 'migration-3-4')?.records.reviewDecisions).toHaveLength(1);
     expect((await store.approvedVersions.get('ingredient:ing-1:1'))?.reviewDecision.decision)
       .toBe('legacy_unverified');
     expect(marker.isUsed()).toBe(true);
@@ -684,6 +1132,97 @@ describe('schema migrations and recovery points', () => {
 });
 
 describe('versioned workspace backups', () => {
+  it.each(['none', 'passphrase'] as const)('preserves unsourced answers and optional source details in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const profile = emptyClassificationProfile();
+    const savedProduct: ProductRecord = {
+      ...product,
+      classificationProfile: {
+        ...profile,
+        formulatedCaffeinatedBeverage: {
+          ...profile.formulatedCaffeinatedBeverage,
+          flavoured: { answer: 'yes', evidence: [], previousEvidence: [classificationEvidence('old-answer')] },
+          nonAlcoholic: { answer: 'conflicting', evidence: [] },
+          containsCaffeine: { answer: 'yes', evidence: [{ ...classificationEvidence('existing'), sourceDate: '' }] },
+        },
+      },
+      additiveNameInputs: { confirmedCohorts: [], evidence: { reference: 'Calculation', sourceDate: '' } },
+      claims: [{ id: 'claim-1', text: 'Low sugars', evidence: { reference: '', sourceDate: '2026-11-10' } }],
+    };
+    const savedFormulation: FormulationRecord = {
+      ...formulation,
+      supplierComposition: { coverage: 'complete', specification: { reference: 'Supplier', sourceDate: '' }, unquantifiedComponents: [] },
+    };
+    await source.ingredients.create(ingredient);
+    await source.formulations.create(savedFormulation);
+    await source.products.create(savedProduct);
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
+    expect(await target.products.get(product.id)).toEqual(savedProduct);
+    expect(await target.formulations.get(formulation.id)).toEqual(savedFormulation);
+    await expect(source.products.update(product.id, {
+      additiveNameInputs: { confirmedCohorts: [], evidence: { reference: '', sourceDate: '2026-02-30' } },
+    })).rejects.toBeInstanceOf(RecordValidationError);
+  });
+
+  it.each(['none', 'passphrase'] as const)('round-trips expanded nutrient evidence and approved snapshots in %s backups', async (encryption) => {
+    const source = await openTestStore();
+    const item: IngredientRecord = {
+      ...ingredient,
+      nutrientProfile: { ingredientId: ingredient.id, values: {
+        vitaminA: { value: '0', unit: 'ug/100g', sourceId: 'Lab', sourceDate: '2026-01-01', evidenceType: 'analysis', expression: 'retinolEquivalents', method: 'Analysis' },
+        calcium: { value: '0.01', unit: 'g/100g', sourceId: '', sourceDate: '', evidenceType: 'user' },
+      } },
+      additionalNutritionPer100mL: {
+        vitaminB12: { value: '0.25', unit: 'ug/100mL', sourceId: 'Supplier', sourceDate: '2026-01-01', evidenceType: 'supplier', expression: 'cyanocobalamin' },
+      },
+    };
+    await source.ingredients.create(item);
+    await source.approvedVersions.create(approvedVersion(item));
+    const backup = await source.exportBackup(encryption === 'none'
+      ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
+    expect(await target.ingredients.get(item.id)).toEqual(item);
+    expect((await target.approvedVersions.get(approvedVersion(item).id))?.snapshot).toEqual(item);
+    expect((await target.ingredients.get(item.id))?.nutrientProfile?.values.iodine).toBeUndefined();
+  });
+
+  it('rejects invalid nutrient identities, quantities, units and sources on save', async () => {
+    const store = await openTestStore();
+    const evidence = { value: '1', unit: 'ug/100g', sourceId: '', sourceDate: '', evidenceType: 'user' };
+    for (const [key, value] of [
+      ['unknownNutrient', evidence],
+      ['vitaminA', { ...evidence, value: '-1' }],
+      ['vitaminA', { ...evidence, unit: 'ug/100mL' }],
+      ['vitaminA', { ...evidence, sourceDate: 'tomorrow' }],
+      ['vitaminA', { ...evidence, expression: '' }],
+    ]) {
+      const invalid = JSON.parse(JSON.stringify({ ...ingredient, nutrientProfile: {
+        ingredientId: ingredient.id, values: { [key as string]: value },
+      } }));
+      await expect(store.ingredients.create(invalid)).rejects.toThrow(/Nutrient profile needs/);
+    }
+  });
+
+  it('rejects an invalid expanded nutrient in a backup without restoring partial data', async () => {
+    const source = await openTestStore();
+    await source.ingredients.create({
+      ...ingredient,
+      nutrientProfile: { ingredientId: ingredient.id, values: {
+        vitaminA: { value: '1', unit: 'ug/100g', sourceId: '', sourceDate: '', evidenceType: 'user' },
+      } },
+    });
+    const envelope = JSON.parse(await source.exportBackup({ encryption: 'none' }));
+    envelope.payload.ingredients[0].nutrientProfile.values.vitaminA.unit = 'ug/100mL';
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(envelope.payload)));
+    envelope.sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const target = await openTestStore();
+    await expect(target.restoreBackup(JSON.stringify(envelope))).rejects.toThrow(/Nutrient profile needs/);
+    expect(await target.ingredients.list()).toEqual([]);
+  });
   it.each(['none', 'passphrase'] as const)('round-trips incomplete sources in %s backups', async (encryption) => {
     const source = await openTestStore();
     const record: IngredientRecord = {
@@ -1030,6 +1569,7 @@ describe('versioned workspace backups', () => {
     await previous.ingredients.create(ingredient);
     await previous.formulations.create(formulation);
     await previous.products.create(product);
+    await previous.labels.create(labelDraft);
     await previous.approvedVersions.approveDraft('ingredient', ingredient.id, {
       reviewDecisionId: 'copy-decision', reviewerId: 'reviewer', rationale: 'Fixture review', results: [reviewResult],
     });
@@ -1042,7 +1582,8 @@ describe('versioned workspace backups', () => {
     await raw.table('recoveryPoints').add(recovery);
     raw.close();
     const counts = await current.copyPreviousWorkspace();
-    expect(counts).toMatchObject({ ingredients: 1, formulations: 1, products: 1, approvedVersions: 1, reviewDecisions: 1 });
+    expect(counts).toMatchObject({ ingredients: 1, formulations: 1, products: 1, labels: 1, approvedVersions: 1, reviewDecisions: 1 });
+    expect(await current.labels.get(labelDraft.id)).toEqual(labelDraft);
     expect(await current.ingredients.get(ingredient.id)).toEqual(ingredient);
     expect(await current.approvedVersions.list('ingredient', ingredient.id)).toEqual(
       await previous.approvedVersions.list('ingredient', ingredient.id),
@@ -1104,10 +1645,39 @@ describe('versioned workspace backups', () => {
     await source.ingredients.create(item);
     const backup = await source.exportBackup(encryption === 'none'
       ? { encryption: 'none' } : { encryption: 'passphrase', passphrase: 'secret' });
-    expect(JSON.parse(backup).formatVersion).toBe(2);
+    expect(JSON.parse(backup).formatVersion).toBe(3);
     const target = await openTestStore();
     await target.restoreBackup(backup, encryption === 'none' ? {} : { passphrase: 'secret' });
     expect(await target.ingredients.get(item.id)).toEqual(item);
+  });
+
+  it('round-trips explicitly recorded caffeine data without source references', async () => {
+    const source = await openTestStore();
+    const item: IngredientRecord = {
+      ...ingredient,
+      caffeineEvidence: {
+        status: 'present',
+        amount: '0.5',
+        unit: 'mg/100mL',
+        specification: { reference: '', sourceDate: '' },
+      },
+    };
+    const conflicting: IngredientRecord = {
+      ...ingredient,
+      id: 'ingredient-conflicting-caffeine',
+      name: 'Conflicting caffeine',
+      caffeineEvidence: {
+        status: 'conflicting',
+        specification: { reference: '', sourceDate: '' },
+      },
+    };
+    await source.ingredients.create(item);
+    await source.ingredients.create(conflicting);
+    const backup = await source.exportBackup({ encryption: 'none' });
+    const target = await openTestStore();
+    await target.restoreBackup(backup);
+    expect(await target.ingredients.get(item.id)).toEqual(item);
+    expect(await target.ingredients.get(conflicting.id)).toEqual(conflicting);
   });
 
   it('rejects invalid caffeine data rather than treating it as absent', async () => {
@@ -1117,6 +1687,13 @@ describe('versioned workspace backups', () => {
       caffeineEvidence: {
         status: 'present', amount: '0', unit: 'g/100g',
         specification: { reference: 'SPEC', sourceDate: '2026-01-01' },
+      },
+    })).rejects.toThrow(/Caffeine evidence/);
+    await expect(store.ingredients.create({
+      ...ingredient,
+      caffeineEvidence: {
+        status: 'absent',
+        specification: { reference: '', sourceDate: '2026-02-30' },
       },
     })).rejects.toThrow(/Caffeine evidence/);
   });

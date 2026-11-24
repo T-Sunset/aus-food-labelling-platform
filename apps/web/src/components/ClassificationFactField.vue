@@ -20,20 +20,14 @@ const emit = defineEmits<{
 
 const answerOptions: { value: ClassificationAnswer; label: string }[] = [
   { value: 'unknown', label: 'Unknown / not assessed' },
-  { value: 'yes', label: 'Yes, supported by evidence' },
-  { value: 'no', label: 'No, supported by evidence' },
+  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: 'No' },
   { value: 'conflicting', label: 'Evidence conflicts' },
 ];
 
 const evidenceRequirement = computed(() => {
-  if (props.modelValue.answer === 'conflicting' && props.modelValue.evidence.length < 2) {
-    return 'Add at least two source references to record a conflict.';
-  }
-  if (
-    (props.modelValue.answer === 'yes' || props.modelValue.answer === 'no')
-    && props.modelValue.evidence.length === 0
-  ) {
-    return 'A yes or no answer needs at least one source reference.';
+  if (props.modelValue.answer === 'conflicting') {
+    return 'Resolve the conflicting information before relying on this answer.';
   }
   return '';
 });
@@ -47,9 +41,15 @@ function updateAnswer(event: Event): void {
   if (answer === undefined) {
     return;
   }
+  const changed = props.modelValue.answer !== answer.value;
+  const previousEvidence = changed
+    ? [...(props.modelValue.previousEvidence ?? []), ...props.modelValue.evidence]
+    : props.modelValue.previousEvidence;
   emit('update:modelValue', {
     ...props.modelValue,
     answer: answer.value,
+    evidence: changed ? [] : props.modelValue.evidence,
+    ...(previousEvidence?.length ? { previousEvidence } : {}),
   });
 }
 </script>
@@ -78,11 +78,18 @@ function updateAnswer(event: Event): void {
     <ClassificationEvidenceList
       :label="label"
       :description="modelValue.answer === 'conflicting'
-        ? 'Add each source that supports the conflicting accounts.'
-        : 'Record the document reference and date. The document itself stays in your local records.'"
+        ? 'You can optionally add sources for the conflicting accounts.'
+        : 'Optionally record a document reference and date. The document itself stays in your local records.'"
       :model-value="modelValue.evidence"
       @update:model-value="emit('update:modelValue', { ...modelValue, evidence: $event })"
     />
+    <p
+      v-if="modelValue.previousEvidence?.length"
+      class="classification-description"
+    >
+      Earlier source details (not attached to this answer):
+      {{ modelValue.previousEvidence.map((item) => [item.reference, item.sourceDate].filter(Boolean).join(' - ')).join('; ') }}
+    </p>
     <p
       v-if="evidenceRequirement"
       class="classification-error"

@@ -21,6 +21,17 @@ export function normalizeDecimal(value: string): string {
   return parseDecimal(value).toString();
 }
 
+export function plainDecimal(value: string): string {
+  return parseDecimal(value).toFixed();
+}
+
+export function roundDecimalHalfUp(value: string, decimalPlaces = 0): string {
+  if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 100) {
+    throw new RangeError('decimalPlaces must be an integer from 0 to 100');
+  }
+  return parseDecimal(value).round(decimalPlaces, EngineBig.roundHalfUp).toFixed(decimalPlaces);
+}
+
 export function isNegativeDecimal(value: string): boolean {
   return parseDecimal(value).lt('0');
 }

@@ -25,8 +25,9 @@ import type {
   PrescribedNameCandidateValue,
   ProcessMassBalance,
 } from '@aus-food/domain';
-import type { FormulationRecord, IngredientRecord, ProductRecord } from '@aus-food/storage';
-import { additiveSourcesInRecipe } from './ingredient-additives';
+import type { FormulationRecord, IngredientRecord, LabelAdditiveWording, ProductRecord } from '@aus-food/storage';
+import { additiveIngredientsInRecipe, additiveSourcesInRecipe, expandAdditiveIngredients } from './ingredient-additives';
+import { labelAdditiveSelection } from './label-additive-wording';
 import {
   nameRuleTrace,
   nameRules,
@@ -64,7 +65,7 @@ export interface AdditiveNameReport {
 // These evaluators exist in the engine but have no entry fields in the workspace yet.
 export const NOT_WIRED_LIMITATIONS: readonly string[] = [
   'Same-purpose mixture, aggregate colour, carry-over and processing-aid checks are not run here. Treat them as REVIEW REQUIRED.',
-  'Direct additive ingredients are treated as added; the recipe cannot yet record whether an ingredient was used as a processing aid or carried over.',
+  'Direct additive ingredients use their recorded recipe use where supplied; otherwise they are normally treated as added. Carry-over and processing-aid eligibility are not assessed.',
   'Concentrations are calculated for a 100 g ingoing formulation and use the declared figures only; nothing is assumed.',
 ];
 
@@ -86,29 +87,38 @@ export function buildAdditiveNameReport(
   formulations: readonly FormulationRecord[],
   ingredients: readonly IngredientRecord[],
   illustrative = false,
+  additiveWording: readonly LabelAdditiveWording[] = [],
 ): AdditiveNameReport {
   const inputs = product.additiveNameInputs;
-  const base = { declarations: [], additives: [], uncodedAdditives: [], limitations: NOT_WIRED_LIMITATIONS } as const;
-  let expanded;
+  const inspection = additiveIngredientsInRecipe(product.formulationId, formulations, ingredients);
+  let expanded: ReturnType<typeof expandFormulation> = [];
+  let errorMessage: string | undefined;
   try {
     expanded = expandFormulation(product.formulationId, { value: '100', unit: 'g' }, formulations);
   } catch (error) {
-    return { ...base, error: error instanceof Error ? error.message : 'The formulation could not be expanded.' };
+    errorMessage = error instanceof Error ? error.message : 'The formulation could not be expanded.';
+    const messages = inspection.issues.get('FORMULATION_AMOUNTS_MISSING') ?? new Set<string>();
+    messages.add(errorMessage);
+    inspection.issues.set('FORMULATION_AMOUNTS_MISSING', messages);
   }
 
   const ingredientById = new Map(ingredients.map((item) => [item.id, item]));
-  const hasCompoundIngredients = expanded.some((item) => ingredientById.get(item.ingredientId)?.kind === 'compound');
-  const limitations = hasCompoundIngredients
-    ? [...NOT_WIRED_LIMITATIONS, 'Additives inside linked compound ingredients are not included in this report. Concentrations require review and may be incomplete.']
-    : NOT_WIRED_LIMITATIONS;
+  const invalidUse = inspection.issues.get('SOURCE_IDENTITY_MISSING');
+  if (invalidUse) errorMessage = [...invalidUse].join(' ');
+  const limitations = [...NOT_WIRED_LIMITATIONS, ...[...inspection.issues.values()].flatMap((messages) => [...messages])];
+  if (inspection.hasProcessChanges) {
+    limitations.push('A recipe has recorded processing details. Their effect on additive concentrations is not yet calculated and needs review.');
+  }
   const sourcesByIngredient = new Map<string, readonly IngredientAdditiveSource[]>(
     ingredients.map((item) => [item.id, additiveSourcesInRecipe(item)]),
   );
-  const traced = traceAdditiveSources(expanded, sourcesByIngredient);
+  const directSourceIdByIngredient = new Map(ingredients.flatMap((item) =>
+    item.directAdditiveSourceId ? [[item.id, item.directAdditiveSourceId] as const] : []));
+  const traced = traceAdditiveSources(inspection.references, sourcesByIngredient, directSourceIdByIngredient);
   const nameOf = (id: string): string => ingredientById.get(id)?.name ?? id;
 
   const declarations = traced.map((item) => {
-    const selection = item.source.declarationSelection;
+    const selection = labelAdditiveSelection(item.ingredientId, item.source, additiveWording);
     return {
       ingredientName: nameOf(item.ingredientId),
       additiveName: item.source.additiveName,
@@ -131,8 +141,10 @@ export function buildAdditiveNameReport(
   const formulation = formulations.find((item) => item.id === product.formulationId);
   const ingoing = { value: '100', unit: 'g' } as const;
   let processBalance: ProcessMassBalance;
-  if (formulation?.processMassProfile) {
-    processBalance = calculateProcessMassBalance(ingoing, formulation.processMassProfile);
+  if (inspection.hasProcessChanges) {
+    processBalance = { status: 'review_required', reason: 'PROCESSING_EFFECTS_UNSUPPORTED', ingoingMass: ingoing };
+  } else if (formulation?.processMassProfile) {
+    processBalance = calculateProcessMassBalance(ingoing, { changes: [] });
   } else if (inputs?.noProcessMassChangeConfirmed) {
     processBalance = calculateProcessMassBalance(ingoing, { changes: [] });
   } else {
@@ -140,31 +152,30 @@ export function buildAdditiveNameReport(
   }
 
   const evidence = inputs?.evidence;
+  const additiveIngredients = inspection.issues.size === 0
+    ? expandAdditiveIngredients(product.formulationId, formulations, ingredients) : [];
   const additives = [...groupByCode(traced)].map(([codeNumber, group]): AdditiveCheck => {
-    const calculated = calculateAdditiveFinalConcentration({
+    const concentration: AdditiveFinalConcentration = inspection.issues.size > 0
+      ? {
+          status: 'review_required',
+          reasons: [...inspection.issues.keys(), ...(inspection.hasProcessChanges ? ['PROCESSING_EFFECTS_UNSUPPORTED' as const] : [])],
+          detail: [
+            ...[...inspection.issues.values()].flatMap((messages) => [...messages]),
+            ...(inspection.hasProcessChanges ? ['The effect of the recorded processing change on additives needs review.'] : []),
+          ],
+        }
+      : calculateAdditiveFinalConcentration({
       additiveCodeNumber: codeNumber,
       foodState,
       outputUnit: inputs?.outputUnit ?? 'mg/kg',
-      ingredients: expanded,
+      ingredients: additiveIngredients,
       sourcesByIngredient,
+      directSourceIdByIngredient,
       processBalance,
       ingredientDensities: new Map(ingredients.flatMap((item) =>
         item.ingredientDensity ? [[item.id, item.ingredientDensity] as const] : [])),
       finalDensity: inputs?.finalDensity,
     });
-    const concentration: AdditiveFinalConcentration = hasCompoundIngredients
-      ? {
-          status: 'review_required',
-          reasons: [
-            ...(calculated.status === 'review_required' ? calculated.reasons : []),
-            'COMPOUND_ADDITIVES_NOT_PROPAGATED',
-          ],
-          detail: [
-            ...(calculated.status === 'review_required' ? calculated.detail : []),
-            'Linked compound ingredient additives are not included in this calculation.',
-          ],
-        }
-      : calculated;
     const purposes = [...new Set(group.flatMap((item) => item.source.technologicalPurposes ?? []))];
     const statuses = [...new Set(group.map((item) => item.source.sourceStatus))];
     const permissionInput: AdditivePermissionEvaluationInput = {
@@ -179,8 +190,6 @@ export function buildAdditiveNameReport(
       finalConcentration: concentration.status === 'calculated'
         ? { value: concentration.value, unit: concentration.unit, calculatedAs: concentration.calculatedAs }
         : undefined,
-      concentrationProvenanceComplete: concentration.status === 'calculated'
-        ? concentration.provenanceWarnings.length === 0 : undefined,
       evidence,
       sourcePath: [product.id],
     };
@@ -215,14 +224,14 @@ export function buildAdditiveNameReport(
   const sweetened = evaluateInfantSweetenedWord(sweetenedInput);
 
   return {
+    ...(errorMessage ? { error: errorMessage } : {}),
     declarations,
     additives,
     uncodedAdditives: traced
       .filter((item) => !item.source.codeNumber?.trim() && item.source.declarationSelection?.route !== 'addedCaffeine')
       .map((item) => item.source.additiveName),
-    names,
-    sweetened,
-    ...(illustrative ? { sweetenedPreview: illustrateInfantSweetenedWord(sweetened, sweetenedInput) } : {}),
+    ...(!errorMessage ? { names, sweetened } : {}),
+    ...(illustrative && !errorMessage ? { sweetenedPreview: illustrateInfantSweetenedWord(sweetened, sweetenedInput) } : {}),
     limitations,
   };
 }

@@ -13,7 +13,6 @@ test('workspace screens have no WCAG 2.1 A/AA automated accessibility violations
     'Ingredients',
     'Formulations',
     'Products',
-    'Review & trace',
     'Labels',
     'Backup & restore',
   ]) {
@@ -27,6 +26,14 @@ test('workspace screens have no WCAG 2.1 A/AA automated accessibility violations
       `${section}: ${results.violations.map((violation) => `${violation.id}: ${violation.help}`).join('; ')}`,
     ).toEqual([]);
   }
+
+  await page.getByRole('button', { name: 'Products', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit product Illustrative demo product' }).click();
+  await page.getByRole('navigation', { name: 'Product sections' }).getByRole('button', { name: 'Review', exact: true }).click();
+  const reviewResults = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  expect(reviewResults.violations).toEqual([]);
 
   await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
   await page.getByRole('button', { name: 'Add ingredient' }).click();

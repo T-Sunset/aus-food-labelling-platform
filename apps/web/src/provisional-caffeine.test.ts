@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ProductClassificationFact, ProvisionalCaffeineInput } from '@aus-food/domain';
 import { demoCaffeineRule } from '@aus-food/rules';
-import { evaluateProvisionalCaffeine } from '@aus-food/engine';
+import { createEmptyProductClassificationProfile, evaluateProvisionalCaffeine } from '@aus-food/engine';
+import { applyAnswer, caffeinatedQuestions } from './label-builder';
 
 const yes: ProductClassificationFact = {
   answer: 'yes',
@@ -9,7 +10,7 @@ const yes: ProductClassificationFact = {
 };
 const fixture: ProvisionalCaffeineInput = {
   rule: demoCaffeineRule,
-  evaluationDate: '2026-11-11',
+  evaluationDate: '2026-11-19',
   classification: {
     beverage: yes,
     flavoured: yes,
@@ -69,27 +70,68 @@ describe('provisional caffeinated beverage concentration', () => {
     expect(result.resultBasis).toBe('provisional');
   });
 
-  it('returns non-applicability only from sourced classification facts', () => {
+  it('returns provisional non-applicability from an explicit unsourced answer', () => {
     const result = evaluateProvisionalCaffeine({
       ...fixture,
-      classification: { ...fixture.classification, nonAlcoholic: { ...yes, answer: 'no' } },
+      classification: { ...fixture.classification, nonAlcoholic: { answer: 'no', evidence: [] } },
     });
-    expect(result.status).toBe('NOT APPLICABLE');
+    expect(result.status, result.explanation).toBe('NOT APPLICABLE');
     expect(result.resultBasis).toBe('provisional');
   });
 
-  it('does not conclude when any classification fact is unknown, conflicting or unsourced', () => {
+  it('uses complete, explicit user-entered facts without requiring source references', () => {
+    const unsourced: ProductClassificationFact = { answer: 'yes', evidence: [] };
+    const result = evaluateProvisionalCaffeine({
+      ...fixture,
+      classification: {
+        beverage: unsourced,
+        flavoured: unsourced,
+        nonAlcoholic: unsourced,
+        containsCaffeine: unsourced,
+        mentalPerformancePurpose: unsourced,
+      },
+      concentration: {
+        ...fixture.concentration!,
+        evidence: [{
+          ...fixture.concentration!.evidence[0]!,
+          sourceId: '',
+          sourceDate: '',
+        }],
+      },
+    });
+    expect(result.status, result.explanation).toBe('WITHIN RANGE');
+    expect(result.resultBasis).toBe('provisional');
+  });
+
+  it('does not conclude when a classification fact is unknown, conflicting or has an invalid source date', () => {
     for (const fact of [
       { answer: 'unknown', evidence: [] },
       { answer: 'conflicting', evidence: yes.evidence },
-      { answer: 'yes', evidence: [] },
       { answer: 'yes', evidence: [{ ...yes.evidence[0]!, sourceDate: '2026-02-30' }] },
+      { answer: 'yes', evidence: [{ ...yes.evidence[0]!, sourceDate: '2026-12-01' }] },
     ] satisfies ProductClassificationFact[]) {
       expect(evaluateProvisionalCaffeine({
         ...fixture,
         classification: { ...fixture.classification, beverage: fact },
       }).status).toBe('REVIEW REQUIRED');
     }
+  });
+
+  it('uses a changed unsourced classification answer without reusing its previous source', () => {
+    const profile = createEmptyProductClassificationProfile();
+    const sourced = applyAnswer(profile, caffeinatedQuestions[1]!, 'yes', yes.evidence[0]);
+    const changed = applyAnswer(sourced, caffeinatedQuestions[1]!, 'no', undefined);
+    const fact = changed.formulatedCaffeinatedBeverage.nonAlcoholic;
+    expect(fact.previousEvidence).toEqual(yes.evidence);
+    const result = evaluateProvisionalCaffeine({
+      ...fixture, classification: { ...fixture.classification, nonAlcoholic: fact },
+    });
+    expect(result.status).toBe('NOT APPLICABLE');
+    expect(result.inputs.find((input) => input.name === 'Non-alcoholic')).toMatchObject({
+      value: 'no',
+      sourceId: '',
+      sourceDate: '',
+    });
   });
 
   it('blocks incomplete, conflicting, unsupported state and invalid concentration evidence', () => {
@@ -125,7 +167,7 @@ describe('provisional caffeinated beverage concentration', () => {
 
   it('uses only dates within the verified period, including the transition start', () => {
     expect(evaluateProvisionalCaffeine({ ...fixture, evaluationDate: '2026-06-09' }).status).toBe('WITHIN RANGE');
-    for (const evaluationDate of ['2026-06-08', '2026-11-12', '2028-06-09', 'bad-date']) {
+    for (const evaluationDate of ['2026-06-08', '2026-11-20', '2028-06-09', 'bad-date']) {
       expect(evaluateProvisionalCaffeine({ ...fixture, evaluationDate }).status).toBe('REVIEW REQUIRED');
     }
   });

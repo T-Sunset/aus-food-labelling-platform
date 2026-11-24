@@ -21,6 +21,19 @@ describe('process mass balance', () => {
       yieldPercentage: '100',
       changes: [],
     });
+
+  });
+
+  it('requires review for incomplete changes even if the final mass is supplied', () => {
+    for (const profile of [
+      { changes: [{ id: 'loss', kind: 'loss' as const }], complete: false, declaredFinalMass: { value: '800', unit: 'g' as const } },
+      { changes: [{ id: 'loss', kind: 'loss' as const }] },
+      { changes: [], complete: false },
+    ]) {
+      expect(calculateProcessMassBalance({ value: '1', unit: 'kg' }, profile)).toMatchObject({
+        status: 'review_required', reason: 'PROCESS_MASS_PROFILE_INCOMPLETE',
+      });
+    }
   });
 
   it('applies documented additions, gains and losses in sequence', () => {

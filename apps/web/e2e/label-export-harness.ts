@@ -1,5 +1,25 @@
 import { createConsultantReportPdf, createLabelPdf, layoutLabel } from '../../../packages/label/src/index.js';
 
+export async function renderPreviewForTest(svg: string, widthMm: number, heightMm: number) {
+  const layout = {
+    svg, widthMm, heightMm, orientation: (widthMm > heightMm ? 'landscape' : 'portrait') as 'landscape' | 'portrait',
+    status: 'review_required' as const, issues: [],
+    nonCertificationStatement: 'This label draft assists review and does not certify legal compliance.' as const,
+  };
+  const result = await createLabelPdf(layout, {
+    productVersion: 'test-draft', ruleRelease: 'test-only', exportedAt: '2026-11-09T05:30:00.000Z',
+  });
+  return Array.from(result.pdfBytes);
+}
+
+export async function renderFractionalSizeFixture() {
+  const layout = layoutLabel({
+    widthMm: 80.12345, heightMm: 150.67891, orientation: 'portrait',
+    margins: { topMm: 0, rightMm: 0, bottomMm: 0, leftMm: 0 }, blocks: [], requiredBlocks: [],
+  });
+  return renderPreviewForTest(layout.svg, layout.widthMm, layout.heightMm);
+}
+
 export async function createRepeatExportFixture() {
   const layout = layoutLabel({
     widthMm: 100,

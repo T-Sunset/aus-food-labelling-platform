@@ -17,10 +17,9 @@ describe('label builder helpers', () => {
     expect(detectProductType(createEmptyProductClassificationProfile())).toBe('');
   });
 
-  it('refuses a yes or no answer without a source', () => {
-    expect(() =>
-      applyAnswer(createEmptyProductClassificationProfile(), flavoured, 'yes', undefined),
-    ).toThrow(/where this information came from/);
+  it('records an answer without a source', () => {
+    const result = applyAnswer(createEmptyProductClassificationProfile(), flavoured, 'yes', undefined);
+    expect(result.formulatedCaffeinatedBeverage.flavoured).toEqual({ answer: 'yes', evidence: [] });
   });
 
   it('attaches the chosen source and detects the product type', () => {
@@ -32,18 +31,33 @@ describe('label builder helpers', () => {
     expect(countAnswered(next, 'caffeinatedBeverage')).toEqual({ answered: 1, total: 4 });
   });
 
-  it('keeps existing evidence when the answer changes and clears it for not sure', () => {
+  it('preserves earlier sources without attributing them to a changed or uncertain answer', () => {
     const evidence = makeBuilderEvidence('productBrief', '', '2026-11-10');
     const yes = applyAnswer(createEmptyProductClassificationProfile(), infantCore, 'yes', evidence);
     const no = applyAnswer(yes, infantCore, 'no', undefined);
-    expect(no.foodForInfants.intendedAsNourishmentForInfants.evidence).toEqual([evidence]);
+    expect(no.foodForInfants.intendedAsNourishmentForInfants).toEqual({
+      answer: 'no', evidence: [], previousEvidence: [evidence],
+    });
     const unsure = applyAnswer(no, infantCore, 'unknown', undefined);
-    expect(unsure.foodForInfants.intendedAsNourishmentForInfants).toEqual({ answer: 'unknown', evidence: [] });
+    expect(unsure.foodForInfants.intendedAsNourishmentForInfants).toEqual({
+      answer: 'unknown', evidence: [], previousEvidence: [evidence],
+    });
     expect(detectProductType(unsure)).toBe('');
   });
 
   it('needs a description when the source is something else', () => {
     expect(() => makeBuilderEvidence('other', '  ', '2026-11-10')).toThrow(/Describe/);
     expect(makeBuilderEvidence('other', 'Supplier email', '2026-11-10').reference).toBe('Supplier email');
+  });
+
+  it('adds newly selected source details without losing or duplicating existing ones', () => {
+    const first = makeBuilderEvidence('productBrief', '', '');
+    const second = makeBuilderEvidence('other', 'Supplier email', '2026-11-10');
+    const original = applyAnswer(createEmptyProductClassificationProfile(), infantCore, 'yes', first);
+    const updated = applyAnswer(original, infantCore, 'no', second);
+    const repeated = applyAnswer(updated, infantCore, 'no', makeBuilderEvidence('other', 'Supplier email', '2026-11-10'));
+    expect(repeated.foodForInfants.intendedAsNourishmentForInfants).toEqual({
+      answer: 'no', evidence: [second], previousEvidence: [first],
+    });
   });
 });

@@ -17,6 +17,11 @@ export interface BuilderQuestion {
 
 export const productTypeOptions: { value: Exclude<ProductType, ''>; label: string; hint: string }[] = [
   {
+    value: 'other',
+    label: 'Another food or drink (for example cake, bread or jam)',
+    hint: 'This route is for foods outside the two specialised questionnaires. Product-specific rules are not yet checked for every food.',
+  },
+  {
     value: 'caffeinatedBeverage',
     label: 'A drink with added caffeine (for example an energy drink)',
     hint: 'Standard 2.6.4 sets rules for caffeinated drinks, so we ask a few questions to check it fits.',
@@ -25,11 +30,6 @@ export const productTypeOptions: { value: Exclude<ProductType, ''>; label: strin
     value: 'infantFood',
     label: 'Food for infants (babies under 12 months)',
     hint: 'Standard 2.9.2 covers infant foods and excludes some products, so we ask a few questions.',
-  },
-  {
-    value: 'other',
-    label: 'Something else',
-    hint: 'We can still draft a basic label. A consultant will need to check the rules for this product.',
   },
 ];
 
@@ -141,16 +141,16 @@ export function applyAnswer(
   evidence: Evidence | undefined,
 ): Profile {
   const current = factOf(profile, question);
-  let nextFact: Fact;
-  if (answer === 'unknown') {
-    nextFact = { answer: 'unknown', evidence: [] };
-  } else if (current.evidence.length > 0) {
-    nextFact = { answer, evidence: current.evidence };
-  } else if (evidence === undefined) {
-    throw new Error('Choose where this information came from before answering yes or no.');
-  } else {
-    nextFact = { answer, evidence: [evidence] };
-  }
+  const changed = current.answer !== answer;
+  const currentEvidence = changed ? [] : current.evidence;
+  const previousEvidence = changed ? [...(current.previousEvidence ?? []), ...current.evidence] : current.previousEvidence;
+  const alreadyRecorded = evidence && currentEvidence.some((item) =>
+      item.kind === evidence.kind && item.reference === evidence.reference && item.sourceDate === evidence.sourceDate);
+  const nextFact: Fact = {
+    answer,
+    evidence: answer !== 'unknown' && evidence && !alreadyRecorded ? [...currentEvidence, evidence] : currentEvidence,
+    ...(previousEvidence?.length ? { previousEvidence } : {}),
+  };
   return {
     ...profile,
     [question.group]: { ...profile[question.group], [question.key]: nextFact },
@@ -160,7 +160,7 @@ export function applyAnswer(
 export function makeBuilderEvidence(
   kind: EvidenceKind,
   otherDescription: string,
-  today: string,
+  sourceDate: string,
 ): Evidence {
   const label = evidenceSourceOptions.find((option) => option.value === kind)?.label ?? kind;
   const reference =
@@ -171,7 +171,7 @@ export function makeBuilderEvidence(
   return {
     id: `classification-evidence-${crypto.randomUUID()}`,
     reference,
-    sourceDate: today,
+    sourceDate,
     kind,
   };
 }

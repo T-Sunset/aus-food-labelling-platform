@@ -136,6 +136,36 @@ describe('worked examples', () => {
     expect(ingredients.map.has('we-ing')).toBe(true);
   });
 
+  it('keeps examples referenced by a recipe with an unknown amount', async () => {
+    const { store, ingredients } = fakeStore();
+    await loadWorkedExamples(store, set);
+    await store.formulations.create({
+      ...formulation('own-form', 'own-ing', ['mine']), incompleteRecipeLines: {
+        unquantifiedLines: [{ id: 'unknown', kind: 'ingredient', ingredientId: 'we-ing' }],
+        lineOrder: ['own-form-line', 'unknown'],
+      },
+    });
+    await removeWorkedExamples(store);
+    expect(ingredients.map.has('we-ing')).toBe(true);
+  });
+
+  it('keeps nested examples used through an unknown amount regardless of listing order', async () => {
+    const { store, ingredients, formulations } = fakeStore();
+    await store.ingredients.create(ingredient('nested-ing'));
+    await store.formulations.create(formulation('nested', 'nested-ing'));
+    await store.formulations.create({
+      ...formulation('parent', 'nested-ing'), incompleteRecipeLines: {
+        unquantifiedLines: [{ id: 'nested-line', kind: 'formulation', formulationId: 'nested' }],
+        lineOrder: ['parent-line', 'nested-line'],
+      },
+    });
+    await store.products.create(product('own-product', 'parent', ['mine']));
+    await removeWorkedExamples(store);
+    expect(formulations.map.has('parent')).toBe(true);
+    expect(formulations.map.has('nested')).toBe(true);
+    expect(ingredients.map.has('nested-ing')).toBe(true);
+  });
+
   it('keeps an example product that has an approved version', async () => {
     const { store, products } = fakeStore(undefined, ['we-prod']);
     await loadWorkedExamples(store, set);

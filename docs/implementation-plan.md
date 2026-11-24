@@ -1,9 +1,33 @@
 # Implementation plan - Australian Food Labelling Platform
 
-**Status:** Living plan; the 2026-11-16 priority reset and I1-I9
+**Status:** Living plan; the 2026-11-18 UXR usability and review-copy track
+is complete as recorded below. UXR13 research is complete. The owner closed
+the planned UXR14-UXR15 label-retention
+expansion on 2026-11-19: use ingoing recipe nutrients and quantities as the
+general NIP calculation method where it best represents average quantities;
+do not develop an automatic retention-factor dataset or integrate one into
+the label workflow. Preserve existing optional finished-food/manual-retention
+routes and Code-triggered food-state handling. See [food-state nutrition
+research](./food-state-nutrition-research.md) and [ADR 022](./adr/022-nutrition-panel-integration.md).
+The 2026-11-16 priority reset and I1-I9
 ingredient/formulation track are approved. I1's direction is agreed in
-principle; I2 ingredient-data research and approach are approved, I3 through
-I6 are complete; I7 is next.
+principle; I2 ingredient-data research and approach are approved, I3
+through I9 are complete. The post-I9 N1-N14 nutrition, food-state and
+product/label track is approved; N1 through N14 and N12a-N12c are complete. The owner
+extended the remaining track on 2026-11-17 to consolidate product review and
+provide a dedicated label workspace.
+On 2026-11-19 the owner approved the UXR16-UXR23 workflow-clarity and
+label-content roadmap below; UXR16-UXR23 are complete. The
+user-facing clarity standard and related decisions are recorded in
+[ADR 034](./adr/034-practical-workflow-progressive-disclosure.md).
+On 2026-11-23 the owner agreed the direction of the following UXS
+streamlining and label-workspace track. UXS1's Formulation and Product
+design discussion, UXS2-UXS6 implementation, the UXS7 Label design
+discussion, UXS8-UXS11 implementation, UXS12 regression gate, UXS13
+claims-roadmap discussion, CRS1 design, CRS2 local detection, CRS3
+candidate resolution, CRS4 missing-fact guidance and CRS5 first-five-claim
+research, CRS6 claim/NIP interaction reporting and CRS7 review-copy claim
+rendering are complete. CRS8a is next.
 Earlier plans and their progress are retained as history.
 **Audience:** engineers and AI agents implementing the product.
 **Related documents:** `AGENTS.md` (always-on agent rules), `docs/requirements.md` (the contract), `docs/reviewer-questions.md` (questions for the human regulatory reviewer).
@@ -16,7 +40,7 @@ order. The owner approved the I1-I9 ingredient/formulation track; the I1
 screen details remain subject to design and implementation. Past trackers and decisions are historical except where
 explicitly retained; the current export and result safeguards still apply.
 
-## Current direction and proposed next turns
+## Current direction and approved next turns
 
 The goal is a guided Australian food-labelling workflow: ingredients and
 supplier evidence feed formulations; a formulation and product-specific facts
@@ -36,11 +60,1457 @@ incomplete composition cannot establish absence (DATA-003, FORM-005).
 Specific additive and substance checks require the right identity, context,
 amount and source; names or numbers alone do not prove legal permission.
 
+Clarity is a requirement, not a cosmetic follow-up: if a complex field or
+capability remains, its purpose and consequences must be explained in plain
+language, and it should appear only when relevant rather than cluttering the
+ordinary path. The completed UXR16-UXR23 roadmap and the following UXS
+track apply this principle to the workflow.
+
+### UXS: streamlining and label-workspace track
+
+The owner reviewed the completed UXR work on 2026-11-23. Overview and
+Ingredients are satisfactory for the MVP and are not redesign targets.
+The owner agreed to remove the named Formulation sections while retaining
+genuinely needed inputs as contextual, plain-language questions; simplify
+Product; use a four-tab Label editor with a live preview; and defer broader
+claims expansion until after the immediate layout and entry cleanup.
+
+The completed UXS sequence followed the UXR track. The Formulation, Product
+and Label directions are agreed; details assigned to the claims roadmap's
+later discussion turns remain open. No application changes or new regulatory
+approvals were made by recording this plan or completing UXS1 or UXS13.
+The claims roadmap below follows UXS13; CRS8a is the next turn. Work
+sequentially, with one turn per step as the target and two or three at most;
+agree a bounded split
+before proceeding if a step cannot fit. Update this plan and relevant ADRs
+when decisions are made, and tick each step only after its exit criteria are
+met. Ask before changing any locked decision in section 3.
+
+**Shared acceptance constraints**
+
+- Remove the named sections rather than simply renaming them or moving the
+  same blanket questionnaire elsewhere. Ask only for a fact that is needed
+  in the current context and cannot reliably be derived. Give a clear reason,
+  examples where useful, and an actionable route for genuinely missing facts.
+- Retain underlying calculations and saved values, including shared recipe
+  processing, composition, food-state and claim data, unless the owner
+  explicitly approves a change. Removing a screen must not silently erase
+  records or turn an unknown into zero, absence or `PASS`. Preserve existing
+  saved-label and backup behavior; do not make a migration or data deletion
+  a hidden prerequisite for simplification.
+- Separate entered draft information from regulatory review. A green tick
+  may say `Required draft information entered` only when the checks it
+  represents are satisfied; it is not legal clearance. Missing, unsupported,
+  stale and unsaved cases remain understandable and actionable. Status is
+  never conveyed by colour alone.
+- Preserve local-first operation, exact-size label/PDF behavior, offline
+  operation, accessibility, separate Label drafts and consultant review
+  reports. Rule provenance remains accessible in review/trace, even when
+  ordinary claim source-entry fields are removed. Existing draft rules and
+  release gates do not become approved through UI changes.
+- Preserve the current preview's distinction between unsaved Label edits and
+  the latest saved Product and ingredients. Claims are currently not rendered
+  on label artwork: the layout work must not imply otherwise. Do not silently
+  add, remove, rewrite or approve claims in preview or export as part of the
+  layout or entry cleanup.
+- Each implementation turn includes focused tests for its changes and
+  affected existing workflows, including missing and non-applicable inputs,
+  narrow screens and keyboard/accessibility checks where relevant. Run
+  applicable type-check and lint; run rule validation if rule data changes.
+  Keep the end-to-end gate in UXS12. Requirement IDs below identify the
+  relevant contract, not approval of any legal interpretation.
+
+#### UXS1 - Discuss and settle Formulation and Product design
+
+**Entry:** This roadmap is recorded; UXR23 is complete.
+
+**Status:** Complete, 2026-11-23. The owner approved the following design
+for implementation and expects to reassess it after using and testing the
+completed track. [ADR 034](./adr/034-practical-workflow-progressive-disclosure.md)
+records the decision and the updates to ADRs 028, 030 and 031 identify the
+superseded presentation directions. No application code changed.
+
+**Agreed design:**
+
+- **Composition:** Remove the generic Formulation composition section.
+  Leave the existing compound-ingredient completeness question on Ingredients
+  unchanged. When a shared recipe is used as a compound ingredient and a
+  completeness answer is needed, offer an action for that shared recipe:
+  `Are all the ingredients in this component recipe listed?` An unknown
+  answer stays unknown. Do not silently create a separate ingredient
+  composition when the user intends to update a shared recipe.
+- **Finished-batch information:** Remove the Manufacturing Details section.
+  Beside the recipe ingredients, offer a small optional `Have finished-batch
+  details?` entry point to the particular information the user chooses to
+  add, not the former multi-part section under a new name. Where an existing
+  recipe already has weight, processing, finished-food nutrition or
+  retention details, provide a concise way to inspect and edit the relevant
+  saved detail. Missing weight remains unknown; weight alone does not
+  establish nutrient retention. Use ingredient-based nutrition where
+  appropriate, without making it a universal rule.
+- **Directions and nutrition:** Keep one aligned customer-directions
+  question and show mixing and draining details only as applicable. Remove
+  the two named Product nutrition sections. Derive a nutrition basis only
+  where supported; unclear, conflicting or unmappable saved non-default
+  states need an actionable review path, not a guessed basis. Preserve
+  previously saved values.
+- **Additives and names:** Remove the Product section and navigation;
+  preserve its data and existing supported checks. Unresolved technical
+  findings remain in separate review/report, with a concise notice for an
+  applicable active check such as caffeine. Label-specific additive wording
+  remains on Label. No unsupported check becomes a pass.
+- **Product completion:** A tick may say `Required product draft information
+  entered` when the Product, linked recipe and relevant nutrition inputs
+  checked here are complete and saved. Label-only fields and claims do not
+  block this Product tick. Missing required inputs get a short list with edit
+  links; unsaved edits are identified. Unsupported checks remain review
+  items, not passes, and a brief note distinguishes completion from legal
+  clearance. The tick must not imply that every legal requirement or every
+  label field was checked.
+
+**Exit:** Owner agreed the contextual Formulation and Product approach and
+the decision is recorded (FORM-005, CALC-002, CALC-010, DATA-003, ADD-009,
+TRACE-008, UX-007).
+
+#### UXS2 - Remove the Formulation composition section
+
+**Status:** Complete, 2026-11-23.
+
+**Entry:** UXS1 establishes the contextual composition path.
+
+**Work:** Remove `Composition details (optional)` from Formulation entry.
+Leave the existing Ingredient question alone. When a shared recipe is used
+as a compound ingredient and completeness matters, offer the agreed
+specific question as an action on that shared recipe. Do not silently
+create a separate composition. Keep existing incomplete and confirmed
+composition facts and their effects; neither listed components nor missing
+amounts alone establish complete coverage.
+
+**Exit:** Ordinary recipes have no composition section or blanket prompt;
+needed compound/supplier cases can still be resolved without inventing
+coverage. New, partial, complete, unknown and previously saved
+compositions, nested allergen/nutrition effects and backup round trips are
+tested (FORM-005, DATA-003, CALC-001, TRACE-008, UX-007).
+
+**Result:** Removed the general composition section. A shared component
+recipe opens its Ingredients section with the completeness question; an
+existing saved supplier composition remains editable even if no ingredient
+currently links to it. Product review links unresolved compound composition
+to the shared recipe as well as the ingredient. Unknown answers and amounts
+stay unknown, existing source details remain optional and saved, and editing
+the shared recipe does not create an ingredient-specific copy. Focused
+unit tests (85), affected browser suites (24), a further unlink/preservation
+browser test, narrow-screen keyboard and accessibility checks, type-check
+and targeted lint passed. Both unencrypted and encrypted backups were
+restored in the supplier journey.
+
+#### UXS3 - Remove the Formulation manufacturing section
+
+**Status:** Complete, 2026-11-23.
+
+**Entry:** UXS1 establishes the contextual processing path; UXS2 is complete.
+
+**Work:** Remove `Manufacturing details (optional)` from the Formulation
+page. Beside the recipe ingredients, offer the agreed small optional entry
+point to the specific finished-batch detail a user wants to add; provide
+concise access to existing saved details. Do not simply recreate the entire
+old section under a different heading. Keep recipe-wide facts distinct from
+customer directions and do not infer nutrient retention from weight change.
+
+**Exit:** Ordinary recipe entry is streamlined; relevant previously saved
+processing and nutrition evidence can be inspected and edited without
+silent loss. Tests cover no details, a relevant contextual case, saved
+processing profiles, incomplete amounts and calculation/backup regressions
+(CALC-002, CALC-014, DATA-003, DATA-006, UX-007).
+
+**Result:** Removed the manufacturing section. An optional entry beside
+the recipe ingredients opens only the chosen batch-weight/processing,
+finished-food nutrition or nutrient-retention detail. Existing saved details
+have direct review actions, including inactive nutrition evidence without
+silently selecting it. Switching details retains edits; unknown weight
+remains unknown and weight alone does not establish retention. Existing
+processing profiles, calculations and backup data remain intact. Focused
+unit and storage tests (145), affected browser suites (36), accessibility,
+encrypted backup/restore, type-check and targeted lint passed.
+
+#### UXS4 - Simplify Product directions and nutrition
+
+**Status:** Complete, 2026-11-23.
+
+**Entry:** UXS1-UXS3 are complete.
+
+**Work:** Correct the alignment and clutter in `Customer directions and
+nutrition`, including its inline disclosures. Remove `Saved nutrition basis`
+and `Nutrition evidence from the saved recipe` from the Product UI. Follow
+customer directions and existing data for food-state selection only when
+reliably supported; retain a contextual route or unresolved review state
+where necessary. Preserve saved non-default states and their consequences.
+
+**Exit:** Controls align at desktop and narrow widths, with neither removed
+section visible. Ordinary as-sold, prepared, reconstituted, drained, combined-food,
+unknown and previously saved non-default cases retain appropriate nutrition
+and review behavior; no unsupported state is silently treated as as-sold.
+Focused browser and calculation tests pass (CALC-003, CALC-004, CALC-010,
+CALC-014, DATA-003, UX-007).
+
+**Result:** Removed both named nutrition sections. Customer actions and their
+relevant mixing or draining inputs now use an aligned, responsive layout
+without inline preparation disclosures. The existing calculations follow
+recorded directions; ingredient nutrition sources remain available in the
+technical review. Older non-default or missing food states are shown only
+when applicable and remain unchanged until explicitly edited. A missing
+state can be saved as unknown; a disabled action that conflicts with a
+recorded drained or reconstituted state remains unresolved. Focused
+calculation tests (105), affected browser suites (61), keyboard and
+accessibility checks, encrypted backup/restore, type-check and targeted lint
+passed. No regulatory rules or release gates changed.
+
+#### UXS5 - Remove Product Additives and Names
+
+**Status:** Complete, 2026-11-23.
+
+**Entry:** UXS1 and UXS4 are complete.
+
+**Work:** Remove the Product `Additives and Names` section and its step
+navigation. Retain the underlying records and existing supported checks;
+place unresolved technical findings in separate review/report, with a
+concise notice for applicable active checks, without inserting a replacement
+questionnaire in the ordinary Product workflow. Keep Label-specific
+additive wording intact.
+
+**Exit:** The Product section is absent; saved data, the existing provisional
+caffeine check, report/trace boundaries and Label additive wording still
+work. Unknown and unsupported additive/name cases do not become clear or
+approved. Focused Product, report and Label tests pass (ADD-009, NAME-001,
+DATA-003, TRACE-008, TRACE-015).
+
+**Result:** Removed the Product section and navigation. The saved specialist
+inputs remain intact but are no longer editable in the Product interface.
+Technical review retains the additive and prescribed-name results, source
+details, limitations and opt-in illustrative preview; missing-information
+actions open this review instead of the removed section. Applicable caffeine
+checks have a concise provisional notice and expandable details. Label
+wording and review reports remain separate, and unsupported cases remain
+unresolved. Focused unit tests (88), affected browser suites (39), keyboard
+and accessibility checks, encrypted backup/restore, type-check and targeted
+lint passed. No regulatory rules or release gates changed.
+
+#### UXS6 - Simplify Product review and next actions
+
+**Status:** Complete, 2026-11-23.
+
+**Entry:** UXS1 and UXS4-UXS5 are complete.
+
+**Work:** Replace the large `Review and next actions` content with the
+agreed concise Product completion message and a tick when the defined
+Product, recipe and nutrition inputs are complete and saved. Label-only
+fields and claims do not block the Product tick. When required inputs are
+missing, show a short list with edit links; distinguish unsaved changes and
+unsupported checks. Preserve technical review and report access without
+restoring the large summary.
+
+**Exit:** Complete, incomplete, unknown, stale and unsaved cases have
+accurate text and accessible status, with no implication of legal
+compliance. Links navigate to relevant editing contexts; label export and
+technical traces remain usable. Browser and accessibility tests cover
+desktop and narrow layouts (TRACE-008, TRACE-012, DATA-003, UX-007).
+
+**Result:** Product review now shows a concise saved-input completion tick or
+a short actionable list. The tick checks Product details and type, pack and
+servings, linked recipe and available ingredient references, and relevant
+nutrition and directions; stale and unsaved Product edits prevent it. Label
+fields, claims and review-only panel limitations do not establish or block
+legal clearance. Detailed draft findings and their edit actions remain in
+technical review, including pending allergens and the additive checks.
+Label export, offline reports and history remain available. Focused unit tests
+(102), affected browser workflows, desktop and narrow-screen accessibility,
+type-check and targeted lint passed. No rules or release gates changed.
+
+#### UXS7 - Discuss the Label workspace in detail
+
+**Entry:** UXS2-UXS6 are complete.
+
+**Status:** Complete, 2026-11-23. The owner agreed the design below. No
+application code, claim artwork, regulatory rules or release gates changed.
+
+**Discussion:** Work through the agreed two-column layout and four tabs:
+`Label setup`, `Ingredients & allergens`, `Pack details`, and `Claims`.
+Agree the placement of existing controls, label selection, save state,
+missing-information messages, review/export actions and a live preview
+that remains useful while editing. Agree narrow-screen behavior, keyboard
+navigation, example text and precautionary-allergen help. Make clear which
+inputs are editable locally and which come from saved Product data. Decide
+how to surface that claim artwork is not yet implemented.
+
+**Agreed design:**
+
+- A compact header selects the Product and saved Label and makes New,
+  Duplicate, Save and saved/unsaved status discoverable. Preserve multiple
+  named drafts per Product, missing-Product and dependency-change warnings,
+  and existing protections for unsaved work when switching or restoring.
+- On desktop, show the four-tab editor on the left and the live preview on
+  the right, keeping the preview visible while editing when space permits.
+  Put preview/layout warnings, incomplete-review-copy export and the
+  separate review-report action alongside the preview. Replace the long
+  upfront list with concise missing-information notices and actionable links
+  to the relevant editor or Product review. Keep detailed findings available.
+- **Label setup:** label name, dimensions, orientation and nutrition display;
+  place margins, spacing and text sizes behind an optional advanced
+  disclosure. The displayed preview is not a physical-size proof.
+- **Ingredients & allergens:** generated ingredient and allergen content,
+  links to edit its saved source records, and per-Label additive wording.
+  Missing evidence remains unknown; generated content stays reviewable.
+- **Pack details:** supplier, lot, date, storage, warning and precautionary
+  allergen text, with entered/not-entered and unresolved-applicability
+  information still accessible. UXS9 adds short illustrative examples and
+  plain-language help; examples are not default values or universally
+  applicable wording. Explain that precautionary statements concern possible
+  unintended cross-contact, do not replace required allergen declarations,
+  and need a basis; a blank does not establish no risk.
+- **Claims:** retain existing Label-specific claims and checks. State both in
+  this tab and beside the preview that claims are not yet shown on the
+  artwork. Keep current claim-entry controls and the separate Product
+  claim-facts save until UXS10-UXS11 change them; do not imply that a claim
+  has been rendered or approved.
+- The preview updates for unsaved Label edits but uses the latest saved
+  Product, recipe and ingredient data. Explicitly flag unsaved Product edits
+  and changed saved dependencies. Product-sourced values are edited in
+  their own records, rather than silently altered in the Label.
+- On narrow screens, stack editor and preview and provide a persistent
+  `View preview` jump and an easy return to editing. Tabs support keyboard
+  navigation and retain edits when switched. Preserve offline operation,
+  output safeguards, review reports and Incomplete Review Copy restrictions.
+
+**Exit:** Owner agrees a concrete layout and interaction design, including
+small-screen behavior and preservation of existing workflows. Record the
+decision and any superseded presentation direction from ADRs 024, 032 and
+034. No application change or new claim-rendering behavior is included
+(PACK-005, TR-004, TR-019, CLAIM-006, UX-007).
+
+#### UXS8 - Implement the Label tabs and live-preview layout
+
+**Entry:** UXS7's design is agreed.
+
+**Status:** Complete, 2026-11-23. The agreed four-tab editor, responsive
+live preview, draft controls and actionable review links are implemented.
+Pending Label edits and separately saved Product claim facts are preserved
+across tabs; switching and browser unload protect unsaved changes. Saved
+Product dependencies and claim-artwork limitations remain explicit. Unit
+tests (626), all 72 browser tests, type-check and targeted lint passed.
+No claim artwork, regulatory rules or release gates changed.
+
+**Work:** Build the four-tab editor and live preview as agreed. Reorganise
+existing controls without changing their meaning or adding claim artwork.
+Keep Label selection, saved/unsaved indications, save, review and export
+discoverable; preserve pending edits across tab switches.
+
+**Exit:** Each existing relevant control is reachable in its agreed tab;
+edits that already affect artwork update the preview immediately; saved
+Product dependencies remain clearly distinguished. Tab and keyboard
+navigation, narrow-screen stacking, separate Label drafts, persistence,
+preview and PDF/report regression tests pass. Claim artwork limitations
+remain explicit (PACK-005, DATA-003, TRACE-012, UX-007).
+
+#### UXS9 - Explain pack details and precautionary allergens
+
+**Entry:** UXS7-UXS8 are complete.
+
+**Status:** Complete, 2026-11-23. Pack fields have accessible, illustrative
+examples and plain-language explanations. Precautionary allergen guidance
+explains unintended cross-contact, the separate required declarations, the
+assessment basis and why a blank does not establish no risk. Examples are not
+stored or included in output. Focused browser, desktop and narrow-screen
+accessibility, unit, type-check and targeted lint checks passed; existing
+validation and user-entered preview, report and persistence behavior remain
+unchanged. No regulatory rules or release gates changed.
+
+**Work:** Add useful, clearly illustrative examples to the Pack details and
+statements fields and explain what each asks for. Explain precautionary
+allergen labelling and unintended cross-contact in plain language; it is
+separate from mandatory allergen declarations. Do not generate a default
+statement or suggest that an example is universally appropriate.
+
+**Exit:** Examples are not saved as user data, and a user can understand
+the statement and its required basis. A blank statement does not establish
+absence of cross-contact risk. Existing validation, preview, report and
+saved values remain intact; focused browser and accessibility tests pass
+(TR-004, TR-019, DATA-003, PACK-005, UX-007).
+
+#### UXS10 - Connect claims to existing nutrition facts
+
+**Entry:** UXS8-UXS9 are complete. Inspect the existing nutrition pipeline,
+claim rules and food-state limitations before selecting supported cases.
+
+**Work:** Connect claim evaluation to the existing, unrounded Product
+nutrition calculation when its nutrient, unit, food form, serving or
+per-100 basis and dependencies are demonstrably suitable. The low-sugars
+case must use the Product's own sugars value when available. Derive other
+facts for the existing supported claim set only where reliably established;
+do not infer restricted contexts or missing facts from a name or blank
+field. Keep existing rule gates and record the calculation path in
+review/trace. A stale manual amount must not override current derived
+nutrition.
+
+**Exit:** Low-sugars tests cover correct values, threshold boundaries,
+missing and conflicting nutrition, mass/volume basis, changed recipes and
+unsupported food states. Test every additional existing claim connected,
+including per-serving cases where supported. Incomplete or incompatible
+inputs stay `REVIEW REQUIRED`, and no new rule or official approval is
+implied (CALC-010, CLAIM-001, CLAIM-003, CLAIM-004, DATA-003, TRACE-008).
+
+**Outcome:** The five existing draft checks use unrounded saved as-sold
+nutrition where the relevant nutrient, form, density, recipe and, for fibre,
+serving are reliable. Ingoing, confirmed finished-food and supported
+retention paths retain their source and calculation trace in both Label review
+and consultant reports. Prepared, reconstituted, drained and combined-food
+claim calculations remain unsupported. Existing person-confirmation and draft
+rule gates remain in force. Historical claim amounts and source details are
+retained but do not determine the calculated amount; missing and conflicting
+data never fall back to them. UXS11 removes the redundant entry controls.
+
+#### UXS11 - Remove redundant claim-entry questions
+
+**Entry:** UXS10 is complete; its derivation and unsupported cases are
+explicit.
+
+**Work:** Remove the manual nutrient amount and claim source-detail entry
+from the Label claim UI, and remove everything under `Facts used by nutrition
+content claim checks`. Use reliably derivable saved Product facts; if a fact
+cannot be established, explain the review need without recreating that
+questionnaire. Preserve saved claims and evidence without silently changing
+historical data. Keep exact wording and Label-specific independence.
+
+**Exit:** Users can add a low-sugars claim without re-entering sugars or
+claim sources; current nutrition changes are reflected in checks. Missing,
+ambiguous, unsupported and conflicting inputs remain `REVIEW REQUIRED`;
+no hidden saved manual value creates a passing result. Rule provenance is
+available in separate review/trace, and preview/report accurately state
+that claim artwork is not yet implemented. Tests cover editing, save/reload,
+independent Labels, existing records and report consistency (CLAIM-003,
+CLAIM-006, DATA-003, TRACE-008, UX-007).
+
+**Outcome:** Label claim entry no longer asks for a nutrient amount, claim
+source or the Product claim-facts questionnaire. Checks use the saved Product
+food form where it does not conflict with a historical answer, and explain
+unresolved conditions in the result. Claim-specific form, serving and
+restricted-context confirmations are not inferred from incomplete facts.
+Existing Product facts and historical Label claim amounts and evidence remain
+stored, including when a claim is edited; they do not supply the calculated
+nutrient amount. Changing a claim's type requires confirming the new type.
+Claim artwork remains unimplemented; rule provenance remains in review and
+the consultant report.
+
+#### UXS12 - End-to-end usability and regression gate
+
+**Entry:** UXS2-UXS11 are complete.
+
+**Work:** Exercise the ordinary baked-good workflow and the contrasting
+drink and relevant compound/food-state cases through formulation, Product,
+Label tabs, live preview, review report, incomplete PDF and backup/restore.
+Include a low-sugars claim with both available and missing nutrient data.
+Check desktop, narrow-screen keyboard use, accessibility and offline use.
+
+**Exit:** Record the exercised journeys, commands and results; fix
+regressions caused by this track before closing it. Existing review-copy,
+trace, unknown-input and release safeguards remain intact. Clearly list any
+remaining unsupported cases and human review gates. No regulatory acceptance
+or public-release approval is inferred (UX-007, TEST-004, PACK-005,
+BKP-001, TRACE-012).
+
+**Status:** Complete as an automated engineering regression gate.
+
+- Fictional cake and cookie journeys cover ingredient and compound recipes,
+  Product, Label tabs, declarations, review report, incomplete PDF and
+  encrypted backup/restore. A cake claim uses 52.96 g sugars per 100 g from
+  the unrounded recipe; after recipe edits and restore it uses 70.6 g. An
+  incomplete cookie recipe leaves the claim amount unavailable and the
+  status `REVIEW REQUIRED`, including after restore.
+- The fictional drink exercises supplier and nested composition data, liquid
+  nutrition, Label, the separately downloaded report and incomplete PDF,
+  caffeine review, and both encrypted and unencrypted backup/restore.
+  Separate journeys cover finished-food values, reconstitution, combined
+  foods, drained food and recorded retention, including changed or missing
+  evidence. Other Label tests check live preview updates, review-copy output,
+  unsaved changes and trace. Desktop and 390 px layouts, keyboard operation,
+  automated WCAG scans and offline editing/report/PDF use were exercised in
+  isolated Chromium contexts; this is not a manual usability or print proof.
+- Windows PowerShell commands: `pnpm.cmd test` (641 passed);
+  `pnpm.cmd lint` (passed); `pnpm.cmd build` (type-check and build passed,
+  with Vite's large-chunk warning); `pnpm.cmd validate:rules` (five draft
+  rules and 19 sources validated, no rules enabled);
+  `$env:CI='true'; pnpm.cmd test:e2e --workers=2` (74 passed).
+  The expanded drink PDF assertions were added after that full run and passed
+  separately with `$env:CI='true'; pnpm.cmd exec playwright test apps/web/e2e/drink-supplier-entry.spec.ts --project=chromium --workers=1`;
+  `pnpm.cmd exec eslint apps/web/e2e/ingredient-workflows.spec.ts apps/web/e2e/drink-supplier-entry.spec.ts`
+  passed for both changed journey files.
+- Claims are not rendered on artwork. Prepared, reconstituted, drained and
+  combined-food claim calculations remain unsupported; only the five existing
+  draft nutrition-content checks are covered, and missing, stale or
+  conflicting facts remain review-required. Other claims, warnings, pack
+  applicability, exemptions and print legibility are not fully assessed.
+  The caffeine check remains provisional and requires a current verified
+  rule period. Human review remains necessary, including R3-01 golden
+  fixtures, R1-13 NIP display policy, R1-21 physical print proof and
+  applicable rule-mapping and claims gates in
+  [reviewer questions](./reviewer-questions.md). Neither this gate nor its
+  exports constitute regulatory acceptance or public-release approval.
+
+#### UXS13 - Discuss and plan the wider claims system
+
+**Entry:** UXS12 is complete. This is a design and research-planning turn,
+not authorisation to implement new claim types.
+
+**Discussion:** Agree priorities and a staged roadmap for finding claims
+across relevant user-entered label text, recognising and classifying wording,
+evaluating supported claim families, and reflecting claims and any
+claim-dependent content on the label. Define what the app may safely
+suggest versus what needs user confirmation or expert review; account for
+unrecognised or ambiguous wording, non-text artwork, comparative/health and
+other claim families, missing inputs, existing NIP interactions, and
+Australia-specific source and effective-date requirements. Never silently
+rewrite or remove user wording. Distinguish a future coverage ambition from
+what can be supported at each release.
+
+**Exit:** Owner agrees a separate, bounded turn-by-turn claims roadmap with
+explicit entry/exit criteria, examples, rule and reviewer gates, source
+verification and regression tests. Delegate bounded primary-source
+regulatory research to the Australian Food Requirements Analyst when needed;
+do not invent thresholds or rely on unverified interpretations. No new claim
+rules, scanning or label rendering are implemented in this turn (FR-007,
+REG-CLAIM-001, REG-CLAIM-003, CLAIM-001 to CLAIM-006, INT-001, TRACE-015).
+
+**Outcome:** Complete, 2026-11-23. The owner agreed the CRS roadmap below:
+start with the five existing draft checks, then prioritise no-added-sugar,
+gluten-free and fibre/protein claims. Comparative and health claims are
+initially flagged for review rather than promised as supported checks. The
+owner chose to show exact user-selected wording on incomplete review artwork
+even when a check is unresolved or fails, with prominent review warnings.
+No application behavior, rule, reviewer approval or release gate changed.
+
+### CRS: guided claims roadmap
+
+This is the current work order after UXS13, not a claim that all families
+are supported or approved. Each step is intended for one turn, at most two
+or three; agree a bounded split before proceeding if necessary. Research
+steps use the Australian Food Requirements Analyst and primary sources
+only for the provisions needed; capture compilation/effective dates,
+mapping confidence, evidence requirements, unverified points and reviewer
+gates. Do not invent a threshold, assume that a verified provision is
+reviewer-approved, or enable deterministic results before their gates.
+
+**Shared design and safety boundaries**
+
+- Scan locally the user-entered text intended to appear on the selected
+  Label, including relevant Product and pack text and Label claims. CRS1
+  determines exact fields, their origins and saved versus unsaved boundaries.
+  Do not transmit formulation or label content. Scanning is limited candidate
+  detection, not a guarantee of finding every claim or of clearance when
+  nothing is flagged. Images, logos and other non-text artwork cannot be
+  reliably assessed; identify that limitation and require human review.
+- Link each candidate to its exact original wording and location. A clear
+  supported match may be suggested/classified where reliable; ambiguous
+  classification requires confirmation. Let users resolve false positives
+  without silently declaring other text safe. Unsupported, unrecognised,
+  conflicting or missing evidence remains `REVIEW REQUIRED`, not absence,
+  zero or `PASS`. Do not silently rewrite, delete or move user text.
+- Reuse dependable Product, ingredient and recipe facts, preserving
+  calculation trace and rule provenance. Ask only for necessary facts not
+  reliably derivable; no return to a blanket claim-facts questionnaire.
+  Keep claim text and decisions Label-specific, preserve historical records,
+  backup/restore and approved-version immutability.
+- When artwork support is implemented, display the user's exact selected
+  wording on incomplete review copies even when a check is unresolved or
+  fails. Make the status and limitations prominent in the preview and
+  review-copy output and in the separate report, without relying on colour.
+  Text already rendered from another field must not be duplicated as a claim.
+  The incomplete review copy is not a finished or approved label.
+- Research claim-dependent NIP rows and accompanying statements before
+  generating them. Preserve the current NIP, food-state and release
+  safeguards, including unsupported prepared, reconstituted, drained and
+  combined-food claim calculations until separately verified and implemented.
+  External artwork and general marketing content outside the supported
+  label-text inventory are not silently treated as scanned.
+- For each implemented slice test recognised and ambiguous wording, false
+  positives, missing/conflicting data and non-applicability as relevant;
+  include boundary values, source/effective-date and reviewer gates for rule
+  changes. Test trace, label/report consistency, saved data, privacy,
+  accessibility and affected workflows. A review-only outcome is acceptable
+  when the evidence or approval for deterministic checks is unavailable.
+
+#### CRS1 - Inventory and design the claim journey
+
+**Entry:** UXS13 is complete. Inspect the existing text, claims, nutrition,
+preview and report flows; identify user-entered label-facing fields, their
+origins and any already-rendered wording.
+
+**Exit:** Agree a concrete, uncluttered workflow for detection, candidate
+confirmation, exact-text ownership, false positives, saved/unsaved changes,
+unsupported text and non-text artwork. Record a field inventory, examples
+and data/backup implications; distinguish what is scanned from what is not.
+No application changes or new regulatory conclusions (FR-007, CLAIM-006,
+DATA-003, PACK-005).
+
+**Status:** Complete, 2026-11-23. The owner agreed the following design
+for implementation and wants to reassess it after seeing it in use.
+No detection, artwork, application behavior or regulatory rule changed.
+
+**Current inventory and proposed local scan scope**
+
+| Origin | Text to inspect | Current artwork and ownership |
+| --- | --- | --- |
+| Saved Product | Product name; enabled preparation, draining and other consumer directions | The name is rendered. Directions are rendered only when the recorded direction state permits it; show entered-but-withheld text as such. Product remains the source and edit location. |
+| Saved ingredients and Label additive choices | Ingredient names used in the declaration, including compound components; selected additive declaration wording | The declaration is generated and may be withheld when required information is missing. Trace a candidate to its actual ingredient/additive choice and path, without treating generated declaration copy as a second independent claim. |
+| Saved added ingredient | Added-food name used in a combined-food NIP heading or description | Conditionally rendered as part of the generated nutrition panel; link to the saved ingredient rather than treating generated headings as separate editable text. |
+| Label pack copy | Supplier name and address, lot, date, storage, warning/advisory and precautionary-allergen statement | Entered copy is rendered when pack copy parses successfully; a precautionary statement also needs its paired basis. Applicability is not assessed. Inspect entered but withheld text and identify its output status. Label pack fields remain the source and edit location. |
+| Label claims | Each exact manually entered claim | Label-specific and checked today, but not yet rendered. Include it in the scan/review inventory; CRS7 will add selected claim artwork. Older Product-level claims remain inactive until explicitly copied. |
+
+This inventory follows the present [label layout](../apps/web/src/label-layout.ts),
+[pack draft](../apps/web/src/pack-draft.ts),
+[Label editor](../apps/web/src/components/LabelExportPanel.vue) and
+[storage records](../packages/storage/src/index.ts). Source locations must
+refer to the original user-entered text, not formatted or wrapped SVG text.
+Include the relevant entered text even when the preview cannot currently
+render it, and identify that distinction; inactive retained directions are
+not represented as current label copy. Continue to show other existing
+preview and validation limitations.
+
+The internal Label draft name, source references, precautionary-allergen
+basis (review-report-only), numerical NIP values and application-generated
+boilerplate are not claim-scanning inputs. Images, logos, external artwork
+and other marketing material outside this inventory are not scanned; tell
+users to review these separately. A scan only recognises a bounded set of
+patterns and cannot establish that no other claims exist.
+
+**Agreed workflow**
+
+1. Keep the Claims tab compact: list possible claims with exact wording,
+   original location, whether the text is on the current preview and a brief
+   status/action. Allow manual claim entry. No green all-clear or claim that
+   all wording or artwork has been assessed.
+2. Suggest a classification for a clear recognised match without implying
+   that its wording is legally accepted. Offer `This is a claim`,
+   `Not a claim` and `I'm unsure` for ambiguous candidates. An unsupported
+   or unresolved claim remains `REVIEW REQUIRED`; a person's `Not a claim`
+   decision records their judgment, not a legal clearance. Avoid flagging
+   common ingredient words alone merely because they occur in claim phrases.
+3. Keep detected wording owned and edited at its original source. Show its
+   location and an appropriate edit action; do not copy it into a second
+   editable claim. Where independently entered Claim-tab wording duplicates
+   found text, offer a way to link or resolve it without deleting or
+   rewriting either source. A linked occurrence already on artwork must
+   not be rendered again; distinct user-entered occurrences are not silently
+   removed. For example, `Low sugar` in a Product name and the same words
+   independently entered in Claims need an explicit duplicate decision,
+   not an automatic deletion.
+4. Evaluate current unsaved Label edits together with the latest saved
+   Product, formulations and ingredients, as the preview does today. Mark
+   unsaved Label changes and any known unsaved Product changes. If source
+   wording or relevant context changes, recheck and require affected
+   decisions to be reviewed; do not silently reuse a stale confirmation.
+   Missing or changed sources must not be silently relinked. Other Label
+   drafts remain independent.
+5. Once CRS7 implements claim artwork, show exact user-selected wording even
+   for unresolved or failing checks. Keep the chosen-size artwork intact:
+   put prominent textual claim warnings alongside the live preview, on the
+   incomplete PDF's review cover/report, and in the separate report, rather
+   than silently inserting warning copy into the artwork. Never imply that
+   the review copy is a finished or approved label.
+
+**Data, persistence and implementation checks**
+
+- Detection and review remain on-device. Future Label-specific decisions
+  need stable source/occurrence links and enough context to detect changes;
+  repeated wording at different locations must not share a decision merely
+  because the text matches. Avoid duplicating editable source text; preserve
+  the exact wording needed for trace and review.
+- Save decisions with the Label draft, not the shared Product. Preserve
+  existing Label and legacy Product claims, historical evidence and
+  approved-version immutability. Define validation, orphaned/stale links,
+  restore and any schema or backup-format changes in the implementing step;
+  do not assume an upgrade is needed. Verify encrypted and unencrypted
+  backup/restore and separate Label drafts.
+- Future tests must cover eligible and withheld text, false positives,
+  ambiguous wording, duplicate locations, manual entries, stale or removed
+  sources, current Label edits versus saved dependencies, preview/report/PDF
+  consistency, unsupported artwork and offline privacy. Research and
+  reviewer gates remain in CRS5 and the later family-specific steps.
+
+#### CRS2 - Find candidate claims locally
+
+**Entry:** CRS1's field inventory and workflow are agreed.
+
+**Exit:** Bounded local detection identifies selected example wording in
+each in-scope field with its location; unrelated or ambiguous wording is
+not silently changed or cleared. Tests cover case/wording variants, multiple
+locations, false positives, edits, missing text and stated scan limitations.
+Unmatched text is not presented as evidence that no claim exists (FR-007,
+CLAIM-006, UX-007).
+
+**Status:** Complete, 2026-11-23. The Claims tab and review report list
+locally detected possible phrases with their original source, preview
+status and an edit action. The scan covers the CRS1 inventory using current
+Label edits and saved Product and ingredient data. It recognises a bounded
+set of examples, including low/reduced/high nutrient, no-added-sugar,
+gluten-free, fibre/protein source and selected health or natural wording;
+it can miss claims and does not inspect external artwork. Every match
+requires review; detection does not classify, clear or change wording.
+Candidate decisions, duplicate resolution and persistence are implemented in
+CRS3; broader missing-fact guidance remains for CRS4.
+
+#### CRS3 - Classify and resolve candidates
+
+**Entry:** CRS2 detects candidates and CRS1 defines confirmation.
+
+**Exit:** Clear supported matches can be connected to existing checks;
+ambiguous or unsupported wording is explicit and requires confirmation or
+review. Users can address false positives without altering the underlying
+copy. Tests cover exact wording and location, classification changes,
+duplicate candidates, separate Labels, save/reload and backup/restore
+(CLAIM-002, CLAIM-006, DATA-003).
+
+**Status:** Complete, 2026-11-24. Each detected occurrence can be marked
+`Treat as a claim`, `Not a claim` or `I'm unsure`, with the decision keyed
+to its exact wording and source location. Treating a clear supported phrase
+as a claim creates a Label-specific linked claim and connects the existing
+draft rule where applicable; the original Product, ingredient or pack text
+remains the edit source. Linked claims are read-only in the Claims panel and
+provide a source-navigation action. Decisions, source links and claims
+persist with separate Label drafts and backup/restore. They remain review
+states, not legal clearance, and stale or unmatched wording still requires
+review.
+
+#### CRS4 - Guide users to missing facts
+
+**Entry:** CRS3 preserves candidate and classification decisions.
+
+**Exit:** Supported checks reuse existing reliable Product and recipe facts
+and show actionable missing/conflict reasons with links to relevant inputs.
+No redundant nutrition entry or broad questionnaire is introduced. Tests
+cover changing a recipe, absent and conflicting facts, and unsupported
+food-state bases (CLAIM-003, CALC-010, TRACE-008, UX-007).
+
+**Status:** Complete, 2026-11-24. Existing derived nutrition and claim
+evaluation results now produce concise next actions. Classification, rule
+selection and wording issues focus the Label claim entry; missing,
+conflicting, stale or unsupported nutrition and food-state bases link back
+to Product inputs. The guidance reuses saved recipe and Product nutrition,
+does not ask users to re-enter nutrient amounts, and keeps unsupported
+prepared, combined and other food-state bases at REVIEW REQUIRED.
+
+#### CRS5 - Recheck the first five draft checks
+
+**Entry:** CRS4 is complete. Bound primary-source research to low energy,
+low fat, low sugars, low sodium and good source of dietary fibre and their
+relevant wording, exclusions, food-state, NIP and accompanying-content
+conditions; reuse the existing source map as a starting point.
+
+**Exit:** A traceable current-source specification identifies what is
+verified, effective dates, unresolved wording/evidence and reviewer
+decisions, plus independently described boundary and non-applicable fixtures.
+Record any rule-data changes needed for later work, without implementing or
+approving them in this research step (CLAIM-001 to CLAIM-004, TRACE-015).
+
+**Status:** Complete, 2026-11-24. Re-verified the five draft thresholds,
+descriptor/property mappings, principal restrictions and food-state basis
+against current Federal Register compilations of Standards 1.2.7 and 1.2.8
+and Schedule 4 and Schedule 12. Recorded compilation identifiers, dates and
+primary URLs in [the regulatory research record](./mvp-regulatory-research.md).
+The research confirms provision-level threshold candidates but does not
+establish an exhaustive wording list, semi-solid mapping, complete
+claim-triggered NIP pathway, analytical/tolerance policy or transitional
+arrangement. Reviewer questions R5-C1-07 to R5-C1-12 capture those gates.
+No rule data was activated or changed.
+
+#### CRS6 - Connect verified checks and NIP interactions
+
+**Entry:** CRS5 supplies a bounded specification; only conditions whose
+sources and data are sufficient are connected.
+
+**Exit:** Supported conditions and claim-dependent NIP requirements use
+shared facts and consistent results/trace in Label and report. Missing
+evidence, unsupported food states, unreviewed rules and unresolved
+accompanying content remain review-required. Test each affected rule at
+boundaries, non-applicability and on input/claim changes; validate changed
+rule data. No reviewer gate is bypassed (INT-001, CALC-012, CLAIM-003,
+CLAIM-004, TRACE-015).
+
+**Status:** Complete, 2026-11-24. Existing derived Product/recipe nutrition
+now drives a review-only interaction trace for all five draft checks. The
+Label claim panel and consultant report identify the relevant NIP rows and
+whether shared derived data is available, including fibre for low-sugars and
+fibre claims and potassium for low-sodium claims. No NIP rows or deterministic
+rule outcomes are activated; unsupported food states, missing/conflicting
+inputs and unresolved accompanying-content requirements remain REVIEW
+REQUIRED. Verified focused and expanded unit tests, five claims browser
+journeys, typecheck, lint and unchanged rule-data validation.
+
+#### CRS7 - Render selected claims on review copies
+
+**Entry:** CRS1-CRS6 are complete; the artwork behavior agreed in UXS13
+and existing incomplete-copy safeguards apply.
+
+**Exit:** User-selected exact claim text appears once in live preview and
+incomplete PDF, including when its check is unresolved or fails, with
+prominent textual review warnings in preview, review-copy output and report.
+Supported claim-dependent content is consistent; unsupported content is
+identified, never invented. Tests cover duplicate locations, edit/removal,
+unsaved changes, narrow screens, offline PDF, accessibility and separate
+Labels (CLAIM-006, INT-001, PACK-005, UX-007).
+
+**Status:** Complete, 2026-11-24. Selected Label claim wording is now
+rendered exactly once per distinct wording in the shared SVG layout, with
+explicit review-only warning text. The same layout is used by the incomplete
+PDF review copy; the Label preview and consultant report also show prominent
+textual warnings. Unsupported or unresolved claims are reproduced without
+being rewritten, cleared or presented as legal approval. Verified layout,
+report, PDF/export and claims browser coverage, including duplicate wording,
+typecheck and lint.
+
+#### CRS8a / CRS9a - No-added-sugar claims
+
+**CRS8a entry:** CRS7 is complete. **Exit:** Bounded primary-source
+research specifies wording, effective/transition dates, formulation and
+supplier evidence, missing information and reviewer gates, with examples
+and test boundaries. Incomplete composition does not establish that nothing
+was added (CLAIM-001, DATA-003, TRACE-015; R5-03, R5-C1-05).
+
+**CRS9a entry:** CRS8a's specification is available. **Exit:** Implement
+only the evidenced, safely supported slice; otherwise retain explicit
+review-only behavior and record the blocker. Verify present, absent,
+unknown and nested ingredients, wording, applicability and date boundaries,
+plus artwork/report and saved-data consistency (CLAIM-003, CLAIM-004).
+
+#### CRS8b / CRS9b - Gluten-free claims
+
+**CRS8b entry:** CRS9a is complete. **Exit:** Bounded primary-source
+research specifies the relevant wording, product/evidence requirements,
+allergen and cross-contact limitations, and reviewer gates, with examples
+and test boundaries. A missing allergen entry is not evidence of absence
+(CLAIM-001, TR-004, TRACE-015).
+
+**CRS9b entry:** CRS8b's specification is available. **Exit:** Implement
+only the evidenced, safely supported slice; otherwise retain explicit
+review-only behavior and record the blocker. Test known presence, incomplete
+or conflicting evidence, nested ingredients, applicability and relevant
+wording, along with artwork/report and backup consistency (CLAIM-003,
+CLAIM-004).
+
+#### CRS8c / CRS9c - Fibre claims
+
+**CRS8c entry:** CRS9b is complete. **Exit:** Research the prioritised
+fibre wording and its relevant per-serving, food-state, NIP and evidence
+requirements; reconcile with the existing good-source draft check. Record
+sources, examples, boundaries and reviewer gates (CLAIM-001, INT-001;
+R5-C1-03).
+
+**CRS9c entry:** CRS8c's specification is available. **Exit:** Extend or
+reuse the existing check only where supported, otherwise keep review-only
+behavior and record the blocker. Test missing fibre, serving and food-state
+bases, boundaries, non-applicability and artwork/report consistency
+(CLAIM-003, CLAIM-004, CALC-012).
+
+#### CRS8d / CRS9d - Protein claims
+
+**CRS8d entry:** CRS9c is complete. **Exit:** Research prioritised protein
+wording and its relevant nutrition, product-specific, NIP and evidence
+conditions; record sources, examples, boundaries and reviewer gates,
+including any applicable infant-food question (CLAIM-001, INT-001;
+R5-C1-02).
+
+**CRS9d entry:** CRS8d's specification is available. **Exit:** Implement
+only the evidenced, safely supported slice; otherwise retain explicit
+review-only behavior and record the blocker. Test missing nutrition or
+context, boundaries, non-applicability and artwork/report consistency
+(CLAIM-003, CLAIM-004, CALC-012).
+
+#### CRS10 - Plan comparative and health-claim follow-ons
+
+**Entry:** CRS9d is complete. Comparative and health claims remain flagged
+for review initially, including reduced-fat and health-relationship examples.
+
+**Exit:** Map reference-food, wording, NPSC, dietary-context and evidence
+needs; propose separately sized source-research and implementation turns
+with review gates. Do not implement or imply support in this planning step.
+Self-substantiation and uncertain scientific/legal judgments remain
+review-only unless a separately approved future scope establishes otherwise
+(REG-CLAIM-002, REG-CLAIM-003, CLAIM-003; R5-04, R5-C1-04).
+
+#### CRS11 - Claims end-to-end regression and scope gate
+
+**Entry:** CRS1-CRS10 are complete; each priority family is either safely
+implemented in its recorded slice or explicitly review-only with its
+blocker. This engineering gate does not waive public-release requirements.
+
+**Exit:** Exercise a baked good and a contrasting drink through text entry,
+candidate detection, supported and review-only claims, NIP interactions,
+preview, incomplete PDF, report, offline use and backup/restore. Include
+unrecognised/ambiguous wording, missing data, changed recipes, non-text
+artwork and accessibility/keyboard cases. Record commands, results, exact
+supported scope, blind spots, source currency and human/release gates. No
+universal coverage, regulatory acceptance or public-release approval is
+implied (TEST-004, PACK-005, BKP-001, TRACE-015).
+
+### Approved practical-workflow track
+
+The owner approved this sequence on 2026-11-18 after an end-to-end trial.
+It superseded the completed N1-N14 track as the work order at that time;
+the completed UXR track is now followed by UXS above. Each
+step must fit the agreed turn size; if a step cannot, agree a bounded split
+before proceeding. Retain saved data, the existing functionality and
+local-first operation. Do not infer missing facts, represent unreviewed rules
+as approved, or imply that a review copy is a finished or compliant label.
+
+The owner also approved incomplete PDF copies for reviewer testing.
+[ADR 025](./adr/025-incomplete-review-copies.md) records the decision;
+UXR2a implemented it early. Technical rule-source provenance remains
+necessary even though ordinary user-entered facts should not require source
+references merely to be entered.
+
+| Step | Status | Scope and exit check |
+| --- | --- | --- |
+| UXR1 | Complete | Removed the Overview worked-example controls and guide without deleting saved examples; the Product list and editor use full width. Desktop and narrow Product widths, saved examples after reload and related navigation passed browser tests; type-check, targeted lint and worked-example unit tests passed (UX-007, DATA-003). Completed 2026-11-18. |
+| UXR2 | Complete | Split with owner approval. **UXR2-1:** nutrition and allergen inputs, including density, retention and drained-food values, no longer require references. **UXR2-2:** classification answers, additive coverage and concentrations, composition, claim and infant-name inputs no longer need source references; optional source details are retained, including in backups. Missing facts and unreviewed rules remain unresolved. Candidate screening remains review-only; opt-in illustrative checks can now use unsourced facts, without changing official draft-rule results. UXR11 now applies the source-optional input policy to its explicitly provisional caffeine check; aggregate and carry-over checks remain unwired. Completed 2026-11-18 (DATA-003, TRACE-008). |
+| UXR2a | Complete | Incomplete Review Copy PDFs include a separate review cover, exact-size artwork and a report of known gaps and layout issues. Incomplete recipes can be exported without inventing a declaration; layout overflow is reported and technical failures remain explicit. Complete and incomplete inputs, offline export, output identification, exact dimensions, overflow and failure paths were tested. This is not a finished label or public-release approval. Completed 2026-11-18 (PACK-001, PACK-005, TRACE-012). |
+| UXR3 | Complete | Direct additives can be used without entering concentration; optional known mixture or concentration details remain available and unknown purity is not inferred. Additive wording is chosen per label, including nested ingredients; existing ingredient choices survive as defaults, while each label's choices are saved and backed up independently. Preview and review report use the same candidates, which remain review-only. Tested unknown and known amounts, nested recipes, multiple labels, existing data, both backup types and accessibility. Completed 2026-11-18 ([ADR 026](./adr/026-additive-label-wording.md); ADD-009, DATA-003). |
+| UXR4 | Complete | Formulation expansion now shows ingredient amounts, before-cooking nutrition, recorded allergens and additives, missing information and optional source paths. Unknown amounts, conflicting evidence and unsupported nested processing remain unavailable rather than guessed. Tested incomplete and nested recipes, nutrition and allergen conflicts, narrow screens and accessibility; prior nutrition and label workflows remain unchanged. Completed 2026-11-18 ([ADR 027](./adr/027-formulation-summary.md); FORM-005, CALC-001, TRACE-008). |
+| UXR5 | Complete | Finished batch weight is optional and available first; detailed weight changes and no-change confirmation remain under advanced options. Saved detailed and earlier unrepresentable processing profiles survive edits. Finished-food nutrition and retention remain optional, and weight alone does not establish retention. Tested incomplete and invalid inputs, preservation, nutrition, backups, narrow screens and accessibility. Completed 2026-11-18 ([ADR 028](./adr/028-simple-cooking-and-yield.md); CALC-002, CALC-014). |
+| UXR6 | Complete | Product guidance distinguishes ingredient, finished-recipe, as-sold and consumer-prepared information; saved nutrition inputs have a concise summary and optional detailed paths. As-sold serving quantities can suggest net contents for explicit user acceptance, without overwriting existing values or converting units. Tested missing, invalid and incompatible inputs, prepared/drained cases, saved values, label preview, narrow screens and accessibility. Completed 2026-11-18 ([ADR 029](./adr/029-product-nutrition-and-pack-guidance.md); CALC-010, CALC-014, DATA-003). |
+| UXR7 | Complete | The general-food route comes first and specialist questions are conditional; prior category answers remain saved. Additives from the saved recipe have a concise summary, with existing checks and inputs in an optional advanced section. Claims are explained and their illustrative toggle and hypothetical results removed; unsupported checks remain explicit. Tested route changes, saved inputs, incomplete and nested recipes, claims, accessibility and existing label workflows. Completed 2026-11-18 ([ADR 030](./adr/030-product-category-additives-and-claims.md); ADD-009, NAME-001, CLAIM-006). |
+| UXR8 | Complete | Product review summarises saved product, ingredient, pack, allergen, additive and claim information, with optional nutrition values. Existing missing items are grouped with links to relevant editors; unsaved edits, unsupported content and label-specific wording are distinguished. Technical traces and historical results remain accessible. Tested missing and nested data, linked editing, unsaved work, historical trace/restore, pending allergens, narrow screens and accessibility. Completed 2026-11-18 ([ADR 031](./adr/031-product-review-summary.md); TRACE-004, TRACE-008, UX-007). |
+| UXR9 | Complete | Supplier name/address, lot identification, proposed date marking, storage instructions and warning/advisory text are captured per label draft and shown consistently in its preview and review report. Empty and entered values remain explicitly unresolved for applicability, adequacy and completeness; no dates, lot codes or warnings are generated, and no universal applicability is assumed. Bounded source review is recorded in [ADR 032](./adr/032-label-pack-copy-and-applicability.md); specialised warning mapping and reviewer questions R1-17 to R1-19 remain open. Older drafts and backups remain supported. Focused unit tests (143), label browser tests (17), keyboard navigation and axe checks passed. Completed 2026-11-19 (PACK-005, TRACE-015). |
+| UXR10 | Complete | Supported ingredient, allergen and nutrition presentation includes optional %DI for eligible general-food as-sold panels. New labels enable it by default; older saved drafts remain off until selected. It uses unrounded per-serving values and the owner-selected nearest whole percentage, half-up display policy, not a Code-mandated rounding rule. Infant, formulated caffeinated beverage, prepared/drained and unresolved cases remain without ordinary %DI. Preview, PDF layout and review-report output, missing values, source-linked reference data and applicable/non-applicable cases are tested. Completed 2026-11-19 (CALC-010, PACK-005). |
+| UXR11 | Complete | Activated only the FCB caffeine-range check in product review and the separate report. Complete, explicit user-entered facts for every recipe ingredient, numeric density where conversion requires it, current as-sold confirmation and supported processing are required; references and dates are optional, and supplied details are retained but not independently verified, including on conflicting statements. Unknown or conflicting facts, invalid or missing conversion densities, an unconfirmed as-sold recipe, recorded mass changes, finished-food or retention adjustments, consumer preparation, and unsupported compounds remain REVIEW REQUIRED. Results are provisional and distinct from the draft rule's reviewer status. Additive, aggregate, carry-over and infant-name checks remain review-only. Targeted unit/report tests and browser/accessibility tests passed; type-check, targeted lint, engine/rules builds and rule validation passed. Completed 2026-11-19 (TRACE-015, TEST-004). |
+| UXR12 | Complete | Exercised the fictional cake/cookie flow through ingredient and nested-recipe edits, product review, label preview, Incomplete Review Copy PDF, separate reviewer report, and encrypted backup/restore. Missing amounts and unknown additive information remain explicit; changed dependencies require renewed confirmation. Automated WCAG 2.1 A/AA scans and the narrow-screen label keyboard test passed; the drink contrast remained provisional or unresolved as appropriate. No external reviewer response was collected; open acceptance and release gates are recorded in [UXR12 results](./uxr12-journey.md). Completed 2026-11-19 (UX-007, PACK-005, BKP-001). |
+| UXR13 | Complete | Recorded bounded AUSNUT 2023 research and two independently reconstructed cake/biscuit examples with uncooked contrasts, calculation arithmetic, factor provenance, energy and weight-change handling, unsupported cases, offline availability and unresolved reuse terms. Factors are indicative survey-method inputs, not universal or Code-prescribed rules. The initial whole-recipe-only follow-on scope was superseded by the owner direction closing UXR14-UXR15; AUSNUT ingredient-specific factors remain out of scope. No application code changed. Completed 2026-11-19 ([UXR13 research](./uxr13-nutrient-retention-research.md); CALC-002, CALC-003, CALC-015, DATA-005). |
+| UXR14 | Closed by owner direction | On 2026-11-19 the owner stopped the planned search for an automatic whole-recipe retention-factor dataset for NIP calculations. Standard 1.1.1-6 permits ingredient-based calculation where the producer considers it best to represent average quantities; this is not a blanket rule for every product. No factors or code were added. Existing optional manual-retention and finished-food routes remain unchanged; specific food-state requirements remain in scope (CALC-003, CALC-004, CALC-015, DATA-003, DATA-006). |
+| UXR15 | Closed by owner direction | No retention-estimate workflow will be integrated into the guided recipe-to-label path. Continue the general ingoing-ingredient calculation where appropriate and preserve the applicable reconstituted, drained and combined-food requirements under Standard 1.2.8-11 to -13. Existing optional routes and review safeguards remain unchanged (DATA-005, TRACE-008, CALC-010, BKP-001). |
+
+UXR13-UXR15 followed UXR12. UXR13 was research and design only; the owner
+subsequently closed UXR14-UXR15 as a scope decision. This did not remove
+existing optional finished-food or manual-retention behavior or change the
+Code-triggered food-state work. No new factors, permissions or regulatory
+conclusions were approved by those steps. Existing [ADR 018](./adr/018-nutrient-retention.md)
+and [ADR 022](./adr/022-nutrition-panel-integration.md) safeguards remain
+in force. The completed UXR16-UXR23 work is recorded below:
+
+### Approved workflow-clarity and label-content roadmap
+
+The owner approved this roadmap on 2026-11-19 after an end-to-end product
+trial. The purpose is to simplify ordinary workflows without discarding
+useful capability or obscuring why retained complexity exists. Each step
+should target one turn; split before implementation if a step cannot fit
+within two or three turns. For every retained technical input, explain in
+plain language what it is for, why it is being requested now, and what
+depends on it. Prefer contextual progressive disclosure over a long list of
+always-visible options. Keep sources optional for ordinary user-entered
+facts, preserve unknown-versus-absent distinctions, and preserve saved data.
+This roadmap changes workflow and presentation, not legal rules, rule
+approval or release status. See [ADR 034](./adr/034-practical-workflow-progressive-disclosure.md).
+
+| Step | Status | Scope and exit check |
+| --- | --- | --- |
+| UXR16 | Complete (2026-11-20) | **Ingredient entry.** Remove the routine, separate caffeine questionnaire; derive supported caffeine facts from existing nutrient, additive and composition data, and ask only for a distinction or amount that an active check needs and cannot derive. Do not equate an entered nutrient amount with proof of whether caffeine was added. Show density only for a needed mass/volume conversion, including per-100-mL nutrient data or volume-based additive calculations. Concentration is not routine label copy; request or retain it when a relevant additive calculation needs it. Exit: ordinary ingredient entry has no redundant questions; contextual explanations make retained fields understandable; unknown, conflicting, mass-only and volume-conversion cases are tested (DATA-003, DATA-006, ADD-004, ADD-005, UX-007). |
+| UXR17 | Complete (2026-11-20) | **Formulation and manufacturing details.** Hide the generic completeness question for ordinary recipes; make composition coverage available only in optional composition details for supplier/compound compositions or when a calculation needs it. Keep source references optional. Keep recipe-wide manufacturing, cooking/yield and related nutrition evidence on Formulation, but make those controls optional, contextual and plainly explained; keep them distinct from Product customer directions and nutrition-basis choices. Preserve existing values and calculation behavior. Exit: an ordinary recipe is straightforward to enter, technical details explain their purpose when revealed, and incomplete, nested, saved and backed-up records remain explicit (FORM-005, CALC-002, CALC-014, DATA-003, DATA-006). |
+| UXR18 | Complete (2026-11-20) | **Product nutrition and customer directions.** Consolidated the nutrition and customer-direction sections around one plain-language question, with relevant preparation, draining and accompanying-food details shown conditionally. Routine as-sold products use the saved recipe's nutrition method without a generic confirmation; automatic confirmation is limited to a current, complete recipe signature. Unknown directions remain unresolved, while reconstituted, drained, combined-food and unsupported cases retain their distinct evidence and review paths. No blanket retention workflow or regulatory rule was added. Focused Product workflow tests cover these paths (CALC-003, CALC-004, CALC-010, CALC-014, UX-007). |
+| UXR19 | Complete | **Product checks and Label-specific claims/wording.** Product/category additive and prescribed-name checks remain in Product Review; additive declaration wording and claim statements are Label-specific. Claim checks use shared Product facts, saved separately. Older Product-level claim entries remain intact and inactive until explicitly copied into a chosen Label; each Label can differ. Verification covers separate persistence, report/check scoping, legacy preservation and backup compatibility (ADD-009, CLAIM-006, DATA-003, PACK-005, TRACE-008). |
+| UXR20 | Complete (2026-11-20) | **Label-content gap audit.** [The audit](./label-content-gap-audit.md) distinguishes stored inputs, draft content and actual checks; records source and applicability boundaries, including unresolved R1-17 to R1-21; and prioritizes UXR21 ingredient declaration, UXR22 allergens, then UXR23 remaining pack content. No legal wording or product applicability is inferred, and no UXR21-23 implementation is included (TR-002, TR-003, TR-004, TR-007, TR-008, TR-016, TR-019, TR-021, PACK-001, PACK-004, PACK-005). |
+| UXR21 | Complete (2026-11-20) | **Ingredient declaration.** The draft orders known ingredients by expanded ingoing mass, preserves nested compound display for general foods, and scales and flattens component masses for the selected infant-food route. Incomplete infant-food compounds, missing component recipes and missing ingredient names do not produce a partial declaration; issues link to the relevant ingredient or recipe. Saved names and additive wordings remain review candidates; no permitted-name mapping, exemption or additive legality is inferred. Source-linked tests cover order, nesting, unknown amounts, missing names, additive candidates and incomplete composition; focused tests, type-check and targeted lint pass. See [ADR 035](./adr/035-draft-ingredient-declaration.md) (SRC-005, SRC-017; TR-003, ADD-009, FORM-005, TRACE-008). |
+| UXR22 | Complete (2026-11-20) | **Allergen declarations.** The draft uses context-specific ingredient-list and summary names, bolds required ingredient-list names, and emits a separate bold `Contains` summary only when evidence and applicable conditions resolve. A compound with explicitly complete supplier composition can derive parent coverage only when it has no separate allergen evidence or additive-source records; each included component still needs current allergen coverage. Incomplete evidence, exemptions and unresolved sulphite conditions remain `REVIEW REQUIRED`. PAL is optional user-entered text with a basis note; no default is generated. Focused allergen cases and the full 68-test browser/accessibility suite pass, as do unit tests, type-check, lint, build and rule validation. See [ADR 036](./adr/036-allergen-declarations-and-pal.md) (TR-004, TR-019, DATA-003, TRACE-008). |
+| UXR23 | Complete (2026-11-23) | **Remaining pack content.** Reconcile label-specific supplier/address, lot, date, storage and warning/advisory copy with Product net quantity and physical label dimensions. The Label workspace shows an entered/not-entered review summary for every pack-copy field. Preview blocks retain plain labels and the report records entered text, missing text and unresolved applicability, adequacy, exceptions and size proof. No values or determinations are generated, and PAL remains separate (PACK-005, TRACE-008, TRACE-015). |
+
+### Approved post-I9 nutrition and product track
+
+The owner approved this sequence on 2026-11-17 and chose to complete nutrient
+and food-state foundations before redesigning Product and labels. The Product
+layout was approved in N9. This completed track was superseded by UXR above
+and had replaced the overlapping earlier proposed G sequence below. It does
+not approve a regulatory release, change locked decisions or remove existing
+export safeguards. Claims remain a later public-MVP commitment.
+
+Each step has the stated entry/exit scope and should aim to fit one turn;
+two or three turns are an exceptional maximum. If a scope cannot fit, agree
+a bounded split rather than silently adding work. Tests include missing inputs,
+boundaries and non-applicability as relevant. Ask only for facts that matter
+and cannot be reliably derived. Unknown is never zero or a PASS. Processing
+mass alone does not establish which nutrients were retained or lost. The
+owner does not prioritise compatibility with pre-release draft saves, but
+approved versions remain immutable and data must not be deleted without
+approval.
+
+| Step | Status | Scope and exit check |
+| --- | --- | --- |
+| N1 | Complete | Research food-state requirements from primary sources: as sold, prepared, reconstituted and drained, including relevant conditions and unresolved cases. Exit: source-linked requirements and explicit limits; no application implementation (CALC-002, CALC-010, CALC-014). |
+| N2 | Complete | Research the relevant nutrient catalogue, including vitamins, minerals, forms and units. Exit: source-linked catalogue and explicitly identified gaps; do not assume one list covers every food and purpose (ING-002, DATA-003, DATA-006). |
+| N3 | Complete | Support the verified nutrient identifiers, units, sources and unknown values in storage and calculations. Exit: unit-boundary and backup round-trip tests; no invented zeroes. |
+| N4 | Complete | Make expanded nutrient entry searchable and optional. Exit: values can be entered, edited and restored without requiring all nutrients. |
+| N5 | Complete | Propagate supported additional nutrients through nested recipes. Exit: independent calculations, missing-evidence cases, source paths and no double counting are tested. |
+| N6 | Complete | Connect supported processing yield and finished-food evidence to calculations. Exit: documented supported and incomplete cases; mass change alone does not invent nutrient retention or loss. |
+| N7 | Complete | Support tested prepared and reconstituted cases, directions, additions and food-state-specific amounts. Exit: applicable basis is clear, and missing facts require review. |
+| N8 | Complete | Support tested drained cases using appropriate drained quantities and evidence. Exit: supported and incomplete cases are tested without guessing nutrient distribution. |
+| N9 | Complete | Propose the Product journey based on the saved recipe and genuinely independent product/pack facts. Exit: owner can review the design and layout before implementation. |
+| N10 | Complete | Build the agreed Product journey. Exit: common-food and drink workflows, actionable gaps and edit persistence are tested. |
+| N11 | Complete | Connect supported nutrition rows and food-state columns to the label preview and trace. Exit: output matches independently checked calculations; unsupported rows remain explicit. |
+| N12 | Complete | Connect supported ingredient, allergen and general pack content. Exit: traceable previews and review reports show missing or unsupported content, without invented facts. |
+| N12a | Complete | Move the separate Review & trace functionality into the appropriate Product and Labels workflows, then remove its navigation. Exit: product-level checks, source paths, calculations, unresolved evidence and saved evaluation/version history remain accessible in context; label-specific review and report access remain on Labels; no existing result, history or safeguard is lost. |
+| N12b | Complete | Design the Labels workspace for previewing, generating, saving and customising labels. Exit: owner can review the proposed workflow, editable layout controls, local draft persistence and links to Product before implementation; open design choices are explicit. |
+| N12c | Complete | Implement the agreed Labels workspace. Exit: supported label drafts and layout choices can be saved, reopened and customised locally; preview and generation use the selected product and settings; validation, backups, unsaved edits and existing export safeguards are tested. |
+| N13 | Complete | Make the selected label preview, review report and PDF consistent with supported information and layout settings. Exit: output and layout tests pass; existing export policy and non-certification safeguards remain unless changed with approval. |
+| N14 | Complete | Exercise complete and incomplete product and label journeys, contextual traces, accessibility, edits and backup/restore. Exit: regressions and remaining release blockers are documented; no public-release approval is implied. |
+
+#### Navigation and label-workspace direction
+
+On 2026-11-17 the owner clarified the intended navigation: **Products** is
+for product-level checks and their explanations; **Labels** is for label
+preview, generation, saving and customisation. The separate Review & trace
+page is to be retired after its functionality is available in context.
+The earlier N9 sketch below records what was implemented at N10; its
+standalone Review & trace link is superseded by this direction. See
+[ADR 024](./adr/024-product-and-label-workspaces.md).
+
+- Preserve the current input and calculation traces, preparation and
+  draining evidence, ingredient and allergen paths, missing/conflicting
+  items, rule sources and saved versioned results. Show product-level
+  review within the selected Product; retain label-specific explanations
+  and the downloadable review report on Labels. Do not lose approved
+  versions or recompute historical results as if they were current.
+- Labels should work from the selected saved Product, rather than asking
+  the user to enter its ingredients or checks again. Changes to a Product
+  or its dependencies must be reflected or explicitly identified as stale;
+  navigating between pages must not silently discard unsaved work.
+- The label-workspace design must address editable dimensions, orientation
+  and margins for a single panel (PACK-001), local saving and reopening,
+  preview and generation, and how the label is associated with its Product.
+  Propose which appearance, arrangement and content controls are supported.
+  The agreed initial editing, draft and backup behaviour is recorded in
+  N12b below; do not assume arbitrary mandatory wording can be edited
+  safely or that layout customisation determines legal compliance.
+- No local draft save, preview or review report is legal clearance. Label
+  PDF export remains subject to the existing release, missing-content,
+  layout and non-certification safeguards. Do not bypass those safeguards
+  merely to enable the new workspace (DATA-003, VER-002, TRACE-004,
+  TRACE-006, TRACE-008, PACK-001, PACK-004, PACK-005, UX-007).
+
+N12a completed 2026-11-17: Product review now includes the existing input
+and food-state traces, saved evaluation history and provisional caffeine
+check. Labels keeps its preview, explanations and downloadable report and
+links to the selected Product's review. Product selection and unsaved edits
+are preserved across these journeys, and Labels identifies unsaved edits
+that are not yet reflected in its saved-product preview. Historical results
+remain unchanged; the separate Review & trace navigation has been removed.
+See [ADR 024](./adr/024-product-and-label-workspaces.md)
+(TRACE-004, TRACE-006, TRACE-008, VER-002, UX-007).
+
+### N12b - Agreed Labels workspace
+
+**Status:** Proposed and approved by the owner on 2026-11-17. This is a
+product and interaction design, not new regulatory research or approval.
+N12c implements the agreed scope and behaviour below; N13 and N14 remain subsequent work
+(PACK-001, PACK-004, PACK-005, VER-001 to VER-004, DATA-003,
+LOCAL-006, BKP-001, BKP-005, UX-007).
+
+#### Proposed journey
+
+1. **Choose a Product and a label draft.** Labels opens with a list of saved
+   drafts, their Product and last-saved time. Create a draft from a saved
+   Product, or open an existing draft. Allow several independently
+   named drafts for one Product, for example different pack sizes; duplicate
+   an existing draft to start another. Creating a label does not duplicate or
+   ask for the recipe again. With no Product, explain that a Product is
+   needed and link to Products.
+2. **Set the physical label.** Enter width and height in millimetres,
+   portrait or landscape, and top, right, bottom and left margins. The
+   existing 100 x 150 mm portrait, 6 mm margins can be an editable starting
+   point, clearly labelled as an example, not a recommended or compliant
+   size. Orientation and dimensions must agree; explain invalid dimensions,
+   margins or orientation instead of silently changing them. The preview
+   represents the entered dimensions; screen size is not a physical-size
+   measurement.
+3. **Customise the draft.** Use a single-column, single-panel pack-copy
+   layout with adjustable text size by content block and spacing between
+   blocks, plus the dimensions and margins above. Keep the existing block
+   order initially, with ingredient and allergen content together. Do not
+   silently shrink text to fit. Identify overflow and unverified type size
+   visibly in words, with the affected block and a suggested action. These
+   controls are design choices, not a determination that type, placement,
+   adjacency or legibility meets legal requirements.
+4. **Preview and review.** Show the generated draft alongside the controls
+   on wider screens and sequentially on smaller screens. Make missing,
+   unsupported and conflicting content visible and link to the relevant
+   Product, recipe or ingredient to fix the source. Keep the current
+   declaration, allergen and nutrition explanations and the separate review
+   report accessible. A missing input is not zero, absent or PASS.
+5. **Save and reopen.** Save the draft name, Product association and layout
+   choices locally, even if product evidence is incomplete. Explicitly show
+   unsaved changes; preserve work on navigation or ask before discarding it
+   when switching drafts. Reopening restores the saved choices, not a
+   promise that the Product or its dependencies have remained unchanged.
+6. **Download.** Keep the existing review report available with its current
+   meaning: it is not a label. Label PDF export stays unavailable until the
+   existing blockers are resolved through the appropriate later approvals.
+   The eventual label PDF must use the selected settings at exact physical
+   size; N13 addresses preview, report and PDF consistency. A review report,
+   saved draft or preview does not certify compliance.
+
+#### Product changes, history and backup
+
+- **Live draft behaviour:** a label draft remains associated with
+  the same Product. Preview uses the latest *saved* Product and its saved
+  dependencies; it does not include unsaved Product edits. If the Product,
+  an ingredient, recipe or other relevant dependency changes since the
+  label was last saved, identify that the preview has changed and that
+  review is needed. Retain the saved layout choices; do not silently present
+  the earlier result as current or claim it is an unchanged historical
+  snapshot. Missing references are explicit review items.
+- Record enough dependency-change information to make that warning reliable,
+  including nested dependencies. This draft mechanism does not replace
+  version-pinned results, rule/source provenance or reproducible approved
+  history required by VER-001 to VER-004 and VER-006. Approved versions
+  remain immutable; editing one must create a new draft/version rather than
+  changing the approved record. Do not imply those later capabilities exist
+  merely because a draft can be saved.
+- Include label drafts and their Product links in versioned local backups
+  and restore them losslessly with the rest of the workspace. Older backups
+  without labels must be handled explicitly; restore remains an inspected,
+  user-confirmed operation, not a silent merge or deletion. Missing Product
+  links after import/restore must be reported, not automatically replaced
+  with a different Product.
+
+#### Initial boundaries and owner decisions
+
+- The first implementation will not provide free-form artwork placement,
+  logos, colour/font-family selection, arbitrary block reordering or multiple
+  panels. Those are potential later enhancements, not implied to be
+  unnecessary. The owner chose this bounded scope for now and can revisit it
+  after seeing it in use.
+- Generated ingredient, allergen, nutrition and other product-derived text
+  is not freely edited or hidden in the label editor. Correct the underlying
+  Product or evidence instead. Optional commercial text and other content
+  not yet modelled are deferred, not silently treated as legally irrelevant.
+  Supplier, date, lot and storage details, warnings, ingredient allergen
+  emphasis and other existing gaps remain visible; the current food-state
+  and nutrition limitations in ADR 022 also remain.
+- The owner chose multiple named drafts per Product, the bounded initial
+  customisation scope, and the live preview with an explicit change warning.
+  These are product decisions, not statements about law.
+
+N12c completed 2026-11-17: Labels now saves multiple named drafts with
+single-panel layout choices locally, supports duplication and preserves
+unsaved edits across navigation. Its preview uses the latest saved product
+and traces nested dependencies to warn about changes; missing product links
+remain explicit. Inspected version-3 backups preserve labels, and older
+backups warn before replacing existing drafts. Layout validation, overflow,
+restore, accessibility and existing export safeguards have been tested.
+These drafts are not approved or version-pinned historical results; label
+PDF export remains blocked. N13 still addresses preview, report and PDF
+consistency (PACK-001, PACK-004, PACK-005, VER-001 to VER-004, DATA-003,
+LOCAL-006, BKP-001, BKP-005, UX-007).
+
+N13 completed 2026-11-18: the review report identifies the selected draft
+and current layout, layout issues and displayed nutrition values, including
+unavailable values, basis and optional combined-food column. It identifies
+unsaved, changed or invalid preview states rather than implying an approved
+or historical result. The preview and PDF renderer use the same generated
+SVG; fractional physical dimensions and text sizes are not silently rounded
+in that SVG. Output tests include prepared, combined and drained food, and
+PDF page dimensions. Label PDF export remains blocked and physical print
+proof, nutrition policy and regulatory review remain outstanding
+(DATA-003, CALC-010, CALC-014, PACK-001, PACK-004, PACK-005, TRACE-008).
+
+### N14 - Journey and release-gate check
+
+Completed 2026-11-18 as an engineering check, not public-release or
+regulatory acceptance. The fictional cake-and-cookie journey exercises
+supported and incomplete nutrition inputs, nested ingredient/allergen
+paths, edits and stale confirmations. It now also saves distinct labels for
+both products, checks the nested-dependency warning and restores their
+settings and Product links from an encrypted backup. The incomplete cookie
+retains unavailable nutrition values and cannot generate a preview from its
+incomplete declaration. “Complete” here means the exercised inputs are
+sufficient for a supported draft calculation, not that a label is legally
+complete.
+
+The browser suite also covers the fictional drink, prepared and drained
+foods, Product review and historical results, label duplication, missing
+links, restore replacement, offline report access and both backup types.
+Automated WCAG scans include Product review and Labels; a narrow-screen
+keyboard test covers label editing and saving. These checks do not replace
+manual assistive-technology testing or physical print proof. The full
+unit and browser suites, build, type-check, lint and draft rule-data
+validation passed. No application regression was found in the exercised
+paths (DATA-003, CALC-014, TRACE-004, TRACE-006, TRACE-008, PACK-001,
+PACK-004, BKP-001, BKP-005, UX-007).
+
+**Remaining release blockers and limits at N14:** UXR2a subsequently enabled
+incomplete review-copy PDFs only; it did not resolve the public-release
+limitations listed here.
+
+- **Label assembly and export:** required pack information and the
+  applicability of warnings/advisories are not fully assessed or assembled;
+  supplier name/address, lot, date and storage details, ingredient allergen
+  emphasis and other content remain incomplete. Label PDF export is still
+  blocked. See [ADR 023](./adr/023-pack-and-declaration-integration.md).
+- **Nutrition and food states:** the NIP display policy and fixtures remain
+  reviewer-gated (R1-13); prepared per-100 mL, additional/claim-related rows,
+  infant-food formats and some food-state combinations remain unsupported or
+  review-only. See [ADR 022](./adr/022-nutrition-panel-integration.md).
+- **Reviewer and print acceptance:** R3-01 reviewer-verified golden
+  fixtures and R1-21 minimum-size/physical print proof remain open P1-6 and
+  P1-5 gates. Automated layout and accessibility checks are not a substitute
+  for those reviews.
+- **Regulatory coverage:** the installed rule data is draft and no rules are
+  enabled; additive, prescribed-name and claims mappings, selected-cohort
+  fixtures and applicable reviewer approvals remain outstanding. Unsupported
+  cases must remain REVIEW REQUIRED. See the
+  [Phase 2 gate record](./phase2-gate-record.md) and
+  [reviewer questions](./reviewer-questions.md).
+- **Historical reproducibility:** approved record snapshots are retained,
+  but label drafts and their change signatures do not pin the full
+  ingredient/formulation, rule and source dependency history. Historical
+  reproduction remains open (VER-003, VER-006, VER-009).
+
+N14 does not close the earlier unchecked Phase 1 or public-MVP gates, approve
+any rule, or authorize label export. No new regulatory research or approval
+was performed in this check.
+
+2026-11-18 usability feedback: the Formulations page now uses the same
+full-width, expandable-section pattern as Ingredients. Recipe input,
+processing and save validation remain unchanged (FORM-004 to FORM-006,
+UX-007). Internal draft headings and review notes are separated from the
+pack-copy preview; the surrounding warning, review report and label export
+block remain. The owner also identified excessive source-related review
+messages, which remain unresolved.
+
+N1 completed 2026-11-17: [food-state nutrition research](./food-state-nutrition-research.md)
+records the primary-source triggers and outcomes for water reconstitution,
+draining and food prepared or consumed with another food. These provisions
+are conditional, not a universal choice of one food state. Missing
+composition, yield or preparation evidence cannot be replaced by an assumed
+retention factor. Overlapping triggers and product-specific exceptions remain
+explicitly bounded for later work. N1 changed documentation only.
+
+N2 completed 2026-11-17: [nutrient catalogue research](./nutrient-catalogue-research.md)
+records general NIP entries, conditional entries, Schedule 1 vitamins and
+minerals, forms and units, calculation components and product-specific
+limits. It identifies sources and gaps rather than treating one list as
+universal. N2 changed documentation only.
+
+N3 completed 2026-11-17: [ADR 016](./adr/016-nutrient-data-foundation.md)
+records the expanded identifiers, units, evidence and conservative
+expression handling. Mass-based ingoing calculations, sourced-density
+conversion and backup round trips are tested; a missing quantity or
+unsupported form is not treated as zero. The searchable editor and expanded
+nested propagation were planned for N4 and N5.
+
+N4 completed 2026-11-17: the ingredient editor searches the expanded
+catalogue and records optional mass- and volume-based values, units and
+user-supplied forms. Missing forms are not inferred. Edits and backup restore
+preserve saved evidence, while removing or clearing a value leaves it unknown.
+Expanded recipe propagation and label rows were planned for later steps
+(ING-002, DATA-003, DATA-006).
+
+N5 completed 2026-11-17: supported additional nutrients flow through nested
+recipes as ingoing estimates, using either whole-compound or component
+evidence, not both. Tests check independent weighted results, unit and
+sourced-density conversion, repeated source paths, missing evidence,
+incompatible forms, known zero and insufficient precision. These estimates
+are not finished-food or label results; processing and food-state support
+remain subsequent steps (CALC-001, CALC-015, DATA-003, DATA-006).
+
+N6 completed 2026-11-17 in two owner-approved turns: optional finished-recipe
+values, then independently sourced whole-recipe nutrient retention with
+recorded batch yield. Each route requires confirmation and leaves missing or
+stale evidence for review; weight change alone does not determine retention.
+Processed nested recipes, nutrient additions and unsupported factors remain
+review cases. See [ADR 017](./adr/017-finished-food-nutrition.md) and
+[ADR 018](./adr/018-nutrient-retention.md)
+(CALC-002, CALC-003, CALC-015, DATA-003, DATA-005, DATA-006).
+
+N7 completed 2026-11-17: optional consumer-preparation directions and one
+evidenced addition support a confirmed mixing-only calculation, with
+independent prepared servings and sourced densities where needed. Missing or
+conflicting inputs require review, and changes invalidate the relevant
+confirmation. Prepared results are trace-only until N11; draining remains N8.
+See [ADR 019](./adr/019-consumer-preparation.md)
+(CALC-002, CALC-011, CALC-014, CALC-015, DATA-003, DATA-006).
+
+N8 completed 2026-11-17: directly evidenced drained-food values support
+per-100 g and recorded serving calculations, with source and directions
+shown in trace. Missing or stale evidence, and draining combined with other
+preparation, remain review cases; drained weight alone does not determine
+nutrient distribution. Label integration remains N11. See
+[ADR 020](./adr/020-drained-food-nutrition.md)
+(CALC-002, CALC-011, CALC-014, CALC-015, DATA-003, DATA-006).
+
+N10 completed: the Product editor now uses expandable sections, shows
+saved recipe and nutrition evidence, and keeps pack facts separate from
+consumer directions. Mixing, draining and other directions can coexist;
+unknown, conflicting and unsupported cases remain review-only. Older
+records without a direction status or other recorded evidence of directions
+remain unknown. The editor preserves
+unsaved work while navigating to ingredients or recipes and warns before
+discarding it. Classification retains its automatic saves; additive and
+claim inputs retain their own save controls. Common-food and drink
+workflows, conditional directions, edits, backup/restore and accessibility
+have browser and unit coverage. Prepared and drained label columns were
+left to N11; this step did not approve a regulatory release.
+See [ADR 021](./adr/021-product-journey.md)
+(UX-004, UX-007, UX-009, CALC-002, CALC-014, DATA-003, DATA-006).
+
+N11 completed 2026-11-17: the draft panel and trace distinguish as-sold,
+reconstituted, drained and supported combined-food results. The combined
+column is calculated only where the recorded mixture matches one product
+serving. Overlapping or unclear directions and missing or stale evidence
+remain review cases. Prepared volume unit quantities, additional and
+claim-triggered rows, and correct servings per pack for prepared or drained
+servings are not established by this step. The general panel, product
+classification and applicable exceptions still require review; label export
+remains blocked. See [ADR 022](./adr/022-nutrition-panel-integration.md)
+(CALC-010, CALC-011, CALC-014, CALC-015, DATA-003, DATA-006).
+
+N12 completed 2026-11-17: recorded name, net quantity and eligible consumer
+directions are shown as draft pack content, alongside candidate ingredient
+and allergen information. The review report and trace retain ingredient
+paths, available specification details and allergen evidence, including
+unresolved cases. Missing pack fields and unsupported ingredient-list
+allergen emphasis are explicit; no absence or legal exemption is inferred.
+Supplier, lot, date-marking and storage data are not yet collected, and
+legal applicability and warning content remain unresolved. Label export
+remains blocked. See [ADR 023](./adr/023-pack-and-declaration-integration.md)
+(CALC-001, DATA-003, TRACE-008, PACK-005).
+
+### N9 - Agreed Product journey
+
+**Status:** Approved by the owner, 2026-11-17; implemented in N10. This is the
+agreed workflow and layout, not new regulatory research. See
+[ADR 021](./adr/021-product-journey.md).
+It preserves the existing release and export gates and does not certify a
+product or label (UX-004, UX-007, UX-009, TRACE-008, TRACE-012).
+
+#### Agreed layout
+
+Use one Product page with expandable sections, like the ingredient editor,
+instead of requiring users to work through a separate screen for every topic.
+The first sections are open for a new product; advanced and conditional
+details expand when relevant. Every section shows a text status such as
+**Not entered**, **Needs attention**, or **Information entered**; none means
+legally compliant. A save control remains visible and the draft can be saved
+with missing facts.
+
+```text
+PRODUCT: [working name]                         [Save product draft]
+
+1. Product and recipe
+   Product name: [                         ]
+   Recipe:       [ choose saved recipe     ]   [Open recipe]
+   From the recipe: ingredients, processing and selected nutrition method
+   [What needs attention in this recipe?]
+
+2. Pack and servings
+   Net contents: [       ] [g / mL]
+   Serving size: [       ] [g / mL]    Servings per pack: [       ]
+   Food form:    [ solid / liquid / not sure ]
+
+3. What does the customer do before eating?
+   [No such directions] [Directions apply] [Not sure yet]
+   If directions apply, record the relevant instructions:
+   [Mix with water or another food]  [Drain]  [Other / unsure]
+   More than one can apply. Show only the relevant detail sections.
+
+4. Nutrition and food-state details
+   Show the recipe's selected as-sold nutrition method and its evidence.
+   Ask for product confirmation and a sourced density only when needed.
+   If relevant: preparation amounts and added-food evidence; or drained-food
+   values and evidence. Show each basis and missing information separately.
+
+5. Product type, additives, names and claims
+   Existing product-type questions, additive/name checks and optional claims.
+   Show known recipe evidence first; ask only for independent or unresolved
+   facts. Keep the existing detailed checks and sources accessible.
+
+6. Review and next actions
+   [Needs attention: specific item + where to fix it]
+   [Open Review & trace]  [Open Labels]
+   Draft only; no result is a legal clearance.
+```
+
+#### Behaviour and safeguards
+
+- **Recipe is the source, not a second questionnaire.** Display known
+  ingredients, nested sources, processing and the selected nutrition method
+  from the linked recipe. Link to the recipe or ingredient to change them.
+  Do not ask the user to enter the recipe or its nutrient values again.
+  Show gaps, conflicting evidence and changes that need reconfirmation.
+  Ingredient presence may establish a supported fact; incomplete data does
+  not establish absence (FORM-005, DATA-003).
+- **Pack facts are independent.** Ask for net contents, serving, servings per
+  pack and food form when not reliably known. Reuse an existing serving only
+  for the same food state and unit. A servings-per-pack suggestion is
+  appropriate only when the recorded quantities have a compatible basis and
+  units; identify it as a suggestion requiring confirmation, not a legal
+  rounding rule. Otherwise leave it for the user to enter.
+- **Directions are not one exclusive food state.** Ask whether the label has
+  relevant consumer instructions; allow mixing/reconstitution, draining and
+  other instructions to coexist. “Not sure” stays unknown. Existing records
+  without directions do not automatically mean “no directions”. Distinguish
+  manufacturing processing, the product as sold and what the customer does.
+  Do not infer the legal NIP basis or an exemption merely from a selection;
+  unresolved or overlapping cases require review (CALC-002, CALC-014).
+- **Only show genuinely needed details.** For a supported mixing case, use
+  the existing recipe as the product input and request the added food,
+  amounts, directions and confirmation. For a drained case, use direct
+  drained-food evidence; do not infer nutrients from drained weight. Request
+  the appropriate sourced density only for a conversion that needs it.
+  Reuse the already-entered drained serving when its basis is the same.
+  Existing N7 and N8 limits remain visible; unsupported processing,
+  combinations, missing inputs and conflicting evidence remain review cases.
+- **Preserve checks, evidence and user work.** Retain the current specialised
+  caffeinated-beverage and infant-food questions, additive/name and claim
+  checks, their source information and illustrative-preview controls. Do not
+  suppress an unresolved check because a section is collapsed. Reuse
+  equivalent facts only when the basis and evidence really match; retain
+  conflicting facts for review rather than silently overwriting them.
+  Previously entered preparation details remain available if a section is
+  switched off. Relevant changes make existing confirmations stale.
+- **Saving and accessibility.** The product stays on the device. Saving an
+  incomplete draft is allowed; validation and save errors are explicit.
+  Navigating to edit a recipe or ingredient must not silently discard
+  unsaved product work. Sections, errors, statuses and actions work by
+  keyboard and do not rely on colour alone. Approved snapshots remain
+  immutable and existing data is not deleted without approval.
+
+#### Examples and implementation boundary
+
+An ordinary cake can select its saved recipe, enter pack and serving facts,
+and record that there are no relevant consumer preparation directions. If
+its cooking or finished nutrition is unresolved, the page points back to
+that evidence rather than asking for an as-sold recipe again. A canned food
+with draining directions shows drained-food evidence, not an assumed
+distribution of nutrients. A caffeinated drink retains its applicable
+classification and additive questions and asks for a sourced product density
+when the supported volume calculation needs it. These are examples, not
+universal templates or determinations of applicable law.
+
+N10 implements the agreed Product layout and preserves the existing
+workflows, with tests for ordinary food, the drink, unknowns, conditional
+directions, edits and persistence. The direction status and independent
+preparation and draining flags represent multiple directions and unknowns
+without inferring “no directions” from missing older data, overwriting saved
+facts, or changing immutable versions.
+
+N11 connected the supported nutrition rows and food-state columns described
+above; N12 connected the currently supported ingredient, allergen and pack
+content. N12a-N12c now cover the requested navigation and label workspace,
+N13 covers preview/report/PDF consistency, and N14 covers end-to-end release
+blockers. The proposal does not add unsupported regulatory checks,
+promise a complete label, or relax existing export restrictions.
+
 ### Approved ingredient and formulation track
 
-The owner approved this sequence on 2026-11-16. Each step is intended for one
-turn but may need splitting. I1's general direction is agreed; detailed
-interactions remain open. The approved goal is a flexible foundation
+The owner approved this sequence on 2026-11-16. Keep to each step's agreed
+entry and exit criteria: aim to complete it in one turn, with two or three
+turns as an exceptional maximum. Do not silently expand a step to encompass
+all related requirements; record genuinely later work separately. I1's general
+direction is agreed; detailed interactions remain open. The approved goal is a flexible foundation
 for most simple cakes and cookies, not a claim that every baked good is
 supported. The drink remains a contrasting test case.
 
@@ -49,12 +1519,12 @@ supported. The drink remains a contrasting test case.
 | I1 | Direction agreed | Single-page ingredient entry with expandable sections, inline compound-component entry and a recipe screen with ingredients and amounts together. Detailed interactions and preservation checks continue in later steps. |
 | I2 | Approved | Research and agree general ingredient data, nutrition, allergen and additive identity/evidence; distinguish common, optional and conditional information. Bounded source review and the agreed approach are recorded below. |
 | I3 | Complete | Basic ingredient creation/editing uses a single expandable page and general names, without mandatory drink-specific questions. The earlier specialised controls were retired during I6 (ING-001, DATA-003, DATA-005). |
-| I4 | Complete | Nutrient and allergen entry accepts optional general sources; supported nutrient values can be entered on either basis with explicit units. Unknowns remain unknown, and volume nutrition calculations currently require sourced ingredient density (ING-002, ING-003, DATA-003, DATA-005, DATA-006). Catalogue expansion and optional-nutrient product calculations remain future work. |
+| I4 | Complete | Nutrient and allergen entry accepts optional general sources; supported nutrient values can be entered on either basis with explicit units. Unknowns remain unknown, and volume nutrition calculations currently require sourced ingredient density (ING-002, ING-003, DATA-003, DATA-005, DATA-006). Catalogue expansion remains future work. |
 | I5 | Complete | Support an additive as an ingredient; the redundant additive-within-ingredient entry was replaced by component entry during I6. Additive permission coverage expands separately (ING-001, DATA-003, DATA-005). |
 | I6 | Complete | Guide entry of complete and partial compound ingredients and composition inline, with explicit unknown amounts and nutrition basis. |
-| I7 | Pending | Rebuild recipe/formulation entry, quantities, nested recipes and relevant process/yield details; preserve cycle protection. |
-| I8 | Pending | Carry supported nutrient, allergen and additive evidence through formulations, with source paths, missing/conflicting data and no double counting. |
-| I9 | Pending | Exercise multiple fictional cakes, cookies and the drink, including incomplete evidence and a direct additive; test accessibility, edits, backup/restore and regressions. |
+| I7 | Complete | Rebuild recipe/formulation entry, quantities, nested recipes and relevant process/yield details; preserve cycle protection. |
+| I8 | Complete | Carry supported nutrient, allergen and additive evidence through formulations, with source paths, missing/conflicting data and no double counting. |
+| I9 | Complete | Exercise multiple fictional cakes, cookies and the drink, including incomplete evidence and a direct additive; test accessibility, edits, backup/restore and regressions. |
 
 I1 discussion: the owner chose a single ingredient page with expandable
 sections over a step-by-step wizard. Proposed sections are basics, contents,
@@ -98,15 +1568,16 @@ mass-based recipe calculator can use a per-100 mL ingredient value when
 that ingredient has a positive, dated, sourced density; otherwise the value
 is unavailable rather than converted using a guessed or finished-food density
 (CALC-010, DATA-003, DATA-006). If both bases have a value for the same
-nutrient, the calculator currently prefers the per-100 g value; it does not
-compare or reconcile the two. The allergen confirmation wording is shorter,
+nutrient, the calculator prefers the per-100 g value. I8 flags differences or
+an unavailable density for review; it does not reconcile the two. The allergen confirmation wording is shorter,
 and the ingredient editor uses the available desktop width.
 
 I4's optional-nutrient control supports the existing domain identifiers in
 g or mg per 100 g or 100 mL. It is not a complete catalogue of vitamins or
 minerals. Optional values are saved with their individual source and are not
-automatically added to labels or included in product nutrition calculations;
-calculation propagation and catalogue expansion remain future work (I8).
+automatically added to labels. I8 calculates ingoing estimates when every
+selected ingredient has the optional nutrient; incomplete values remain
+review-only. Finished-food and label use, and catalogue expansion, remain future work.
 Current-format backups are tested, but compatibility with an actual earlier
 v2 app remains unverified; see ADR 011. I6 later retired the specialised
 questions from the ingredient editor.
@@ -117,12 +1588,11 @@ current additive report and a direct declaration candidate is not printed as
 a second ingredient. A source may be promoted rather than re-entered.
 General dated evidence can confirm additive-source coverage. No permission,
 purity, concentration or legal identity is inferred from a name or number.
-Complete inline composition was added in I6; end-to-end nested additive propagation
-and prevention of parent/component double counting remain I8. Actual
+Complete inline composition was added in I6; I8 adds nested additive propagation
+with review for possible parent/component overlap. Actual
 previous-v2 app compatibility for these new fields remains unverified.
-Until nested additive propagation is implemented, the additive report warns
-when a compound ingredient occurs and does not present a partial total as a
-calculated final concentration.
+Incomplete compositions and possible overlapping additive evidence cannot
+produce a calculated final concentration.
 
 I6 owner feedback: make single ingredients, additives and ingredients made
 from other ingredients clear choices. Components should be entered once, not
@@ -168,23 +1638,102 @@ scope is complete; nested propagation remains I8.
 A direct additive with unknown saved status is treated as added when used as a
 recipe ingredient, without changing its saved status or overriding an explicit
 carry-over or processing-aid status. Known concentration and density values
-can now be calculated without a dated source; the result and consultant notes
-identify missing provenance, and an unsourced concentration cannot establish a
-permission result. Missing quantities, purity, density or other
-required calculation inputs are not guessed. Propagation through compound
-ingredients remains I8 work (ADD-004, ADD-009, DATA-003).
+can now be calculated without a dated source. UXR2 subsequently removed
+source-only warnings and the source-only permission gate; rule approval and
+other permission safeguards still apply. Missing quantities, purity, density or other
+required calculation inputs are not guessed. I8 propagates supported additive
+sources through compound ingredients (ADD-004, ADD-009, DATA-003).
 
-I7/I8 follow-up: decide how to capture an additive's role per use, both in a
-formulation and in a compound ingredient. The same ingredient can have
-different roles in different uses. Derive a component's route from its recipe
-where possible, but do not infer processing-aid status or legal carry-over
-eligibility. Until a use-level workflow and checks exist, the current report
-states that direct additives are treated as added and that processing-aid and
-carry-over checks are not run (ADD-007, ADD-010, DATA-003).
+I7 captures an optional direct-additive use on individual formulation lines
+and compound ingredient components. The same ingredient can have different
+uses in different paths; ordinary entry does not require the question.
+Uncertain uses and potential processing aids require review rather than
+being silently excluded from calculations or declarations. Carry-over and
+processing-aid eligibility are not assessed. I8 propagates additives inside
+complete compound ingredients (ADD-007, ADD-010, DATA-003). See
+ADR 013.
 An ingredient cannot currently be both a direct additive and a compound
 ingredient: a supplied additive blend with carriers can record concentration
 but cannot list those carriers on that same record. Design this case before
 claiming general additive-blend support; do not infer unknown carriers.
+
+I7 completion (FORM-001 to FORM-004, DATA-003): ingredients can be created
+without losing an in-progress recipe, and the new ingredient is added as a
+line with an unknown amount. Ordinary recipe drafts can be saved with selected
+ingredients or nested recipes whose amounts are unknown, without labelling
+them as supplier compositions. The amounts, line order, chosen units and
+per-use additive details can be completed later; proportions, ordered
+declarations and nutrition remain unavailable while amounts are missing.
+Known allergen evidence remains visible for review. A measured final weight
+can also be retained without inventing a starting weight. See ADR 015.
+Recipe and compound-ingredient selections reject circular references as they
+are chosen, showing the recipe and ingredient names in the cycle without
+discarding the other draft entries. The same graph check protects saves and
+backup inspection/restore, including unknown-amount lines (FORM-004).
+Merge and sync are not implemented and will need the same check if added.
+A line's ingoing percentage is shown alongside its
+amount when the whole recipe is quantified. As an optional alternative to
+entering weights directly, a complete recipe's percentages can be converted
+to line weights using a known starting batch weight. The total must be
+exactly 100%; incomplete or unreconciled inputs are not silently applied or
+discarded when saving. See ADR 014. The user can leave processing
+unknown, confirm that no processing changed the food, enter a final batch
+weight, or optionally record individual gains and losses with an optional
+description and material. Amounts can be unknown; a list is not treated as
+complete unless the user confirms it and every amount is known. A complete
+recipe's starting weight is derived from its lines. A measured finished
+weight or complete change list can show a yield preview, and a supplied
+final weight must agree with the changes. See ADR 012 for the data and
+calculation safeguards.
+
+I7 meets its entry-workflow exit scope: recipes and quantities can be entered,
+nested recipes selected, relevant processing and yield recorded optionally,
+and cycles rejected. The broader requirements are not all complete. Recorded
+processing details do not establish which nutrients or additives remain in
+the food; affected calculations and declaration ordering remain flagged for
+review, even when starting and final weights match. Processing effects on
+those calculations remain to be designed and wired. Percentage-only recipes
+without a starting batch weight, partial percentage compositions, and other
+FORM-001/FORM-002 details are not yet implemented; they are not I7 exit
+conditions and remain future work.
+
+I8 completed (FORM-005, ADD-004, DATA-003, TRACE-015): the additive report
+traces sources through nested compound ingredients, including repeated uses,
+and shows their paths. It calculates from complete, quantified component lists
+and confirmed additive coverage; UXR2 subsequently made user-source
+references optional without source-only warnings. Unknown amounts, incomplete coverage, missing
+records, possible compound/component overlap and conflicting calculation
+bases prevent a final total. Known additive sources remain visible when
+amounts are missing. Allergen evidence retains each recipe and compound path,
+including repeated uses and unknown amounts; conflicting compound and
+component assessments require review without hiding known positive evidence.
+The review workspace shows selected whole-ingredient or component nutrition
+inputs and their paths. It provides ingoing estimates for supported optional
+nutrients only when every selected ingredient has evidence, and flags
+conflicting mass/volume values or an unavailable comparison density. These
+estimates are not automatically label rows or finished-food calculations.
+Processing effects and processing-aid eligibility remain review-only. Broader
+nutrient catalogue and declaration support remain future work.
+
+I9 completed (DATA-003, FORM-005, CALC-010, UX-002, TEST-011): a browser
+journey enters two fictional cakes and cookies using shared ingredients, a
+compound mix and a direct additive. It checks ingredient edits propagate,
+recipe edits invalidate the food-basis confirmation, incomplete quantities
+retain known allergen and additive evidence, and a clean-profile encrypted
+restore preserves the drafts and their results. It finishes the cookie recipe
+and checks its direct additive once in the declaration and its calculated
+concentration. Automated accessibility checks cover the compound editor,
+incomplete recipe, label and expanded trace; the trace is also opened by
+keyboard. A contrasting drink journey enters the documented fictional batch,
+checks the independently calculated energy and sugars for the serving and
+per 100 mL, and restores both encrypted and unencrypted backups.
+
+The baked-good figures are invented arithmetic fixtures, not real recipes or
+food evidence. Their test-only confirmation that no processing changes the
+food must not be inferred for actual baking. Optional processing effects,
+actual product and label acceptance, accessibility beyond automated checks,
+and regulatory release remain outside these tests. The baked-good fixtures
+exist in the tests; they are not additional in-app worked examples.
 
 Bounded I4 research by the Australian Food Requirements Analyst, 2026-11-16:
 [Schedule 11 S11-2](https://www.legislation.gov.au/F2015L00481/2024-10-29/2024-10-29/text/original/epub/OEBPS/document_1/document_1.html)
@@ -265,8 +1814,9 @@ FR-005, DATA-003 and DATA-006, FORM-004 and VER-002.
 ### Earlier broader sequence
 
 The I1-I9 track above replaces the ingredient/formulation portion of the
-following proposed sequence. Later product, pack and label steps remain
-provisional and should be revisited after I9.
+following proposed sequence. Its later product, pack and label proposals
+remain historical/provisional. The approved N1-N14 track is complete; the
+UXR16-UXR23 roadmap above is complete. Any later work must remain within the approved plan and exit gates.
 
 **Earlier proposed sequence:** each row is intended to fit one turn; split if research,
 implementation or verification makes it too large. User approval of the
@@ -334,8 +1884,8 @@ Target: a presentable, offline-capable MVP vertical slice that can later grow in
 | D4  | UI uses Tailwind CSS v4 with shadcn-vue (accessible primitives, components owned in-repo). No Bootstrap.                                                                                                                                                                                                             | 2026-11-05 |
 | D5  | A human food-regulatory reviewer is engaged at defined touchpoints (section 10).                                                                                                                                                                                                                                     | 2026-11-05 |
 | D6  | Monetisation details (plans, trial length, pricing) are deferred and are not an MVP concern.                                                                                                                                                                                                                         | 2026-11-05 |
-| D8  | Selected, eligible local-demo checks show source-verified provisional outcomes normally under ADR-009; they are distinct from reviewer-approved results. The ADR-006 opt-in illustrative policy remains for other existing checks until deliberately changed. Neither policy fills missing facts or confers approval. | 2026-11-11 |
-| D7  | Users may manually enter nutrient values from an appropriate source, including a supplier, product label, laboratory result or food-composition database, recording source and basis. Defer automatic external database integration until release, licence, provenance and update policy are decided. | 2026-11-16 |
+| D8  | Selected, eligible local-demo checks show provisional outcomes normally under ADR-009; they are distinct from reviewer-approved results. UXR11 may use complete, explicit user-entered caffeine facts without source references; supplied sources are retained but not independently verified. The ADR-006 opt-in illustrative policy remains for other existing checks until deliberately changed. Neither policy fills missing facts or confers approval. | Updated 2026-11-19 |
+| D7  | Users may manually enter nutrient values from sources such as suppliers, labels, analysis or food-composition databases. As approved 2026-11-18, source references are optional in the ordinary workflow; retain the value's necessary basis and any already-recorded source details. Do not infer unknown facts or remove rule-source provenance. Automatic external database integration remains deferred until release, licence, provenance and update policy are decided. | Updated 2026-11-18 |
 ## 4. Non-negotiable constraints
 
 These come from `docs/requirements.md` and apply to every phase.
@@ -612,11 +2162,13 @@ regressions but do not replace this new scenario.
   demo, not removed from the longer-term product scope.
 
 **Accepted local-demo policy.** ADR-009 and updated D1/D8 permit normally
-visible, useful source-verified provisional results for selected eligible
-checks; other existing checks retain ADR-006 safeguards. Provisional and
-reviewer-validated outcomes remain distinct, with versioned source and input
-traces. Missing, ambiguous and unsupported cases are not bypassed, and
-TRACE-015 remains in force. Block label-PDF export for unresolved required
+visible, useful provisional results for selected eligible checks; other
+existing checks retain ADR-006 safeguards. UXR11 accepts complete, explicit
+user-entered caffeine facts without references, retains optional sources, and
+identifies that inputs are not independently verified. Provisional and
+reviewer-validated outcomes remain distinct, with versioned rule provenance
+and input traces. Missing, ambiguous and unsupported cases are not bypassed,
+and TRACE-015 remains in force. Block label-PDF export for unresolved required
 content; explicit lot/date production placeholders are allowed only when the
 required type is known. The separate explanation report remains exportable.
 The incomplete-export safeguard and independent review-report export are
@@ -735,7 +2287,7 @@ Status key: **P0-5 SOURCE-MAPPED** = the cited provision was checked against an 
 | Food Standards Code: Standards 1.1.1, 1.1.2, 1.3.2, 1.3.3, 1.4.x, 1.5.4; Chapter 2 standards; Schedules 1, 3, 14 to 18, 22 | Cth/ANZ             | Definitions, vitamins and minerals, processing aids, food classes, composition | Phases 2 and 3             | TO BE RESEARCHED                                                                              |
 | Country of Origin Food Labelling Information Standard 2016                                                                 | Cth                 | Origin labelling                                                               | Phase 2                    | RESEARCHED; current compilation TO BE VERIFIED                                                |
 | Competition and Consumer Act 2010, Australian Consumer Law (Schedule 2)                                                    | Cth                 | Misleading claims; subscriptions                                               | Phases 3 and 4             | UNVERIFIED                                                                                    |
-| National Measurement Act 1960 and National Trade Measurement Regulations 2009                                              | Cth                 | Net quantity / measurement marking on packages                                  | MVP (review-only)          | P0-5 SOURCE-MAPPED: Act ss 18JA-18JC; Regulations pt 4, regs 4.3-4.16A and Sch 5; detailed exceptions/application remain for review |
+| National Measurement Act 1960 and National Trade Measurement Regulations 2009                                              | Cth                 | Net quantity / measurement marking on packages                                  | MVP (review-only)          | P0-5 SOURCE-MAPPED: Act ss 18JA-18JC; Regulations pt 4, regs 4.3-4.16A and 4.28-4.29, and Sch 5; detailed exceptions/application remain for review |
 | Free Range Egg Labelling Information Standard 2017                                                                         | Cth                 | Egg claims                                                                     | Phase 3                    | UNVERIFIED                                                                                    |
 | Imported Food Control Act 1992                                                                                             | Cth                 | Imported food and importers                                                    | Later                      | UNVERIFIED; out of MVP                                                                        |
 | Therapeutic Goods Act 1989                                                                                                 | Cth                 | Boundary between food and medicine claims                                      | Phase 3                    | UNVERIFIED                                                                                    |
@@ -766,20 +2318,24 @@ The Federal Register of Legislation (FRL) is the authoritative Code text. FSANZ 
 | Date marking | Standard 1.2.5, ss 1.2.5-3 (date marking) and -4 (sale after use-by date) | [FRL Standard 1.2.5](https://www.legislation.gov.au/F2015L00401/latest), compilation F2021C00660 (C03), effective 2021-06-03. | Provisions mapped. Classification, shelf-life evidence, alternatives and exemptions remain R1-18 items; no shelf-life judgement is automated by this mapping. |
 | Directions for use and storage | Standard 1.2.6, s 1.2.6-2 | [FRL Standard 1.2.6](https://www.legislation.gov.au/F2015L00393/latest), effective 2016-03-01 (instrument F2015L00393; no later compilation shown on the record checked). | Provision mapped for the identified storage/directions triggers. Triggering product/process facts and exact rule coverage remain R1-19; no trigger or listed-food case is approved for deterministic evaluation here. |
 | NIP applicability, content, calculation and format | Standard 1.2.8, ss 1.2.8-5 to -7 and -11 to -13; Schedules 11, 12 and 13 | [FRL Standard 1.2.8](https://www.legislation.gov.au/F2015L00395/latest), F2026C00411 (C06), effective 2026-04-30. [Schedule 11](https://www.legislation.gov.au/F2015L00481/latest), F2024C01138 (C06), effective 2024-10-29. [Schedule 12](https://www.legislation.gov.au/F2015L00482/latest), F2017C00342 (C02), effective 2017-04-13. [Schedule 13](https://www.legislation.gov.au/F2015L00483/latest), F2021C00621 (C02), effective 2021-06-03. | Provisions/source chain mapped. Schedule 11 determines the specified calculation methods; Schedule 12 supplies panel formats; Schedule 13 addresses small-package nutrition information. Exemptions, evidence policy, prepared/drained cases and rounding still require R1-11 to R1-15. An alcohol energy-labelling transition is noted in the baseline; exact transition provision, application and dates are TO BE VERIFIED before rule use. |
-| Net quantity / measurement marking | National Measurement Act 1960, ss 18JA-18JC; National Trade Measurement Regulations 2009, pt 4 (especially regs 4.3-4.16A) and Sch 5 | [FRL Act](https://www.legislation.gov.au/C1960A00064/latest), compilation C2024C00648 (C22), effective 2024-10-14. [FRL Regulations](https://www.legislation.gov.au/F2009L03479/latest), compilation F2024C00311 (C08), effective 2024-03-20. [Department/NMI guide](https://www.industry.gov.au/publications/guide-sale-pre-packaged-goods), updated 2025-11-27. | National trade-measurement source mapping replaces “unmapped”; it does not establish one universal label output for every product. Marking exemptions, unit, position, character size, measurement method, quantity accuracy and legal-metrology decisions remain review-only (R1-20). |
-| Victorian application of Code | Food Act 1984 (Vic), s 16(1)-(4) | [Victorian legislation, Act in force](https://www.legislation.vic.gov.au/in-force/acts/food-act-1984), version 119, effective 2026-07-01 | Verified as the Victorian statutory compliance/enforcement context for Code requirements. This is not an additional labelling rule or product approval. Other Food Act provisions were not reviewed. |
+| Net quantity / measurement marking | National Measurement Act 1960, ss 18JA-18JC; National Trade Measurement Regulations 2009, pt 4 (regs 4.3-4.16A and 4.28-4.29) and Sch 5 | [FRL Act](https://www.legislation.gov.au/C1960A00064/latest), compilation C2024C00648 (C22), effective 2024-10-14. [FRL Regulations](https://www.legislation.gov.au/F2009L03479/latest), compilation F2024C00311 (C08), effective 2024-03-20. [Department/NMI guide](https://www.industry.gov.au/publications/guide-sale-pre-packaged-goods), updated 2025-11-27. | National trade-measurement source mapping replaces “unmapped”; it does not establish one universal label output for every product. Marking exemptions, unit, position, character size, measurement method, quantity accuracy and legal-metrology decisions remain review-only (R1-20). |
+| Victorian application of Code | Food Act 1984 (Vic), s 16(1)-(4), s 20(1B) | [Victorian legislation, Act in force](https://www.legislation.vic.gov.au/in-force/acts/food-act-1984/119), version 119, effective 2026-07-01 | s 16 provides Code-compliance context; s 20(1B) permits council appointment of authorised officers. This does not establish principal enforcement practice or constitute a separate labelling rule or product approval. Other Food Act provisions were not reviewed. |
 | Victorian regulations and other listed Victorian instruments | The prior register's “Food Regulations 2015 (Vic)” title was not confirmed. Official register lists Food (Forms and Registration) Regulations 2025, SR 96/2025, in force 2025-11-17, and Food (Primary Production and Processing) Regulations 2025, SR 1/2025, in force 2025-02-11. | [Victorian Food (Forms and Registration) Regulations 2025](https://www.legislation.vic.gov.au/in-force/statutory-rules/food-forms-and-registration-regulations-2025); [Victorian Food (Primary Production and Processing) Regulations 2025](https://www.legislation.vic.gov.au/in-force/statutory-rules/food-primary-production-and-processing-regulations-2025). | Current titles/status checked, but provisions were not clause-reviewed for the MVP labelling scope. The intended 2015 title and its status are TO BE VERIFIED. ACL/Fair Trading, environment/container-deposit and privacy rows remain unverified and outside MVP deterministic rules. R1-27 remains unanswered. |
 
 This table does not verify Standard 1.2.7/1.2.10, additive permissions, prescribed names, claims, HSR, GM, irradiation, country of origin, packaging marks beyond net measurement, nutrition analytical adequacy, or any non-Victorian market. Those remain out of P0-5 scope. The official FSANZ Code index (`https://www.foodstandards.gov.au/food-standards-code/legislation`) was checked as the source navigator on 2026-11-06; its October 2026 consolidation was not substituted for FRL text.
 
 ## 12. Progress tracker
 
-**Current position:** Phase 1 reviewer-ready engineering baseline and Phase 2,
-Phase 3 and usability groundwork are recorded below and in section 7. The
-current workstream is the Victorian drink demo, D0-D11 in section 7. D0 and
-D1 are complete for planning; the local-demo policy and data-flow design are
-approved but not implemented. D2 is next, subject to separate authorization.
-Historical phase and release gates remain open unless explicitly superseded.
+**Current position:** The approved post-I9 N1-N14 track, including
+N12a-N12c, is complete as recorded above. Earlier Phase 1 reviewer-ready
+engineering and Phase 2, Phase 3 and usability groundwork are retained below
+and in section 7. The drink-specific D0-D11 sequence remains paused by the
+2026-11-16 reset; it is not the next work order. Historical phase and release
+gates remain open unless explicitly superseded. The owner approved the
+UXR16-UXR23 workflow-clarity and label-content roadmap on 2026-11-19;
+UXR16-UXR23, UXS1-UXS13 and CRS1-CRS5 are complete. The guided claims roadmap
+continues with CRS6. None of these tracks closes reviewer or
+release gates.
 
 Repository preparation (2026-11-05)
 
@@ -838,7 +2394,7 @@ R1-21 minimum-size policy and physical print proof also remain open P1-5
 acceptance gates. These outstanding gates do not block bounded Phase 2
 research and review-only groundwork under the approved milestone split.
 
-Phase 2 groundwork - current workstream
+Phase 2 groundwork - recorded progress; reviewer sign-off outstanding
 
 - [x] Turn 1: candidate source map recorded in `docs/mvp-regulatory-research.md`.
 - [x] Turn 2: evidence-backed classification inputs that never infer a class from a product name alone.
@@ -858,6 +2414,54 @@ Phase 2 groundwork - current workstream
 Phase 3 claims groundwork and U1-U9 are recorded in section 7; this does not
 mean claims are reviewer-approved or complete for public release. Phases 4 to
 6 have not started.
+
+Practical workflow and label-content track (approved 2026-11-19; see section 7
+and [ADR 034](./adr/034-practical-workflow-progressive-disclosure.md))
+
+- [x] UXR16: Simplify ingredient entry and derive supported caffeine facts.
+- [x] UXR17: Simplify formulation entry and progressively disclose optional manufacturing details on Formulation.
+- [x] UXR18: Simplify Product nutrition and customer-direction flow.
+- [x] UXR19: Separate Product checks from Label-specific claims and wording.
+- [x] UXR20: Audit label-content gaps and prioritize the implementation sequence.
+- [x] UXR21: Generate a clear, traceable draft ingredient declaration.
+- [x] UXR22: Implement supported allergen declarations and separate precautionary statements.
+- [x] UXR23: Reconcile and improve remaining pack and business information.
+
+Streamlining and label-workspace track (agreed direction 2026-11-23)
+
+- [x] UXS1: Discuss and settle Formulation and Product design.
+- [x] UXS2: Remove the Formulation composition section.
+- [x] UXS3: Remove the Formulation manufacturing section.
+- [x] UXS4: Simplify Product directions and nutrition.
+- [x] UXS5: Remove Product Additives and Names.
+- [x] UXS6: Simplify Product review and next actions.
+- [x] UXS7: Discuss the Label workspace in detail.
+- [x] UXS8: Implement the Label tabs and live-preview layout.
+- [x] UXS9: Explain pack details and precautionary allergens.
+- [x] UXS10: Connect claims to existing nutrition facts.
+- [x] UXS11: Remove redundant claim-entry questions.
+- [x] UXS12: Complete the end-to-end usability and regression gate.
+- [x] UXS13: Discuss and plan the wider claims system.
+
+Guided claims roadmap (agreed direction 2026-11-23)
+
+- [x] CRS1: Inventory and design the claim journey.
+- [x] CRS2: Find candidate claims locally.
+- [x] CRS3: Classify and resolve candidates.
+- [x] CRS4: Guide users to missing facts.
+- [x] CRS5: Recheck the first five draft checks.
+- [x] CRS6: Connect verified checks and NIP interactions.
+- [x] CRS7: Render selected claims on review copies.
+- [ ] CRS8a: Research no-added-sugar claims.
+- [ ] CRS9a: Implement the supported no-added-sugar slice.
+- [ ] CRS8b: Research gluten-free claims.
+- [ ] CRS9b: Implement the supported gluten-free slice.
+- [ ] CRS8c: Research fibre claims.
+- [ ] CRS9c: Implement the supported fibre slice.
+- [ ] CRS8d: Research protein claims.
+- [ ] CRS9d: Implement the supported protein slice.
+- [ ] CRS10: Plan comparative and health-claim follow-ons.
+- [ ] CRS11: Complete the claims end-to-end regression and scope gate.
 
 ## 13. Verification and definition of done
 
@@ -1094,7 +2698,158 @@ Phase 1 manual demo: complete the flow offline; restore an encrypted backup on a
 - 2026-11-11: Began D1. `docs/drink-demo-data-flow.md` maps current fields and result paths, proposes evidence and blend propagation, outlines safe migrations and backup/restore, and flags that current product approvals snapshot one record rather than a full dependency closure. The material design awaits product-owner approval; no application code changed.
 - 2026-11-11: Completed D1 after product-owner approval of the existing compound ingredient plus user-created composition formulation model and historical dependency-snapshot direction. ADR-010 records the decision; D2 remains a separate implementation turn. No schema, engine, UI or rule behaviour changed.
 - 2026-11-11: Began D2 (TRACE-008, TRACE-012, TRACE-015, PACK-001, PACK-005). Added a separate, local review-report PDF with input paths and effective dates; it remains available when draft data is incomplete. Blocked label-PDF export for all current layouts because required pack content and the applicability of warnings are not yet fully assessed or assembled. Provisional outcomes are not implemented: existing draft rules and ADR-006 hypothetical reruns do not meet ADR-009 eligibility. D2 remains open; no reviewer approval or deterministic legal outcome has been fabricated.
-- D2 continuation: product owner approved bringing forward the smallest source-verified drink check from D6. Added the narrowly scoped caffeine range evaluator and versioned draft rule (Standard 2.6.4-3(a); TRACE-008, TRACE-012, TRACE-015), preserving reviewer status separately. The evaluator's eligible fixture outcomes are provisional, not approved. The current UI and report deliberately remain unresolved because the current records cannot establish all classification and total-caffeine evidence. The verified period is limited to 2026-06-09 through the 2026-11-11 source check; later dates need a fresh source check, not assumed currency. P1056 source permissions and other requirements are not assessed. D2 is not complete.
+- D2 continuation: product owner approved bringing forward the smallest source-verified drink check from D6. Added the narrowly scoped caffeine range evaluator and versioned draft rule (Standard 2.6.4-3(a); TRACE-008, TRACE-012, TRACE-015), preserving reviewer status separately. The evaluator's eligible fixture outcomes are provisional, not approved. At that point, the UI and report remained unresolved because product records could not establish all classification and total-caffeine evidence. The verified period was limited to 2026-06-09 through the 2026-11-11 source check; later dates require a fresh source check, not assumed currency. P1056 source permissions and other requirements are not assessed. D2 is not complete.
 - Began D3 (DATA-001, DATA-003, TRACE-008). Added supplier-linked caffeine evidence entry with explicit unknown, presence, absence and conflict; no total is calculated. Database schema v3 leaves existing records untouched; backup format v2 protects new data from old backup readers while importing v1. A v2-schema Dexie application can still open the newer database, so safe downgrade of a live workspace is not guaranteed: use the current app and a v2 backup, not an older app, for records with new evidence. Controlled identities, blend completeness, nutrient basis and remaining D3 acceptance tests are still outstanding.
 - D3 continuation (DATA-003, DATA-006, VER-002): the product owner approved isolated workspaces (ADR-011). The current app uses a new database name and offers an explicit verified copy from the old workspace only into an empty destination, including recovery points. Copies do not sync; older apps can still alter the original, not the current workspace. Added explicitly selected versioned demo identities, with unresolved and stale-evidence handling. D3 remains open for the outstanding supplier-data and scenario tests.
 - D3 continuation (FR-002, DATA-003, VER-002): added a dated supplier statement for other added Schedule 28 substances, excluding caffeine, vitamins and taurine. Blank, conflicting and earlier statements remain explicit; it does not cover naturally occurring substances or feed product checks. To avoid a further workspace copy, the new field is separate from the previous v2 editor's managed supplier-facts object. An actual previous-build browser check confirmed preservation through edit, export and restore; it cannot display this field. This compatibility result is specific to the tested field and build, not a general future-version guarantee (ADR-011). D3 remains open.
+- 2026-11-19: Completed UXR11 after a bounded primary-source re-check of Standard 2.6.4 and the P1056 transition. Connected complete, explicit user-entered ingredient caffeine facts (optional references and dates), recipe amounts and numeric densities to the provisional range check; missing/conflicting facts, recorded mass changes, prepared products, and unsupported compounds remain REVIEW REQUIRED. Product review and the separate report show calculation inputs, limitations and the non-certification boundary. Only this caffeine range check is activated; other candidate checks remain review-only (TRACE-015, TEST-004).
+- 2026-11-19: Completed UXR12's local engineering journey with fictional cake/cookie data, including an actual Incomplete Review Copy PDF and separate reviewer report, missing-input handling, accessibility scans, narrow-screen keyboard use and encrypted backup/restore. Exercised the drink contrast without promoting provisional results. No human reviewer feedback was received; R3-01, R1-13, R1-21 and other applicable release gates remain open. See [UXR12 results](./uxr12-journey.md) (UX-007, PACK-005, BKP-001).
+- 2026-11-19: Owner approved the UXR16-UXR23 workflow-clarity and label-content roadmap. Retained complex inputs must be justified, plain-language, contextual and less cluttered; ordinary paths should ask only for facts needed at that point. Recorded decisions and superseded presentation directions in [ADR 034](./adr/034-practical-workflow-progressive-disclosure.md) and dated addenda to ADRs 024, 027-030. No application behavior or regulatory rule changed.
+- 2026-11-20: Completed UXR16. Removed manual caffeine questions from ingredient entry; the check derives supported amounts from nutrient values, direct caffeine-additive concentration and complete compound compositions, while missing or conflicting data remain unresolved and a quantified zero does not establish absence. Density is conditionally shown for volume-basis conversions, and additive concentration is explained as an input to use-level checks rather than label wording. Legacy caffeine evidence is preserved on unrelated edits. Focused unit tests, affected Playwright workflows, type-check and lint pass. The provisional caffeine rule data is checked through 2026-11-19, so on this date complete inputs still produce REVIEW REQUIRED rather than a range outcome; no regulatory rule or release gate changed (DATA-003, DATA-006, ADD-004, ADD-005, UX-007).
+- 2026-11-20: The owner revised UXR17 after reconsidering where recipe-wide process data belongs. Keep manufacturing, cooking/yield and related nutrition evidence with the shared Formulation; Product continues to record customer directions and product-specific nutrition choices. Simplify the ordinary Formulation path and make technical details contextual rather than moving the data to Product or changing its ownership. See [ADR 034](./adr/034-practical-workflow-progressive-disclosure.md) and [ADR 028](./adr/028-simple-cooking-and-yield.md).
+- 2026-11-20: Completed UXR17. Ordinary recipes no longer show a generic completeness prompt; supplier/compound composition coverage is progressively disclosed, and shared Formulation manufacturing details remain optional and open when saved values need to be reviewed. Product keeps its customer directions and nutrition choices distinct, with shared recipe details summarized behind an optional disclosure. Saved and backed-up processing and nutrition evidence remains intact; no schema or calculation behavior changed. Focused unit tests, type-check, lint and targeted Playwright workflows pass (FORM-005, CALC-002, CALC-014, DATA-003, DATA-006, UX-007).
+- 2026-11-20: Completed UXR18. Consolidated Product customer directions and nutrition into one progressive workflow. Routine as-sold products no longer need a redundant confirmation; the saved recipe method is used, with automatic basis confirmation limited to a current, complete recipe signature. Unknown directions remain unresolved, and reconstitution, draining, combined-food and unsupported paths retain their specific checks and evidence. Focused Product unit tests, type-check, lint and 13 Product workflow Playwright tests pass. No regulatory rules or release gates changed (CALC-003, CALC-004, CALC-010, CALC-014, UX-007).
+- 2026-11-20: Completed UXR20. The bounded label-content audit distinguishes stored inputs, draft outputs and actual checks, records source/applicability boundaries and prioritizes UXR21-UXR23. No legal wording, applicability or reviewer interpretation was inferred; R1-17 to R1-21 remain open (TR-002, TR-003, TR-004, TR-007, TR-008, TR-016, TR-019, TR-021, PACK-001, PACK-004, PACK-005).
+- 2026-11-20: Completed UXR21. Ingredient declarations now use recursively scaled ingoing masses, preserve nested candidate display for general foods, and flatten complete compound components for the selected infant-food route. Missing names and incomplete infant-food composition withhold the declaration and expose edit actions; saved names and additive wordings remain candidates, not legal determinations. Source-linked focused tests, type-check and targeted lint pass (SRC-005, SRC-017; TR-003, ADD-009, FORM-005, TRACE-008). See [ADR 035](./adr/035-draft-ingredient-declaration.md).
+- 2026-11-20: Completed UXR22 allergen drafting and optional, user-entered PAL. Complete supplier compositions may establish a compound parent's allergen coverage only when the parent has no separate allergen evidence or additive-source records; component coverage remains required. Updated the browser helper to retain an already-open editor for the requested Product instead of forcing an unnecessary return to the list. Unit tests (620), type-check/build, lint, rule validation, the focused cake/cookie browser test and the full browser/accessibility suite (68/68) pass (TR-004, TR-019, DATA-003, TRACE-008). See [ADR 036](./adr/036-allergen-declarations-and-pal.md).
+- 2026-11-23: Completed UXR23 pack-content reconciliation. Label-specific supplier, lot, date, storage and warning/advisory copy now has an entered/not-entered review summary alongside plain-language unresolved-applicability guidance. Preview blocks show field labels and preserve explicit review boundaries for exceptions, adequacy and print proof. Unit and focused browser tests pass; no legal applicability or generated pack value is inferred (PACK-005, TRACE-008, TRACE-015). See [ADR 032](./adr/032-label-pack-copy-and-applicability.md).
+- 2026-11-23: Recorded the owner-agreed UXS streamlining and Label-workspace
+  direction as the next turn-by-turn track. UXS1 and UXS7 reserve detailed
+  workflow discussions; UXS13 reserves a separate, staged wider-claims
+  roadmap. No application behavior, legal rule, release gate or detailed
+  discussion outcome changed.
+- 2026-11-23: Completed UXS1 discussion. The owner approved contextual
+  composition and finished-batch entry, simplified Product directions and
+  completion status, removal of the Product Additives and Names section,
+  and separate technical review. The design is to be reassessed after
+  implementation and testing. Recorded the decision in ADR 034 and dated
+  addenda to ADRs 028, 030 and 031; no application code or regulatory rule
+  changed (FORM-005, CALC-010, ADD-009, TRACE-008, UX-007).
+- 2026-11-23: Completed UXS2. Replaced the generic Formulation composition
+  section with a contextual completeness question for linked shared recipes
+  and existing supplier compositions; Product review now offers the shared
+  recipe as an edit target. Preserved unknown amounts, source details and
+  existing composition facts. Focused unit tests, affected browser suites,
+  backup/restore, accessibility, type-check and targeted lint passed
+  (FORM-005, DATA-003, CALC-001, TRACE-008, UX-007).
+- 2026-11-23: Completed UXS3. Replaced the Formulation manufacturing section
+  with detail-specific finished-batch entry and direct access to saved
+  processing and nutrition evidence. Preserved inactive evidence, existing
+  calculations, unknown values and backup/restore behavior. Focused unit and
+  storage tests, affected browser suites, accessibility, type-check and
+  targeted lint passed (CALC-002, CALC-014, DATA-003, DATA-006, UX-007).
+- 2026-11-23: Completed UXS4. Removed the two Product nutrition sections and
+  aligned contextual customer directions and nutrition inputs. Existing
+  directions-based calculations, trace and saved non-default states remain
+  available; missing and conflicting states stay unresolved. Focused
+  calculation and affected browser tests, accessibility, backup/restore,
+  type-check and targeted lint passed (CALC-003, CALC-004, CALC-010,
+  CALC-014, DATA-003, UX-007).
+- 2026-11-23: Completed UXS5. Removed the Product Additives and Names section
+  and navigation; retained saved inputs, read-only technical results and
+  illustrative preview, the provisional caffeine notice, review reports and
+  Label wording. Focused unit and affected browser tests, accessibility,
+  encrypted backup/restore, type-check and targeted lint passed (ADD-009,
+  NAME-001, DATA-003, TRACE-008, TRACE-015).
+- 2026-11-23: Completed UXS6. Replaced the large Product review with a
+  saved-input completion status and actionable missing details. Label and
+  regulatory review remain separate; technical findings, pending allergens,
+  reports and export remain accessible. Focused unit and affected browser
+  tests, accessibility, type-check and targeted lint passed (TRACE-008,
+  TRACE-012, DATA-003, UX-007).
+- 2026-11-23: Completed UXS7 discussion. The owner agreed the four-tab
+  Label editor, live preview, compact draft controls, accessible narrow-screen
+  stacking, actionable notices, illustrative pack-field guidance and explicit
+  claim-artwork limitation. Recorded the presentation decisions in ADRs 024,
+  032 and 034; no application or regulatory behavior changed (PACK-005,
+  TR-004, TR-019, CLAIM-006, UX-007).
+- 2026-11-23: Completed UXS8. Implemented the agreed Label tabs, responsive
+  live preview, draft controls and actionable review links. Preserved draft
+  and dependency safeguards, separately saved Product claim facts, offline
+  reports and incomplete review copies. Unit tests (626), the complete
+  browser suite (72), type-check and targeted lint passed. Claim artwork and
+  regulatory release gates remain unchanged (PACK-005, DATA-003, TRACE-012,
+  UX-007).
+- 2026-11-23: Completed UXS9. Added illustrative pack-field examples and
+  accessible plain-language precautionary-allergen and cross-contact guidance.
+  Blank fields remain unknown; examples are not saved or exported, and
+  user-entered text, validation, preview and report behavior are preserved.
+  Focused unit and browser tests, desktop and narrow-screen accessibility,
+  type-check and targeted lint passed (TR-004, TR-019, DATA-003, PACK-005,
+  UX-007).
+- UXS10: Connected the five existing claim checks to current unrounded
+  as-sold Product nutrition, with density and serving conversions where
+  applicable. Trace and report identify the calculation and nutrition
+  sources; unsupported states, stale bases and missing or conflicting data
+  remain review-required. Historical manual figures are not used; no draft
+  rule or compliance outcome is approved. The unit suite (640), affected
+  browser tests (7), desktop and narrow accessibility checks, type-check and
+  targeted lint passed (CALC-010, CLAIM-001, CLAIM-003, CLAIM-004, DATA-003,
+  TRACE-008).
+- 2026-11-23: Completed UXS11. Removed redundant claim nutrient, source and
+  Product-fact questions while retaining saved historical data and explicit
+  review gates. Checks use the saved Product food form when unambiguous and
+  explain outstanding conditions; claims remain absent from artwork.
+  Focused unit tests (106), affected browser tests (24), desktop and narrow
+  accessibility checks, type-check and targeted lint passed (CLAIM-003,
+  CLAIM-006, DATA-003, TRACE-008, UX-007).
+- Completed UXS12's automated engineering regression gate, including cake,
+  cookie, drink, compound and food-state journeys, derived and unavailable
+  low-sugars claims, review-copy outputs, backup/restore, offline and
+  accessibility checks. The recorded limitations and human review gates
+  remain open; no regulatory or public-release approval is implied
+  (UX-007, TEST-004, PACK-005, BKP-001, TRACE-012).
+- 2026-11-23: Completed UXS13 discussion and recorded the owner-agreed CRS
+  roadmap. Prioritised the existing five draft checks, then no-added-sugar,
+  gluten-free and fibre/protein claims; comparative and health claims remain
+  review-only initially. Agreed exact user-selected wording on incomplete
+  review artwork with prominent warnings, including unresolved or failing
+  checks. No application behavior, rule or release approval changed
+  (FR-007, CLAIM-001 to CLAIM-006, INT-001, PACK-005, TRACE-015).
+- 2026-11-23: Completed CRS1. Inventoried current label-facing sources and
+  agreed a local, traceable candidate-review workflow, saved/unsaved and
+  duplicate handling, review-copy warning placement and backup safeguards.
+  The owner expects to reassess the design after using it. No detection,
+  application behavior or regulatory rule changed (FR-007, CLAIM-006,
+  DATA-003, PACK-005, UX-007).
+- 2026-11-23: Completed CRS2. Added bounded local possible-claim detection,
+  source navigation, preview status and review-report findings without
+  changing or classifying text. The scanner can miss wording and cannot
+  inspect external artwork; human review remains necessary. Verified 645
+  unit/property tests and 75 browser tests, plus typecheck, lint, build and
+  rule-data validation. No regulatory or release approval is implied
+  (FR-007, CLAIM-006, UX-007).
+- 2026-11-24: Completed CRS3. Added exact-occurrence candidate decisions,
+  source-linked Label claims, supported-rule suggestions, explicit false
+  positive and uncertainty states, and persistence through separate Labels
+  and backups. Original source wording is not rewritten and all outcomes
+  remain REVIEW REQUIRED rather than legal clearance. Verified focused
+  candidate/storage tests, five claims browser journeys and typecheck/lint
+  (CLAIM-002, CLAIM-006, DATA-003).
+- 2026-11-24: Completed CRS4. Added actionable guidance to existing claim
+  checks, with claim-entry focus or Product-input navigation for missing,
+  conflicting and unsupported facts. Reused derived recipe/Product nutrition
+  without adding a redundant nutrient questionnaire. Verified 647 unit and
+  property tests, five claims browser journeys, typecheck, lint and build;
+  no regulatory or release approval is implied (CLAIM-003, CALC-010,
+  TRACE-008, UX-007).
+- 2026-11-24: Completed CRS5 research. Re-verified the five draft claim
+  thresholds and primary source compilations, documented food-state,
+  wording, high-alcohol and claim-triggered NIP boundaries, and added
+  reviewer gates for unresolved interpretation and evidence questions.
+  No rule data or application behavior was changed; deterministic activation
+  remains blocked pending review (CLAIM-001 to CLAIM-004, TRACE-015).
+- 2026-11-24: Completed CRS6. Added a review-only claim/NIP interaction trace
+  using shared derived Product/recipe nutrition in the Label panel and
+  consultant report. Mapped all five draft checks, including fibre and
+  potassium interactions, without activating NIP rows or deterministic
+  outcomes. Verified 149 focused/expanded tests, five claims browser
+  journeys, typecheck, lint and draft rule-data validation (INT-001,
+  CALC-012, CLAIM-003, CLAIM-004, TRACE-015).
+- 2026-11-24: Completed CRS7. Rendered distinct selected Label claim wording
+  once in the shared SVG and incomplete PDF review copy, with explicit
+  review-only warnings and consistent consultant-report wording. Unsupported
+  and unresolved claims remain unchanged and REVIEW REQUIRED. Verified 65
+  focused layout/report tests, eight label/claims browser journeys,
+  typecheck, lint and PDF export coverage (CLAIM-006, INT-001, PACK-005,
+  UX-007).

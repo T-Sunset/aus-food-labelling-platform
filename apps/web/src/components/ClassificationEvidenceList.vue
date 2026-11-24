@@ -32,12 +32,12 @@ const evidenceKinds: { value: ClassificationEvidenceKind; label: string }[] = [
 
 function addEvidence(): void {
   error.value = '';
-  if (!reference.value.trim() || !sourceDate.value) {
-    error.value = 'Enter a reference and source date before adding evidence.';
+  if (!reference.value.trim()) {
+    error.value = 'Enter a reference before adding evidence.';
     return;
   }
   const parsedDate = new Date(`${sourceDate.value}T00:00:00.000Z`);
-  if (Number.isNaN(parsedDate.valueOf()) || parsedDate.toISOString().slice(0, 10) !== sourceDate.value) {
+  if (sourceDate.value && (Number.isNaN(parsedDate.valueOf()) || parsedDate.toISOString().slice(0, 10) !== sourceDate.value)) {
     error.value = 'Enter a valid source date.';
     return;
   }
@@ -69,7 +69,7 @@ function addEvidence(): void {
         v-for="item in modelValue"
         :key="item.id"
       >
-        <span>{{ item.reference }} · {{ item.sourceDate }} · {{ evidenceKinds.find((entry) => entry.value === item.kind)?.label }}</span>
+        <span>{{ item.reference }}<template v-if="item.sourceDate"> · {{ item.sourceDate }}</template> · {{ evidenceKinds.find((entry) => entry.value === item.kind)?.label }}</span>
         <button
           type="button"
           :aria-label="`Remove evidence ${item.reference}`"
@@ -90,7 +90,7 @@ function addEvidence(): void {
         >
       </label>
       <label>
-        <span>Evidence date</span>
+        <span>Evidence date (optional)</span>
         <input
           v-model="sourceDate"
           :aria-label="`Evidence date for ${label}`"

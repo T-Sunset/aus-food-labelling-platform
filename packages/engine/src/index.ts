@@ -4,6 +4,8 @@ export {
   divideDecimals,
   multiplyDecimals,
   normalizeDecimal,
+  plainDecimal,
+  roundDecimalHalfUp,
   subtractDecimals,
   sumDecimals,
 } from './decimal.js';
@@ -15,7 +17,7 @@ export {
   convertMass,
 } from './mass.js';
 export { calculateProcessMassBalance, ProcessMassError } from './process-mass.js';
-export { aggregateNutrients } from './nutrition.js';
+export { aggregateNutrients, calculateMixedNutrientPer100g, calculateRetainedNutrientPer100g, canonicalNutrientUnit, convertNutrientUnit, convertVolumeNutrientToMass } from './nutrition.js';
 export { formatNpcNutrient } from './nip-rounding.js';
 export { calculateSchedule11Energy } from './energy.js';
 export { propagateAllergens } from './allergens.js';
@@ -28,6 +30,13 @@ export { evaluateAdditivePresencePath } from './additive-presence.js';
 export { identifyPrescribedNameCandidates } from './prescribed-name-candidates.js';
 export { evaluateInfantSweetenedWord } from './infant-sweetened-word.js';
 export { evaluateProvisionalCaffeine } from './provisional-caffeine.js';
+export { calculateCaffeineConcentration } from './caffeine-concentration.js';
+export type {
+  CaffeineConcentrationInput,
+  CaffeineConcentrationResult,
+  CaffeineContentEvidence,
+  CaffeineIngredientInput,
+} from './caffeine-concentration.js';
 export { evaluateNutritionContentClaim } from './claim-evaluator.js';
 export { evaluateClaim } from './claim-router.js';
 export {

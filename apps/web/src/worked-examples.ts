@@ -109,7 +109,8 @@ export async function removeWorkedExamples(store: LocalFoodStore): Promise<Remov
     ownFormulationIds.add(product.formulationId);
   }
   for (const formulation of formulations.filter((record) => !isTagged(record))) {
-    for (const line of [...formulation.lines, ...(formulation.supplierComposition?.unquantifiedComponents ?? [])]) {
+    for (const line of [...formulation.lines, ...(formulation.supplierComposition?.unquantifiedComponents ?? []),
+      ...(formulation.incompleteRecipeLines?.unquantifiedLines ?? [])]) {
       if (line.kind === 'ingredient') {
         ownIngredientIds.add(line.ingredientId);
       } else {
@@ -150,16 +151,44 @@ export async function removeWorkedExamples(store: LocalFoodStore): Promise<Remov
       ownFormulationIds.add(record.formulationId);
     }
   }
-  for (const record of formulations) {
-    const keptBefore = kept;
-    await attempt(record, ownFormulationIds.has(record.id), () => store.formulations.delete(record.id));
-    if (isTagged(record) && kept > keptBefore) {
-      for (const line of [...record.lines, ...(record.supplierComposition?.unquantifiedComponents ?? [])]) {
-        if (line.kind === 'ingredient') {
-          ownIngredientIds.add(line.ingredientId);
+  for (const record of formulations.filter(isTagged)) {
+    if ((await store.approvedVersions.list('formulation', record.id)).length > 0) ownFormulationIds.add(record.id);
+  }
+  for (const record of ingredients.filter(isTagged)) {
+    if ((await store.approvedVersions.list('ingredient', record.id)).length > 0) ownIngredientIds.add(record.id);
+  }
+  const formulationsById = new Map(formulations.map((record) => [record.id, record]));
+  const ingredientsById = new Map(ingredients.map((record) => [record.id, record]));
+  const pendingFormulations = [...ownFormulationIds];
+  const pendingIngredients = [...ownIngredientIds];
+  while (pendingFormulations.length || pendingIngredients.length) {
+    const formulationId = pendingFormulations.pop();
+    if (formulationId) {
+      const record = formulationsById.get(formulationId);
+      if (record) {
+        for (const line of [...record.lines, ...(record.supplierComposition?.unquantifiedComponents ?? []),
+          ...(record.incompleteRecipeLines?.unquantifiedLines ?? [])]) {
+          if (line.kind === 'ingredient' && !ownIngredientIds.has(line.ingredientId)) {
+            ownIngredientIds.add(line.ingredientId);
+            pendingIngredients.push(line.ingredientId);
+          } else if (line.kind === 'formulation' && !ownFormulationIds.has(line.formulationId)) {
+            ownFormulationIds.add(line.formulationId);
+            pendingFormulations.push(line.formulationId);
+          }
         }
       }
     }
+    const ingredientId = pendingIngredients.pop();
+    if (ingredientId) {
+      const formulationId = ingredientsById.get(ingredientId)?.compoundFormulationId;
+      if (formulationId && !ownFormulationIds.has(formulationId)) {
+        ownFormulationIds.add(formulationId);
+        pendingFormulations.push(formulationId);
+      }
+    }
+  }
+  for (const record of formulations) {
+    await attempt(record, ownFormulationIds.has(record.id), () => store.formulations.delete(record.id));
   }
   for (const record of ingredients) {
     await attempt(record, ownIngredientIds.has(record.id), () => store.ingredients.delete(record.id));

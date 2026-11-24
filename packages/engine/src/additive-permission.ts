@@ -76,9 +76,6 @@ function rowReasons(
     reasons.push('CONCENTRATION_MISSING');
     return reasons;
   }
-  if (input.evidence === undefined) {
-    reasons.push('EVIDENCE_MISSING');
-  }
   const expectedUnit = row.limit.unit === 'mg/L' ? 'mg/L' : 'mg/kg';
   if (concentration.unit !== expectedUnit) {
     reasons.push('UNIT_MISMATCH');
@@ -166,9 +163,6 @@ export function evaluateAdditivePermission(
   }
   if (input.sourceStatus !== 'added') {
     reasons.push('SOURCE_STATUS_NOT_ADDED');
-  }
-  if (input.concentrationProvenanceComplete === false) {
-    reasons.push('EVIDENCE_MISSING');
   }
 
   let row: AdditivePermissionCatalogRow | undefined;

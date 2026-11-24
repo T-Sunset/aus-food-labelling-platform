@@ -37,6 +37,13 @@ function ingredient(
     createdAt: at,
     updatedAt: at,
     ...(additiveSources ? { additiveSources } : {}),
+    additivesConfirmed: true,
+    additiveCoverage: {
+      sourceType: 'user',
+      sourceId: inventedEvidence.reference,
+      sourceDate: inventedEvidence.sourceDate,
+      sourcesSnapshot: JSON.stringify(additiveSources ?? []),
+    },
   };
 }
 

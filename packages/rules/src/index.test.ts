@@ -58,6 +58,17 @@ function markClaimCatalogReviewed(candidate: Record<string, unknown>): void {
   }
 }
 
+function markDailyIntakeReviewed(candidate: Record<string, unknown>): void {
+  const referenceSet = candidate.dailyIntakeReferenceSet as {
+    status: string;
+    entries: { reviewStatus: string }[];
+  };
+  referenceSet.status = 'reviewed';
+  for (const entry of referenceSet.entries) {
+    entry.reviewStatus = 'reviewed';
+  }
+}
+
 function markPermissionCatalogReviewed(candidate: Record<string, unknown>): void {
   const catalog = candidate.additivePermissionCatalog as {
     status: string;
@@ -130,6 +141,56 @@ describe('rule release validation', () => {
       throw new Error('Allergen vocabulary fixture is malformed');
     }
     expect(release.allergenVocabulary.status).toBe('draft');
+  });
+
+  it('keeps daily-intake references versioned, source-linked, and separate from the product rounding policy', () => {
+    expect(() => validateRuleRelease(release)).not.toThrow();
+    const candidate = cloneRelease();
+    const referenceSet = candidate.dailyIntakeReferenceSet as {
+      status: string;
+      mappingConfidence: string;
+      sourceIds: string[];
+      scopeExclusionSourceIds: string[];
+      entries: { nutrientId: string; referenceValue: string; unit: string; inclusion: string }[];
+      statements: string[];
+      calculationNote: string;
+    };
+
+    expect(referenceSet).toMatchObject({
+      status: 'draft',
+      mappingConfidence: 'Provision',
+      sourceIds: ['SRC-NIP-DI-001', 'SRC-NIP-DI-002'],
+      scopeExclusionSourceIds: ['SRC-NIP-DI-003', 'SRC-NIP-DI-002'],
+      statements: [
+        'based on an average adult diet of 8 700 kJ',
+        'Percentage daily intakes are based on an average adult diet of 8 700 kJ',
+      ],
+    });
+    expect(referenceSet.entries).toEqual([
+      { nutrientId: 'energy', referenceValue: '8700', unit: 'kJ', inclusion: 'whenIncluded', reviewStatus: 'draft' },
+      { nutrientId: 'protein', referenceValue: '50', unit: 'g', inclusion: 'whenIncluded', reviewStatus: 'draft' },
+      { nutrientId: 'fat', referenceValue: '70', unit: 'g', inclusion: 'whenIncluded', reviewStatus: 'draft' },
+      { nutrientId: 'saturatedFat', referenceValue: '24', unit: 'g', inclusion: 'whenIncluded', reviewStatus: 'draft' },
+      { nutrientId: 'carbohydrate', referenceValue: '310', unit: 'g', inclusion: 'whenIncluded', reviewStatus: 'draft' },
+      { nutrientId: 'sugars', referenceValue: '90', unit: 'g', inclusion: 'whenIncluded', reviewStatus: 'draft' },
+      { nutrientId: 'sodium', referenceValue: '2300', unit: 'mg', inclusion: 'whenIncluded', reviewStatus: 'draft' },
+      { nutrientId: 'dietaryFibre', referenceValue: '30', unit: 'g', inclusion: 'ifDeclared', reviewStatus: 'draft' },
+    ]);
+    expect(referenceSet.calculationNote).toContain('does not state this formula');
+
+    const missingSource = cloneRelease();
+    (missingSource.dailyIntakeReferenceSet as { sourceIds: string[] }).sourceIds = ['SRC-MISSING'];
+    expectInvalid(missingSource, 'references missing source "SRC-MISSING"');
+
+    const invalidFibreCondition = cloneRelease();
+    (invalidFibreCondition.dailyIntakeReferenceSet as {
+      entries: { nutrientId: string; inclusion: string }[];
+    }).entries[7]!.inclusion = 'whenIncluded';
+    expectInvalid(invalidFibreCondition, 'dietary fibre must be conditional on declaration');
+
+    const active = cloneRelease();
+    active.status = 'active';
+    expectInvalid(active, 'dailyIntakeReferenceSet.status: must be reviewed before release activation');
   });
 
   it('keeps additive declaration formats versioned, source-linked, and separate from permission data', () => {
@@ -457,6 +518,7 @@ describe('rule release validation', () => {
     markPermissionCatalogReviewed(fullyReviewed);
     markNameCatalogReviewed(fullyReviewed);
     markClaimCatalogReviewed(fullyReviewed);
+    markDailyIntakeReviewed(fullyReviewed);
     expect(() => validateRuleRelease(fullyReviewed)).not.toThrow();
 
     const unreviewedVocabularyEntry = cloneRelease();

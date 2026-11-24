@@ -2,6 +2,10 @@
 
 Status: HISTORICAL scenario sheet. W3-W7 were subsequently implemented; the current direction is in [implementation-plan.md](../implementation-plan.md). The examples remain fictional and do not establish current regulatory coverage.
 
+UXS10 note: The claim previews in this historical sheet used manually entered
+figures. Current checks instead require usable saved Product nutrition; these
+examples lack that basis, so those claim previews are blocked until it is supplied.
+
 ## Purpose and ground rules
 
 - These products exist to let a reviewer **see the whole system working**, not to describe real products.
@@ -11,6 +15,9 @@ Status: HISTORICAL scenario sheet. W3-W7 were subsequently implemented; the curr
 - Preview outcomes below are **expected values worked out from the draft rule data**. W4 and W5 lock them with automated tests; if a test disagrees, the sheet is corrected, not the test hidden.
 - Limits quoted come from the draft catalog and are `TO BE VERIFIED` by the reviewer. The additive limit unit in the catalog is mg/kg of the food (the draft default); benzoates are compared as benzoic acid.
 - The person's own choices (category, claim classification, food form, confirmations) are entered as the person's own answers. The system never picks them.
+- For these fictional scenarios only, additive-source lists are explicitly
+  confirmed complete against the invented evidence sheet. This does not fill
+  in an individual source's missing concentration or unknown use.
 
 ## Products
 

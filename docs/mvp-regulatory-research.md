@@ -45,13 +45,44 @@ The R1 source pass and official FSANZ material below were checked on 2026-11-06;
 | **R1-06 Allergen list and names**               | Standard 1.2.3-4 applies to listed foods and derivatives in ingredients, compound ingredients, additives and processing aids, subject to the Schedule 9 exemptions. Standard 1.2.3-5 and Schedule 9 table S9-3 distinguish the required name in an ingredient statement from the name for other declarations. The current list includes wheat, fish, crustacean, mollusc, egg, milk, lupin, peanut, soy/soya/soybean, sesame; individual listed tree nuts (almond, Brazil nut, cashew, hazelnut, macadamia, pecan, pistachio, pine nut, walnut); barley/oats/rye when they contain gluten; and added sulphites at **10 mg/kg or more**.                               | Reviewer supplied the sulphite threshold and referred to the Code. The exact declaration name depends on the Schedule 9 column and context; do not use one undifferentiated synonym list.                                                                                                         | Build a versioned controlled vocabulary with separate ingredient-list and summary/other-declaration names. Include exact 10 mg/kg as in scope; distinguish added from naturally occurring sulphites. Test every listed food, derivative, context-specific required name and threshold boundary.                                       |
 | **R1-07 Allergen exemptions**                   | Standard 1.2.3-4(3)-(4) makes the Schedule 9 Column 2 exemptions controlling. A derivative exemption is available only as the table states. The presence/identity alone is not enough to prove a product meets an exemption's processing or composition conditions.                                                                                                                                                                                                                                                                                                                                                                                                   | Reviewer says all exemptions are feasible to handle. Feasibility is not a source mapping or proof of the required facts. The detailed exemption-to-evidence mapping and review policy remain open.                                                                                                | Automate an exemption only when its exact Code conditions, inputs and evidence are mapped and tested. Otherwise return `REVIEW REQUIRED`. Test each exemption and near-miss separately; do not infer exemption from a supplier ingredient name such as “refined oil.”                                                                 |
 | **R1-08 Allergen summary**                      | Standard 1.2.3-6(2) requires the ingredient declaration and summary where applicable. Standard 1.2.3-7 requires the summary to begin “Contains”, contain no other words, be in the same field of view, directly next to but distinctly separated from the ingredients statement, and use the specified bold type/size relationship.                                                                                                                                                                                                                                                                                                                                   | Reviewer agrees on same direction/adjacency/bold, but “usually on its own line below” is convention, not the complete legal test.                                                                                                                                                                 | Add a layout check for adjacency, separation, field of view and typography. “Same line” or “own line below” alone cannot pass the rule. Include label-renderer tests at actual output size.                                                                                                                                           |
-| **R1-09 Precautionary allergen wording**        | The mandatory Code declaration is distinct from voluntary precautionary text. The AFGC guidance is industry guidance, not a Code requirement.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | “May Be Present” as a default and offering alternatives are product-policy choices.                                                                                                                                                                                                               | Keep precautionary text separate from the mandatory “Contains” statement; never use it to replace a required allergen declaration. Cite the chosen guidance and version, and mark this feature as guidance-based.                                                                                                                     |
+| **R1-09 Precautionary allergen wording**        | FSANZ says PAL is voluntary and not regulated by the Code; mandatory allergen declarations remain separate. The Allergen Bureau's VITAL Program describes “May be present” as wording for a risk-assessment outcome, not a blanket default. FIGAML Version 3 F1 (December 2024) treats PAL as appropriate when possible cross-contact has been established and risk assessment finds a statement necessary. AFGC's January 2026 response to Codex describes PAL as a last resort with documented assessment and gives “May contain” examples; it is a submission, not Australian law. Sources: [FSANZ allergen labelling](https://www.foodstandards.gov.au/consumer/labelling/allergen-labelling) (updated 2025-11-26); [VITAL Version 4.0 guide](https://vital.allergenbureau.net/wp-content/uploads/2024/08/Food-Industry_Guide_to_VITAL_4.0_2024_F4.pdf); [FIGAML Version 3 F1](https://allergenbureau.net/wp-content/uploads/2023/08/Food_Industry_Guide_to_Allergen_Management_and_Labelling_ANZ_December_2024_V3_F1.pdf); [AFGC response, 2026-01-29](https://afgc.org.au/wp-content/uploads/2026/02/AFGC-response-to-Guidelines-on-Use-of-PAL-CP2-29012026.pdf). | Product owner rejects a default PAL. Statement text is optional and user-entered with a required basis note; the app does not assess cross-contact risk. A blank field does not establish absence of risk, and PAL does not replace a mandatory declaration. No individual product or laws outside the Code were assessed. |
 | **R1-10 Allergen transition**                   | The Standard 1.2.3 transitional provision allowed the old format during transition and for specified pre-transition-labelled products; FSANZ guidance records the sell-through end as 25 February 2026. That date has passed as at this report date.                                                                                                                                                                                                                                                                                                                                                                                                                  | Reviewer says no legacy format for new labels. This is consistent for new labels; it does not mean historical labels can be silently regenerated under current rules.                                                                                                                             | New label drafts use current names/format. Preserve historical label snapshots and applicable source version; do not offer a legacy format for newly created labels.                                                                                                                                                                  |
 | **R1-11 NIP rows, format and exemptions**       | Standard 1.2.8-5 sets the general NIP requirement and enumerates exemptions (including specified single-ingredient foods, beverages, herbs/spices, processing aids and small packages, subject to conditions and claims). Standard 1.2.8-6(1)-(2) and Schedule 12 set the core panel: servings per package, serving size, unit quantity, energy, protein, carbohydrate, sugars, fat, saturated fat and sodium, in serving and per-100-g/100-mL columns. Claims and other Code provisions can add rows or alter requirements. Sections 1.2.8-11 to -13 cover dehydrated/concentrated, drained, and foods intended to be prepared or consumed with another food.        | Reviewer points to Schedule 12 but has not chosen a supported exemption set or examples. The law supplies the panel; evidence and automatic applicability remain to be mapped.                                                                                                                    | MVP can calculate a base panel only for fully supported states and facts. Test default, liquid/solid units, claims requiring extra rows, small-package and other exemptions, reconstituted/drained foods, and 1.2.8-13 additional-food cases. Unsupported exemption or preparation state is `REVIEW REQUIRED`, never silent omission. |
 | **R1-12 Energy/carbohydrate and input sources** | Schedule 11 S11-2 calculates average energy from average component quantities and specified factors. S11-3 defines available carbohydrate and carbohydrate by difference. S11-4 requires specified AOAC method(s) for dietary fibre. Standard 1.2.8 defines what the panel declares. These provisions specify methods/definitions, not a universal supplier-versus-lab-versus-database hierarchy.                                                                                                                                                                                                                                                                     | Reviewer prefers user-entered supplier data and possibly FSANZ food-composition data. That is a product evidence policy, not the calculation method itself. No conclusion is made here that a particular NUTTAB/AUSNUT release is current, licensed for embedding, or suitable for every product. | Preserve source, date, method and evidence type for each input; apply Schedule 11, not a generic calorie formula. Product must select, version and review any optional food-composition dataset. Test supplier data, calculated ingredients, missing/contradictory inputs and fibre evidence.                                         |
 | **R1-13 NIP rounding**                          | Standard 1.2.8-7(3) caps displayed energy and nutrient/biologically active-substance values at three significant figures. Subsections (4)-(6) permit “LESS THAN 40 kJ”, “LESS THAN 1 g” for listed nutrients, and “LESS THAN 5 mg” for sodium or potassium when the applicable serving or unit quantity is below the stated value. “May” makes these optional formats. The Code does not prescribe a single internal calculation/rounding sequence in these clauses.                                                                                                                                                                                                  | Reviewer gave the three-significant-figure limit but no worked examples or rounding-stage decision.                                                                                                                                                                                               | Keep calculation precision separate from display formatting as a product/technical policy; pin the selected policy and examples. Before deterministic NIP release, have the reviewer check 2-3 worked examples and boundary cases. Do not encode “round per 100 g before per serve” as a legal rule without a separate source.        |
 | **R1-20 Net quantity**                          | This is principally a trade-measurement matter, not a Food Standards Code NIP rule. The National Trade Measurement Regulations 2009 contain measurement-marking rules (Part 4, including regs 4.9-4.16A), special cases and prohibited expressions (reg 4.29). The Code does not establish a universal phrase “net weight” for all products.                                                                                                                                                                                                                                                                                                                          | The recorded statement “display weight as net weight” is ambiguous and not verified as a universal marking instruction. Product type, package, measurement and exceptions matter.                                                                                                                 | Keep net quantity `REVIEW REQUIRED` as the plan currently provides. Do not force the word “net” or generate a quantity-mark PASS until the exact NMI rule and product facts have been reviewed.                                                                                                                                       |
 | **R1-21 Legibility and type size**              | Standard 1.2.1-24 requires English words (subject to Code provisions), legibility and prominence/contrast. Standard 1.2.1-25 specifies warning-statement type size: at least 3 mm, or at least 1.5 mm for a small package. It does not set a universal minimum type size for all label text.                                                                                                                                                                                                                                                                                                                                                                          | Reviewer answer and printed-size golden test are pending. The statutory minimum for warning statements is not a general font-size rule.                                                                                                                                                           | Test general legibility/contrast and warning-specific size separately. A physical-size print test is a product quality gate; only the warning rule can apply the cited numeric minimum.                                                                                                                                               |
+
+### UXR22 implementation boundary (2026-11-20)
+
+The draft label uses Schedule 9's distinct ingredient-list and summary names.
+It adds a required ingredient-list name beside a saved ingredient name when
+that name is not already present, and emphasizes the required name in bold.
+The `Contains` summary is emitted only when recorded allergen evidence,
+ingredient paths and applicable conditions are resolved; it is bold, uses the
+ingredient-name size, and follows the ingredient statement as a separate block
+in the same preview. The renderer cannot establish physical print legibility
+or certify field-of-view requirements on an actual package.
+A compound with explicitly complete supplier-composition coverage may derive
+its parent coverage only when it has no separate allergen evidence or
+additive-source records; every included component still needs current
+allergen coverage.
+
+Wheat is listed independently of gluten status. “Gluten” is included in the
+summary only when wheat is recorded as containing gluten. Barley, oats and
+rye are offered only with the explicit instruction to select them when they
+contain gluten. Added sulphites remain pending final-food concentration
+evaluation, including the 10 mg/kg boundary. Possible Schedule 9 exemptions
+remain `REVIEW REQUIRED`; ingredient identity alone does not establish the
+specified process/composition facts.
+
+PAL is optional user-entered text, not an automatically generated default or
+an assessment. The form requires a basis note and explains that PAL concerns
+unintended cross-contact, does not replace mandatory declarations, and that
+blank text does not establish absence of risk. No product-specific
+cross-contact assessment was performed. These implementation choices are
+recorded in [ADR 036](./adr/036-allergen-declarations-and-pal.md); they do not
+activate deterministic regulatory results.
 
 #### Schedule 11 energy source check (2026-11-09)
 
@@ -598,3 +629,96 @@ Both selected cohorts are candidates for these five. Every result stays tied to 
 
 
 **C4 re-verification (2026-11-10):** the five thresholds in this section were re-read against Schedule 4 S4-3 (F2026C00415) and matched: Energy Low 80 kJ/100 mL, 170 kJ/100 g; Fat Low 1.5 g/100 mL, 3 g/100 g; Sugar or sugars Low 2.5 g/100 mL, 5 g/100 g; Salt or sodium Low 120 mg per 100 mL or 100 g; Dietary fibre general condition 2 g per serving and Good source 4 g per serving. Standard 1.2.7-4, -7 and -12 were re-read for the restrictions, food form and synonym wording. The rules are in the draft claim catalog; they are not reviewed.
+
+### CRS5 re-verification (2026-11-24)
+
+This is a bounded primary-source re-check of the five first-set nutrition
+content claims. It is a research specification, not reviewer sign-off, rule
+activation or legal advice. The latest relevant Federal Register
+compilations checked were:
+
+| Source | Compilation and effective date | URL |
+| --- | --- | --- |
+| Standard 1.2.7, Nutrition, health and related claims | F2025C00833, Compilation 8; 2025-08-13 | https://www.legislation.gov.au/F2015L00394/2025-08-13/2025-08-13/text/original/epub/OEBPS/document_1/document_1.html |
+| Schedule 4, Nutrition, health and related claims | F2026C00415, Compilation 7; 2026-04-30 | https://www.legislation.gov.au/F2015L00474/2026-04-30/2026-04-30/text/original/epub/OEBPS/document_1/document_1.html |
+| Standard 1.2.8, Nutrition information requirements | F2026C00411, Compilation 6; 2026-04-30 | https://www.legislation.gov.au/F2015L00395/2026-04-30/2026-04-30/text/original/epub/OEBPS/document_1/document_1.html |
+| Schedule 12, Nutrition information panels | F2017C00342, Compilation 2; 2017-04-13 | https://www.legislation.gov.au/F2015L00482/2017-04-13/2017-04-13/text/original/epub/OEBPS/document_1/document_1.html |
+
+#### Verified draft specification
+
+The Schedule 4 S4-3 descriptor and Standard 1.2.7-12 threshold are
+provision-level matches for the following draft rules:
+
+| Rule | Threshold and basis | Confirmed restrictions and state handling |
+| --- | --- | --- |
+| Low energy | No more than 80 kJ/100 mL for liquid food or 170 kJ/100 g for solid food | Kava and infant formula product claims are prohibited; energy is an express exception for food above 1.15% alcohol. Apply the 1.2.7-7 food-state basis. |
+| Low fat | No more than 1.5 g/100 mL for liquid food or 3 g/100 g for solid food | Kava, infant formula product and the applicable high-alcohol restrictions remain. Apply the 1.2.7-7 food-state basis. |
+| Low sugars | No more than 2.5 g/100 mL for liquid food or 5 g/100 g for solid food | “Sugars” has the Schedule 4 definition; high-alcohol claims retain the restrictions on referring to other carbohydrate components or individually named sugars. |
+| Low sodium | No more than 120 mg/100 mL for liquid food or 120 mg/100 g for solid food | Kava and infant formula product claims are prohibited; the high-alcohol exception is only for non-beverages. |
+| Good source of dietary fibre | At least 4 g per serving, alongside the general 2 g per serving condition | Kava and infant formula product claims are prohibited. The serving and applicable 1.2.7-7 food-state basis must be established. |
+
+These findings verify thresholds, descriptor/property mapping, the cited
+food-state framework and the main restrictions. They do not establish that
+the current `permittedWording` arrays are exhaustive. Standard 1.2.7-10
+does not prescribe a closed list of claim words; Standard 1.2.7-12(3)
+refers to a descriptor or synonym. Exact wording equivalence remains a
+review judgement.
+
+#### Conditions that remain review-gated
+
+- Liquid versus solid classification is not resolved for every borderline or
+  semi-solid food. Do not silently map a semi-solid product to either form.
+- The claim basis must follow Standard 1.2.7-7: as sold, prepared,
+  reconstituted or drained as applicable. A claim based on a non-as-sold
+  form may require a conditional form statement under Standard 1.2.7-11.
+- Fibre is per serving, so serving-size evidence and the preparation or
+  reconstitution basis need review. The system must not substitute a
+  per-100-g or per-100-mL value.
+- Standard 1.2.8 claim interactions remain incomplete. Candidate
+  requirements include declaring the claimed nutrient, dietary fibre for
+  fibre and sugars claims, and potassium for a sodium claim. The applicable
+  NIP format, exemptions, small-package rules and prepared/drained/combined
+  food cases still require product-specific mapping.
+- The high-alcohol exceptions must preserve their distinctions: energy and
+  sugars have listed exceptions; sodium/salt is limited to non-beverages;
+  fat and dietary fibre have no equivalent exception identified here.
+- No claim-specific transitional arrangement, analytical tolerance,
+  sampling policy, rounding policy or complete evidence standard was verified
+  in this bounded review.
+
+The draft catalog remains appropriate as unreviewed data with deterministic
+release behavior disabled. Do not replace empty NIP or statement interactions,
+expand wording arrays, activate thresholds, or add semi-solid mappings until
+the reviewer gates are answered. Tests for the later implementation must
+cover below/at/above boundaries, both forms, all supported food states,
+semi-solid uncertainty, missing or conflicting evidence, prohibited and
+high-alcohol contexts, required NIP rows and conditional form statements.
+
+## UXR11 (2026-11-19): provisional FCB caffeine range
+
+The bounded re-check of Standard 2.6.4 (F2015L00467) confirmed the
+formulated-caffeinated-beverage definition in 2.6.4—2 and the total-caffeine
+range of 145–320 mg/L, inclusive, in 2.6.4—3(a). The Standard commenced
+2016-03-01. P1056 variation F2026L00700 commenced 2026-06-09 and provides a
+24-month transition ending 2028-06-09; the caffeine range is unchanged through
+that transition. These sources support only the narrow range check, not a
+product-specific classification or a conclusion about permissions for caffeine
+sources.
+
+The application calculates a provisional concentration only when every
+expanded recipe ingredient has dated evidence of caffeine presence or absence,
+volume-basis supplier figures have dated ingredient-density evidence, the
+recipe is confirmed as sold without unsupported processing effects, and the
+finished beverage has dated density evidence. A compound ingredient without
+its own evidenced aggregate remains unresolved; its component recipe is not
+silently counted as an aggregate. These are conservative calculation
+eligibility conditions, not Code-defined tests.
+
+The check does not assess caffeine-source permissions, analytical uncertainty,
+other substances, Standard 2.6.4-5 declarations or advisory statements, or
+overall compliance. User-provided supplier and product facts are not
+independently verified. The rule remains draft and every eligible outcome is
+provisional.
+
+Sources checked 2026-11-19: [Standard 2.6.4, F2015L00467](https://www.legislation.gov.au/F2015L00467/asmade/2015-04-01/text/original/epub/OEBPS/document_1/document_1.html);
+[P1056 variation, F2026L00700](https://www.legislation.gov.au/F2026L00700/asmade/2026-06-09/text/original/epub/OEBPS/document_1/document_1.html).

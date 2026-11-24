@@ -309,13 +309,21 @@ async function requestDurability(): Promise<void> {
           Backup counts: {{ inspection.backupCounts.ingredients }} ingredients,
           {{ inspection.backupCounts.formulations }} formulations,
           {{ inspection.backupCounts.products }} products,
+          {{ inspection.backupCounts.labels }} label drafts,
           {{ inspection.backupCounts.approvedVersions }} versioned reviews.
         </p>
         <p>
           Current workspace: {{ inspection.existingCounts.ingredients }} ingredients,
           {{ inspection.existingCounts.formulations }} formulations,
           {{ inspection.existingCounts.products }} products,
+          {{ inspection.existingCounts.labels }} label drafts,
           {{ inspection.existingCounts.approvedVersions }} versioned reviews.
+        </p>
+        <p
+          v-if="inspection.backupFormatVersion < 3"
+          class="field-hint"
+        >
+          This older backup contains no label drafts. Replacing the workspace will remove current label drafts.
         </p>
         <p>Conflicting record IDs: {{ inspection.conflictingRecordIds.length }}.</p>
         <div

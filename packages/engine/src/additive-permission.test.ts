@@ -144,15 +144,14 @@ describe('additive permission evaluation', () => {
     });
   });
 
-  it('does not pass or fail from a calculated concentration with incomplete provenance', () => {
-    expect(reasons({ ...complete, concentrationProvenanceComplete: false })).toContain('EVIDENCE_MISSING');
-    expect(reasons({
+  it('uses a supplied concentration without a source, while retaining rule gates', () => {
+    expect(evaluateAdditivePermission({ ...complete, evidence: undefined, concentrationProvenanceComplete: false }).status).toBe('PASS');
+    expect(evaluateAdditivePermission({
       ...complete, finalConcentration: { value: '101', unit: 'mg/kg', calculatedAs: 'sorbic acid' },
-      concentrationProvenanceComplete: false,
-    })).toContain('EVIDENCE_MISSING');
-    expect(reasons({
-      ...complete, additiveCodeNumber: '330', gmpConfirmed: true, concentrationProvenanceComplete: false,
-    })).toContain('EVIDENCE_MISSING');
+      evidence: undefined,
+    }).status).toBe('FAIL');
+    expect(reasons({ ...complete, evidence: undefined, rule: { ...rule, mappingConfidence: 'Standard' } }))
+      .toContain('RULE_BELOW_PROVISION_CONFIDENCE');
   });
 
   it('returns REVIEW REQUIRED for a conditional row and shows the conditions', () => {
@@ -174,7 +173,6 @@ describe('additive permission evaluation', () => {
       ...complete,
       finalConcentration: { value: 'abc', unit: 'mg/kg', calculatedAs: 'sorbic acid' },
     })).toEqual(['CONCENTRATION_MISSING']);
-    expect(reasons({ ...complete, evidence: undefined })).toEqual(['EVIDENCE_MISSING']);
     expect(reasons({ ...complete, confirmedCategoryId: undefined })).toContain('CATEGORY_NOT_CONFIRMED');
     expect(reasons({ ...complete, additiveCodeNumber: ' ' })).toContain('ADDITIVE_IDENTITY_MISSING');
     expect(reasons({ ...complete, technologicalPurpose: undefined })).toContain('PURPOSE_MISSING');

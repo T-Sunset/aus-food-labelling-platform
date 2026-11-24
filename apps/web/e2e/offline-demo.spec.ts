@@ -1,9 +1,18 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import AxeBuilder from '@axe-core/playwright';
-import { openIngredientSection } from './helpers';
+import { openFormulationSection, openIngredientSection, openLabelIssues, openLabelNutrition, openLabelPackInformation, openLabelTab, openTechnicalReview } from './helpers';
 
 test('loads the illustrative workflow and exports a review report while offline', async ({ page }) => {
+  await page.addInitScript(() => {
+    const createObjectURL = URL.createObjectURL;
+    URL.createObjectURL = (object) => {
+      if (object instanceof Blob && object.type === 'image/svg+xml') {
+        void object.text().then((svg) => document.documentElement.setAttribute('data-test-preview-svg', svg));
+      }
+      return createObjectURL.call(URL, object);
+    };
+  });
   const response = await page.goto('/');
   expect(response?.headers()['content-security-policy']).toContain("script-src 'self'");
   await expect(page.getByRole('heading', { name: 'Good work starts with good records.' })).toBeVisible();
@@ -11,8 +20,14 @@ test('loads the illustrative workflow and exports a review report while offline'
   await page.getByRole('button', { name: 'Load illustrative demo data' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Illustrative demo data loaded locally' }))
     .toBeVisible();
+  await page.getByRole('button', { name: 'Labels', exact: true }).click();
+  await openLabelTab(page, 'Ingredients & allergens');
+  await expect(page.getByLabel('Draft declaration')).toContainText('No allergen summary is available; missing evidence or conditions do not establish absence.');
+  await openLabelPackInformation(page);
+  await expect(page.getByRole('region', { name: 'Draft pack information' })).toContainText('Net contents: Not supplied');
+  await expect(page.locator('html')).not.toHaveAttribute('data-test-preview-svg', /data-block-id="allergens"/);
   await page.getByRole('button', { name: 'Products', exact: true }).click();
-  await expect(page.getByText('Illustrative demo product', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Products', exact: true }).getByText('Illustrative demo product', { exact: true })).toBeVisible();
   await page.getByText('Class and name screening · REVIEW REQUIRED').click();
   await expect(page.getByText('Insufficient or conflicting evidence; review required').first())
     .toBeVisible();
@@ -35,25 +50,40 @@ test('loads the illustrative workflow and exports a review report while offline'
   }
   await page.getByRole('button', { name: 'Products', exact: true }).click();
   await page.getByRole('button', { name: 'Edit product Illustrative demo product' }).click();
-  const productSteps = page.getByRole('navigation', { name: 'Steps' });
+  const productSteps = page.getByRole('navigation', { name: 'Product sections' });
   await productSteps.getByRole('button', { name: 'What is it?' }).click();
   await page.getByLabel('What kind of product is this?').selectOption('other');
-  await expect(page.getByText('Saved on this device.')).toBeVisible();
-  await productSteps.getByRole('button', { name: 'Pack details' }).click();
+  await expect(page.getByText('Saved on this device.').last()).toBeVisible();
+  await productSteps.getByRole('button', { name: 'Customer directions and nutrition' }).click();
+  await page.getByLabel('What does the label tell customers to do before consuming this product?').selectOption('none');
   await page.getByLabel('Serving size', { exact: true }).fill('50');
   await page.getByLabel('Serving size unit').selectOption('g');
   await page.getByLabel('Servings per pack').fill('2');
   await page.getByLabel('Net contents', { exact: true }).fill('100');
   await page.getByLabel('Net contents unit').selectOption('g');
   await page.getByLabel('Is the food solid or liquid?').selectOption('solid');
-  await page.getByLabel(/I have checked that the recipe amounts/).check();
-  await page.getByRole('button', { name: 'Save pack details' }).click();
-  await expect(page.getByText('Saved on this device.')).toBeVisible();
+  await page.getByRole('button', { name: 'Save product draft' }).click();
+  await expect(page.locator('.product-save-bar').getByText('Saved on this device.')).toBeVisible();
   await page.reload();
   await page.getByRole('button', { name: 'Products', exact: true }).click();
   await page.getByRole('button', { name: 'Edit product Illustrative demo product' }).click();
-  await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'What is it?' }).click();
+  await page.getByRole('navigation', { name: 'Product sections' }).getByRole('button', { name: 'What is it?' }).click();
   await expect(page.getByLabel('What kind of product is this?')).toHaveValue('other');
+  await page.getByRole('navigation', { name: 'Product sections' }).getByRole('button', { name: 'Review', exact: true }).click();
+  const review = page.locator('#product-section-review');
+  await expect(review.getByText('Required product draft information entered.')).toBeVisible();
+  await expect(review.getByText(/not legal clearance/)).toBeVisible();
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()).violations).toEqual([]);
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByLabel('Product name *').fill('Unsaved product');
+  await expect(review.getByText('Required product draft information entered.')).not.toBeVisible();
+  await expect(review.getByText(/You have unsaved changes/)).toBeVisible();
+  await page.getByLabel('Product name *').fill('Illustrative demo product');
+  await expect(review.getByText('Required product draft information entered.')).toBeVisible();
 
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
   await expect(page.getByText('PDF renderer loaded locally for this session.')).toBeVisible();
@@ -62,8 +92,15 @@ test('loads the illustrative workflow and exports a review report while offline'
       name: 'Draft label layout for consultant review',
     }),
   ).toBeVisible();
+  await openLabelTab(page, 'Ingredients & allergens');
   await expect(page.getByLabel('Draft declaration')).toContainText('Illustrative carrier, Illustrative base');
-  await expect(page.getByLabel('Draft declaration')).toContainText('Contains: milk');
+  await expect(page.getByLabel('Draft declaration')).toContainText('Contains milk');
+  await openLabelPackInformation(page);
+  await expect(page.getByRole('region', { name: 'Draft pack information' })).toContainText('Net contents: 100 g');
+  await expect(page.getByRole('region', { name: 'Draft pack information' })).toContainText('Supplier name and business address');
+  await expect(page.locator('html')).toHaveAttribute('data-test-preview-svg', /data-block-id="net-contents"/);
+  await expect(page.locator('html')).toHaveAttribute('data-test-preview-svg', /Contains milk/);
+  await openLabelNutrition(page);
   await expect(page.getByRole('table', { name: 'Draft nutrition information' }))
     .toContainText('50 kJ');
   const accessibility = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
@@ -74,13 +111,27 @@ test('loads the illustrative workflow and exports a review report while offline'
   await expect(page.getByText(/estimated to exceed the printable width/)).toHaveCount(0);
 
   await page.context().setOffline(true);
-  await page.getByRole('button', { name: 'Review & trace' }).click();
-  await expect(page.getByText('No active regulatory release is installed')).toBeVisible();
-  await expect(page.getByText('REVIEW REQUIRED', { exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Review product checks and evidence' }).click();
+  await openTechnicalReview(page);
+  await expect(page.getByText('No active regulatory release is installed in this workspace. The draft trace', { exact: false })).toBeVisible();
+  await expect(page.getByText('REVIEW REQUIRED', { exact: true }).filter({ visible: true }).first()).toBeVisible();
+  await page.getByText('Draft pack and ingredient declaration').click();
+  await expect(page.getByText(/Illustrative base.*path.*No ingredient specification recorded/)).toBeVisible();
+  await page.getByText('Allergen evidence and paths').click();
+  await expect(page.getByText(/Candidate milk.*ingredient-list name/)).toBeVisible();
 
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeDisabled();
-  await expect(page.getByText('Label PDF export is unavailable.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Export Incomplete Review Copy PDF' })).toBeEnabled();
+  await expect(page.getByText('Incomplete Review Copy only')).toBeVisible();
+  const copyDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export Incomplete Review Copy PDF' }).click();
+  const copyPath = await (await copyDownload).path();
+  if (!copyPath) throw new Error('The review copy was not saved locally.');
+  const copy = (await readFile(copyPath)).toString('latin1');
+  expect(copy).toContain('INCOMPLETE REVIEW COPY');
+  expect(copy).toContain('Recorded net contents: 100 g');
+  expect(copy).toContain('Candidate allergen milk');
+  expect(copy).not.toContain('ILLUSTRATIVE ONLY');
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download review report' }).click();
   const download = await downloadPromise;
@@ -91,8 +142,12 @@ test('loads the illustrative workflow and exports a review report while offline'
   const pdfText = (await readFile(pdfPath)).toString('latin1');
   expect(pdfText).toContain('No label layout is included in this report.');
   expect(pdfText).toContain('Notes for your consultant');
-  expect(pdfText).toContain('No claims were entered.');
-  expect(pdfText).toContain('Official results and limitations only');
+  expect(pdfText).toContain('No claims were entered for this Label draft.');
+  expect(pdfText).toContain('Recorded draft inputs and official results');
+  expect(pdfText).toContain('Pack content and limitations');
+  expect(pdfText).toContain('Recorded net contents: 100 g');
+  expect(pdfText).toContain('Ingredient and allergen evidence');
+  expect(pdfText).toContain('Candidate allergen milk');
   expect(pdfText).not.toContain('ILLUSTRATIVE ONLY');
   await expect(page.getByRole('status').filter({ hasText: 'Review report exported' }))
     .toBeVisible();
@@ -103,37 +158,41 @@ test('loads the illustrative workflow and exports a review report while offline'
     'demo-product-review-report.pdf',
   );
   await page.getByRole('button', { name: 'Products', exact: true }).click();
-  await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Pack details' }).click();
+  await page.getByRole('navigation', { name: 'Product sections' }).getByRole('button', { name: 'Customer directions and nutrition' }).click();
   await page.getByLabel('Serving size unit').selectOption('mL');
   await page.getByLabel('Is the food solid or liquid?').selectOption('liquid');
-  await page.getByRole('button', { name: 'Save pack details' }).click();
-  await expect(page.getByText('Saved on this device.')).toBeVisible();
+  await page.getByRole('button', { name: 'Save product draft' }).click();
+  await expect(page.locator('.product-save-bar').getByText('Saved on this device.')).toBeVisible();
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
-  await expect(page.getByText(/Final food density and dated evidence/)).toBeVisible();
+  await openLabelIssues(page);
+  await expect(page.getByRole('region', { name: 'Products and readiness' }).getByText(/Final food density is needed/)).toBeVisible();
+  await openLabelNutrition(page);
   await expect(page.getByRole('table', { name: 'Draft nutrition information' })).toContainText('Not available');
-  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Export Incomplete Review Copy PDF' })).toBeEnabled();
   await page.getByRole('button', { name: 'Products', exact: true }).click();
-  await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Pack details' }).click();
+  await page.getByRole('navigation', { name: 'Product sections' }).getByRole('button', { name: 'Customer directions and nutrition' }).click();
   await page.getByLabel('Final food density (g/mL)').fill('1.2');
+  await page.getByText('Density source details (optional)', { exact: true }).click();
   await page.getByLabel('Density evidence reference').fill('Illustrative density test');
   await page.getByLabel('Density evidence date').fill('2026-01-01');
-  await page.getByRole('button', { name: 'Save pack details' }).click();
-  await expect(page.getByText('Saved on this device.')).toBeVisible();
+  await page.getByRole('button', { name: 'Save product draft' }).click();
+  await expect(page.locator('.product-save-bar').getByText('Saved on this device.')).toBeVisible();
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
   await expect(page.getByRole('table', { name: 'Draft nutrition information' })).toContainText('60 kJ');
   await expect(page.getByRole('table', { name: 'Draft nutrition information' })).toContainText('120 kJ');
-  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeDisabled();
-  await page.getByRole('button', { name: 'Products', exact: true }).click();
-  await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Claims' }).click();
+  await expect(page.getByRole('button', { name: 'Export Incomplete Review Copy PDF' })).toBeEnabled();
+  await openLabelTab(page, 'Claims');
   await page.getByRole('button', { name: 'Add a claim' }).click();
   await page.getByLabel('Claim 1 text (exactly as it appears)').fill('Natural example');
   await page.getByLabel('Claim 1 type (your classification)').selectOption('not_code_regulated');
   await page.getByLabel('I confirm the type of claim 1').check();
-  await page.getByRole('button', { name: 'Save claims' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Claims and claim facts saved' })).toBeVisible();
-  await page.getByLabel(/Show what each result would be/).check();
+  await page.getByRole('button', { name: 'Save label draft', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Label draft saved on this device' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Export Incomplete Review Copy PDF' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Products', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Product sections' }).getByRole('button', { name: 'Review', exact: true }).click();
+  await expect(review.getByText('Required product draft information entered.')).toBeVisible();
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeDisabled();
   const claimDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download review report' }).click();
   const claimPath = await (await claimDownload).path();
@@ -142,13 +201,12 @@ test('loads the illustrative workflow and exports a review report while offline'
   expect(claimText).toContain('Natural example');
   expect(claimText).toContain('Claim check: REVIEW REQUIRED');
   expect(claimText).not.toContain('ILLUSTRATIVE ONLY');
-  await page.getByRole('button', { name: 'Products', exact: true }).click();
-  await page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: 'Claims' }).click();
   await page.getByLabel('Claim 1 text (exactly as it appears)').fill('Natural 🥝');
-  await page.getByRole('button', { name: 'Save claims' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Claims and claim facts saved' })).toBeVisible();
-  await page.getByRole('button', { name: 'Labels', exact: true }).click();
+  await page.getByRole('button', { name: 'Save label draft', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Label draft saved on this device' })).toBeVisible();
   await page.getByRole('button', { name: 'Download review report' }).click();
+  await expect(page.getByRole('alert')).toContainText('characters the PDF font cannot display');
+  await page.getByRole('button', { name: 'Export Incomplete Review Copy PDF' }).click();
   await expect(page.getByRole('alert')).toContainText('characters the PDF font cannot display');
   await page.getByRole('button', { name: 'Ingredients', exact: true }).click();
   await page.getByRole('button', { name: 'Edit ingredient Illustrative carrier' }).click();
@@ -157,8 +215,25 @@ test('loads the illustrative workflow and exports a review report while offline'
   await page.getByRole('button', { name: 'Save ingredient draft' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Ingredient draft saved locally.' })).toBeVisible();
   await page.getByRole('button', { name: 'Labels', exact: true }).click();
-  await expect(page.getByText('Illustrative carrier: nutrition information')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Export draft PDF' })).toBeDisabled();
+  await openLabelIssues(page);
+  await expect(page.getByRole('region', { name: 'Products and readiness' }).getByText('Illustrative carrier: nutrition information')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Export Incomplete Review Copy PDF' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Products', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Product sections' }).getByRole('button', { name: 'Review', exact: true }).click();
+  await expect(review.getByText('Required product draft information entered.')).not.toBeVisible();
+  await review.getByText('Why does this need attention?', { exact: true }).last().click();
+  await expect(review.getByText('Illustrative carrier: nutrition information', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Formulations', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit formulation Illustrative formulation' }).click();
+  await openFormulationSection(page, 'Ingredients');
+  await page.getByLabel('Line 1 quantity').fill('45');
+  await page.getByRole('button', { name: 'Save formulation draft' }).click();
+  await page.getByRole('button', { name: 'Products', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Product sections' }).getByRole('button', { name: 'Review', exact: true }).click();
+  await expect(review.getByText('Required product draft information entered.')).not.toBeVisible();
+  const reason = review.getByText('Why does this need attention?', { exact: true }).last();
+  if (!(await reason.locator('..').evaluate((element) => (element as HTMLDetailsElement).open))) await reason.click();
+  await expect(review.getByText('Confirm that the recipe and nutrients represent the food as sold (pack details)', { exact: true })).toBeVisible();
 });
 
 test('restores an encrypted demo backup into a clean browser profile', async ({ browser }) => {

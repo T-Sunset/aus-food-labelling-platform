@@ -23,6 +23,18 @@ const source: IngredientAdditiveSource = {
 };
 
 describe('additive source tracing', () => {
+  it('applies per-use status only to the direct source and preserves separate paths', () => {
+    const expanded: ExpandedIngredient[] = [
+      { ingredientId: 'salt', mass: { value: '1', unit: 'g' }, sourcePath: ['recipe', 'a', 'salt'], additiveUse: 'added' },
+      { ingredientId: 'salt', mass: { value: '1', unit: 'g' }, sourcePath: ['recipe', 'b', 'salt'], additiveUse: 'processingAid' },
+    ];
+    const other = { ...source, id: 'other', sourceStatus: 'carriedOver' as const };
+    const sources = new Map([['salt', [source, other]]]);
+    const traced = traceAdditiveSources(expanded, sources, new Map([['salt', source.id]]));
+    expect(traced.map((entry) => entry.source.sourceStatus)).toEqual(['added', 'carriedOver', 'processingAid', 'carriedOver']);
+    expect(source.sourceStatus).toBe('carriedOver');
+    expect(() => traceAdditiveSources(expanded, sources)).toThrow(/direct additive source is missing/);
+  });
   it('preserves source details, evidence, and nested ingredient paths', () => {
     const expanded: readonly ExpandedIngredient[] = [
       {
@@ -119,7 +131,7 @@ describe('additive source tracing', () => {
     });
   });
 
-  it('propagates unsourced additive allergens while requiring review', () => {
+  it('propagates entered additive allergens without inventing a source', () => {
     const noEvidence: IngredientAdditiveSource = {
       id: 'no-evidence',
       additiveName: 'Example additive',
@@ -135,7 +147,10 @@ describe('additive source tracing', () => {
     expect(traced).toMatchObject([{ sourceId: '', sourceDate: '', assessments: { milk: 'present' } }]);
     expect(propagateAllergens(traced, [{
       id: 'milk', ingredientListName: 'milk', summaryName: 'milk',
-    }], 'complete')).toMatchObject({ status: 'review_required', allergens: [{ id: 'milk' }] });
+    }], 'complete')).toMatchObject({ status: 'propagated', allergens: [{ id: 'milk' }] });
+    expect(propagateAllergens(traced, [{
+      id: 'milk', ingredientListName: 'milk', summaryName: 'milk',
+    }], 'incomplete')).toMatchObject({ status: 'review_required', allergens: [{ id: 'milk' }] });
   });
 
   it('assigns distinct evidence IDs when the same ingredient is used on multiple paths', () => {

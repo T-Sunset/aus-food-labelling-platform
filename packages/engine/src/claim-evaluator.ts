@@ -103,11 +103,10 @@ export function evaluateNutritionContentClaim(
       ? item('form-of-food', 'Figures are for the form of food in Standard 1.2.7-7', 'MET', 'A person confirmed the figures are for the required form of the food.')
       : item('form-of-food', 'Figures are for the form of food in Standard 1.2.7-7', 'REVIEW', 'A person has not confirmed the figures are for the food as sold, prepared, reconstituted or drained as required.', 'FORM_OF_FOOD_NOT_CONFIRMED'),
   );
-  push(
-    input.evidence === undefined
-      ? item('evidence', 'Dated evidence for the figure', 'REVIEW', 'Dated evidence for the figure is missing.', 'EVIDENCE_MISSING')
-      : item('evidence', 'Dated evidence for the figure', 'MET', `Evidence: ${input.evidence.reference} (${input.evidence.sourceDate}).`),
-  );
+  if (input.evidence !== undefined) {
+    push(item('evidence', 'Optional source details', 'MET',
+      [input.evidence.reference, input.evidence.sourceDate].filter(Boolean).join(' - ')));
+  }
 
   let limit = undefined as ClaimEvaluationInput['claimRule']['limits']['liquid'];
   if (claimRule.basis === 'per100ByFoodForm') {

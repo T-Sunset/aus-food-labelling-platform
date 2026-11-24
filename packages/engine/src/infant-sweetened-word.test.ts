@@ -69,7 +69,6 @@ describe('evaluateInfantSweetenedWord', () => {
       { addedSugarsPer100g: 'abc' },
       { addedSugarsPer100g: '-1' },
       { sugarsBasisConfirmed: undefined },
-      { evidence: undefined },
       { proposedName: '' },
     ];
     for (const override of cases) {
@@ -84,5 +83,11 @@ describe('evaluateInfantSweetenedWord', () => {
         expect(r.status).toBe('REVIEW REQUIRED');
       }
     }
+  });
+
+  it('uses a supplied sugars figure without a source but still requires rule approval', () => {
+    expect(evaluateInfantSweetenedWord({ ...base, evidence: undefined }).status).toBe('PASS');
+    expect(evaluateInfantSweetenedWord({ ...base, evidence: undefined, proposedName: 'Apple custard' }).status).toBe('FAIL');
+    expect(evaluateInfantSweetenedWord({ ...base, evidence: undefined, ruleApproved: false }).status).toBe('REVIEW REQUIRED');
   });
 });

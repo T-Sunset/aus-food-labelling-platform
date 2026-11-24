@@ -14,7 +14,8 @@ type ExpansionErrorCode =
   | 'EMPTY_FORMULATION'
   | 'PARTIAL_COMPOSITION'
   | 'INVALID_INGREDIENT_QUANTITY'
-  | 'INVALID_TARGET_MASS';
+  | 'INVALID_TARGET_MASS'
+  | 'INSUFFICIENT_MASS_PRECISION';
 
 export class FormulationExpansionError extends Error {
   constructor(
@@ -65,7 +66,11 @@ function reachableFormulations(
     }
 
     const nestedIds: string[] = [];
-    for (const line of formulation.lines) {
+    for (const line of [
+      ...formulation.lines,
+      ...(formulation.supplierComposition?.unquantifiedComponents ?? []),
+      ...(formulation.incompleteRecipeLines?.unquantifiedLines ?? []),
+    ]) {
       if (line.kind !== 'formulation') {
         continue;
       }
@@ -139,12 +144,13 @@ export function expandFormulation(
       );
     }
     if (formulation.supplierComposition?.coverage === 'partial'
+      || (formulation.incompleteRecipeLines?.unquantifiedLines.length ?? 0) > 0
       || (formulation.supplierComposition?.unquantifiedComponents.length ?? 0) > 0) {
       throw new FormulationExpansionError(
         'PARTIAL_COMPOSITION',
         formulation.supplierComposition?.coverage === 'partial'
           ? `Composition "${formulationId}" is partial; its proportions cannot be calculated.`
-          : `Composition "${formulationId}" has unknown amounts; its proportions cannot be calculated.`,
+          : `Recipe or composition "${formulationId}" has unknown amounts; its proportions cannot be calculated.`,
         sourcePath,
       );
     }
@@ -168,12 +174,20 @@ export function expandFormulation(
         multiplyDecimals(requestedMass, lineMass),
         batchMassInGrams,
       );
+      if (allocatedMass === '0') {
+        throw new FormulationExpansionError(
+          'INSUFFICIENT_MASS_PRECISION',
+          'Ingredient proportions need greater calculation precision.',
+          [...sourcePath, line.id],
+        );
+      }
 
       if (line.kind === 'ingredient') {
         expanded.push({
           ingredientId: line.ingredientId,
           mass: { value: allocatedMass, unit: 'g' },
           sourcePath: [...sourcePath, line.id, line.ingredientId],
+          ...(line.additiveUse ? { additiveUse: line.additiveUse } : {}),
         });
       } else {
         expand(line.formulationId, allocatedMass, [

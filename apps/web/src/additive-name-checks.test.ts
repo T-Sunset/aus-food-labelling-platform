@@ -5,6 +5,16 @@ import { buildIngredientRecord, emptyAdditiveSourceDraft, emptyIngredientDraft }
 
 const stamp = '2026-11-10T00:00:00.000Z';
 
+function confirmAdditives(record: IngredientRecord): IngredientRecord {
+  return {
+    ...record, additivesConfirmed: true,
+    additiveCoverage: {
+      sourceType: 'user', sourceId: '', sourceDate: '',
+      sourcesSnapshot: JSON.stringify(record.additiveSources ?? []),
+    },
+  };
+}
+
 const ingredient: IngredientRecord = {
   id: 'ing-1',
   name: 'Sweet base',
@@ -49,6 +59,73 @@ const product: ProductRecord = {
 };
 
 describe('buildAdditiveNameReport', () => {
+  it('keeps per-use special and uncertain direct additives under review', () => {
+    const direct: IngredientRecord = {
+      ...ingredient, name: 'Sorbic acid', directAdditiveSourceId: 'src-1',
+      additiveSources: [{
+        id: 'src-1', additiveName: 'Sorbic acid', codeNumber: '200', sourceStatus: 'unknown',
+        concentration: { value: '100', unit: 'mgPerKg', basis: 'asSupplied' },
+      }],
+    };
+    const recipe: FormulationRecord = {
+      ...formulation, lines: [
+        { id: 'one', kind: 'ingredient', ingredientId: direct.id, quantity: { value: '50', unit: 'g' }, additiveUse: 'added' },
+        { id: 'two', kind: 'ingredient', ingredientId: direct.id, quantity: { value: '50', unit: 'g' }, additiveUse: 'processingAid' },
+      ],
+    };
+    const ready: ProductRecord = { ...product, additiveNameInputs: { confirmedCohorts: [], noProcessMassChangeConfirmed: true } };
+    const report = buildAdditiveNameReport(ready, [recipe], [confirmAdditives(direct)]);
+    expect(report.declarations).toHaveLength(2);
+    expect(report.additives[0]?.concentration).toMatchObject({
+      status: 'review_required', reasons: expect.arrayContaining(['SOURCE_NOT_ADDED']),
+    });
+    expect(report.additives[0]?.permission.status).toBe('REVIEW REQUIRED');
+    const { directAdditiveSourceId, ...ordinary } = confirmAdditives(direct);
+    expect(directAdditiveSourceId).toBe('src-1');
+    expect(buildAdditiveNameReport(ready, [recipe], [ordinary]).error).toMatch(/no longer identified as an additive/);
+  });
+  it('does not calculate concentration when a recipe records a processing change', () => {
+    const direct: IngredientRecord = {
+      ...ingredient, directAdditiveSourceId: 'src-1',
+      additiveSources: [{
+        id: 'src-1', additiveName: 'Sorbic acid', codeNumber: '200', sourceStatus: 'unknown',
+        concentration: { value: '100', unit: 'mgPerKg', basis: 'asSupplied' },
+      }],
+    };
+    const ready: ProductRecord = {
+      ...product, additiveNameInputs: { confirmedCohorts: [], noProcessMassChangeConfirmed: true },
+    };
+    const processed: FormulationRecord = {
+      ...formulation, processMassProfile: {
+        changes: [{ id: 'loss', kind: 'loss', mass: { value: '20', unit: 'g' } }],
+      },
+    };
+    const report = buildAdditiveNameReport(ready, [processed], [confirmAdditives(direct)]);
+    expect(report.additives[0]?.concentration).toMatchObject({
+      status: 'review_required', reasons: expect.arrayContaining(['PROCESSING_EFFECTS_UNSUPPORTED']),
+    });
+    expect(report.limitations.join(' ')).toContain('recorded processing details');
+    const nested: FormulationRecord = {
+      ...formulation, id: 'nested',
+      processMassProfile: processed.processMassProfile,
+    };
+    const outer: FormulationRecord = {
+      ...formulation,
+      lines: [{ id: 'n', kind: 'formulation', formulationId: 'nested', quantity: { value: '100', unit: 'g' } }],
+    };
+    expect(buildAdditiveNameReport(ready, [outer, nested], [direct]).additives[0]?.concentration)
+      .toMatchObject({ status: 'review_required', reasons: expect.arrayContaining(['PROCESSING_EFFECTS_UNSUPPORTED']) });
+    const equalFinal: FormulationRecord = {
+      ...formulation, processMassProfile: {
+        changes: [], entryMethod: 'finalMass', declaredFinalMass: { value: '100', unit: 'g' },
+      },
+    };
+    expect(buildAdditiveNameReport(ready, [equalFinal], [direct]).additives[0]?.concentration)
+      .toMatchObject({ status: 'review_required', reasons: expect.arrayContaining(['PROCESSING_EFFECTS_UNSUPPORTED']) });
+    const incomplete: FormulationRecord = { ...formulation, processMassProfile: { changes: [], complete: false } };
+    expect(buildAdditiveNameReport(ready, [incomplete], [direct]).additives[0]?.concentration)
+      .toMatchObject({ status: 'review_required', reasons: expect.arrayContaining(['PROCESSING_EFFECTS_UNSUPPORTED']) });
+  });
   it('traces a direct additive once and leaves unknown purity unresolved', () => {
     const direct: IngredientRecord = {
       ...ingredient, name: 'Sorbic acid', directAdditiveSourceId: 'src-1',
@@ -72,13 +149,13 @@ describe('buildAdditiveNameReport', () => {
     const ready: ProductRecord = {
       ...product, additiveNameInputs: { confirmedCohorts: [], noProcessMassChangeConfirmed: true },
     };
-    const report = buildAdditiveNameReport(ready, [formulation], [direct]);
+    const report = buildAdditiveNameReport(ready, [formulation], [confirmAdditives(direct)]);
     expect(report.declarations).toHaveLength(1);
     expect(report.additives[0]?.concentration).toMatchObject({ status: 'calculated', value: '100' });
     for (const sourceStatus of ['carriedOver', 'processingAid'] as const) {
       const source = direct.additiveSources![0]!;
       const result = buildAdditiveNameReport(ready, [formulation], [
-        { ...direct, additiveSources: [{ ...source, sourceStatus }] },
+        confirmAdditives({ ...direct, additiveSources: [{ ...source, sourceStatus }] }),
       ]);
       expect(result.additives[0]?.concentration).toMatchObject({
         status: 'review_required', reasons: expect.arrayContaining(['SOURCE_NOT_ADDED']),
@@ -98,9 +175,9 @@ describe('buildAdditiveNameReport', () => {
       ...product, additiveNameInputs: { confirmedCohorts: [], noProcessMassChangeConfirmed: true,
         evidence: { reference: 'Calculation', sourceDate: '2026-11-10' } },
     };
-    const result = buildAdditiveNameReport(ready, [formulation], [direct]).additives[0]!;
+    const result = buildAdditiveNameReport(ready, [formulation], [confirmAdditives(direct)]).additives[0]!;
     expect(result.concentration).toMatchObject({
-      status: 'calculated', value: '100', provenanceWarnings: [expect.stringContaining('no complete dated source')],
+      status: 'calculated', value: '100', provenanceWarnings: [],
     });
     expect(result.permission.status).toBe('REVIEW REQUIRED');
   });
@@ -109,6 +186,7 @@ describe('buildAdditiveNameReport', () => {
       const draft = emptyIngredientDraft();
       draft.name = 'Sorbic acid';
       draft.kind = 'atomic';
+      draft.additivesConfirmed = true;
       const source = emptyAdditiveSourceDraft('direct');
       Object.assign(source, {
         codeNumber: '200', showAmount: true, concentrationValue: '95',
@@ -122,7 +200,7 @@ describe('buildAdditiveNameReport', () => {
       };
       const result = buildAdditiveNameReport(ready, [formulation], [direct]);
       expect(result.additives[0]?.concentration).toMatchObject({
-        status: 'calculated', value: '950000', provenanceWarnings: [expect.stringContaining('no complete dated source')],
+        status: 'calculated', value: '950000', provenanceWarnings: [],
       });
       expect(result.additives[0]?.permission.status).toBe('REVIEW REQUIRED');
   });
@@ -149,14 +227,98 @@ describe('buildAdditiveNameReport', () => {
     const readyProduct: ProductRecord = {
       ...product, additiveNameInputs: { confirmedCohorts: [], noProcessMassChangeConfirmed: true },
     };
-    expect(buildAdditiveNameReport(readyProduct, [formulation], [quantified]).additives[0]?.concentration.status)
+    expect(buildAdditiveNameReport(readyProduct, [formulation], [confirmAdditives(quantified)]).additives[0]?.concentration.status)
       .toBe('calculated');
-    const report = buildAdditiveNameReport(readyProduct, [withCompound], [quantified, compound]);
-    expect(report.limitations.join(' ')).toContain('not included in this report');
+    const report = buildAdditiveNameReport(readyProduct, [withCompound], [confirmAdditives(quantified), compound]);
+    expect(report.limitations.join(' ')).toContain('compound composition is missing');
     expect(report.additives[0]?.concentration).toMatchObject({
       status: 'review_required', reasons: expect.arrayContaining(['COMPOUND_ADDITIVES_NOT_PROPAGATED']),
     });
     expect(report.additives[0]?.permission.status).toBe('REVIEW REQUIRED');
+  });
+
+  it('retains known additive evidence when recipe amounts are unknown', () => {
+    const direct = confirmAdditives({
+      ...ingredient, directAdditiveSourceId: 'src-1',
+      additiveSources: [{
+        id: 'src-1', additiveName: 'Sorbic acid', codeNumber: '200', sourceStatus: 'unknown',
+        concentration: { value: '100', unit: 'mgPerKg', basis: 'asSupplied' },
+      }],
+    });
+    const incomplete: FormulationRecord = {
+      ...formulation, lines: [], incompleteRecipeLines: {
+        unquantifiedLines: [{ id: 'unknown', kind: 'ingredient', ingredientId: direct.id }],
+        lineOrder: ['unknown'],
+      },
+    };
+    const report = buildAdditiveNameReport(product, [incomplete], [direct]);
+    expect(report.error).toMatch(/unknown amounts/);
+    expect(report.declarations[0]?.candidate.sourcePath).toEqual(['form-1', 'unknown', 'ing-1']);
+    expect(report.additives[0]?.concentration).toMatchObject({
+      status: 'review_required', reasons: expect.arrayContaining(['FORMULATION_AMOUNTS_MISSING']),
+    });
+    expect(report.names).toBeUndefined();
+  });
+
+  it('propagates compound additives and repeated uses once per path', () => {
+    const direct = confirmAdditives({
+      ...ingredient, id: 'direct', name: 'Preservative', directAdditiveSourceId: 'direct-source',
+      additiveSources: [{
+        id: 'direct-source', additiveName: 'Preservative', codeNumber: '200', sourceStatus: 'unknown',
+        concentration: { value: '10000', unit: 'mgPerKg', basis: 'asSupplied' },
+      }],
+    });
+    const filler = confirmAdditives({ ...ingredient, id: 'filler', name: 'Filler', additiveSources: [] });
+    const compound: IngredientRecord = {
+      ...ingredient, id: 'blend', name: 'Blend', kind: 'compound', compoundFormulationId: 'inside',
+      additiveSources: [],
+    };
+    const inside: FormulationRecord = {
+      ...formulation, id: 'inside', name: 'Blend recipe',
+      supplierComposition: { coverage: 'complete', unquantifiedComponents: [] },
+      lines: [
+        { id: 'additive', kind: 'ingredient', ingredientId: direct.id, quantity: { value: '10', unit: 'g' } },
+        { id: 'filler', kind: 'ingredient', ingredientId: filler.id, quantity: { value: '90', unit: 'g' } },
+      ],
+    };
+    const outer: FormulationRecord = {
+      ...formulation, lines: [
+        { id: 'mix', kind: 'ingredient', ingredientId: compound.id, quantity: { value: '50', unit: 'g' } },
+        { id: 'direct', kind: 'ingredient', ingredientId: direct.id, quantity: { value: '5', unit: 'g' } },
+        { id: 'filler', kind: 'ingredient', ingredientId: filler.id, quantity: { value: '45', unit: 'g' } },
+      ],
+    };
+    const ready = { ...product, additiveNameInputs: { confirmedCohorts: [], noProcessMassChangeConfirmed: true } };
+    const report = buildAdditiveNameReport(ready, [outer, inside], [compound, direct, filler]);
+    expect(report.declarations).toHaveLength(2);
+    expect(report.additives[0]?.concentration).toMatchObject({
+      status: 'calculated', value: '1000',
+      contributions: [
+        { sourcePath: ['form-1', 'mix', 'blend', 'inside', 'additive', 'direct'], additiveMilligrams: '50' },
+        { sourcePath: ['form-1', 'direct', 'direct'], additiveMilligrams: '50' },
+      ],
+      provenanceWarnings: [],
+    });
+    expect(report.additives[0]?.permission.status).toBe('REVIEW REQUIRED');
+
+    const special = { ...inside, lines: [{ ...inside.lines[0]!, additiveUse: 'processingAid' as const }, inside.lines[1]!] };
+    expect(buildAdditiveNameReport(ready, [outer, special], [compound, direct, filler]).additives[0]?.concentration)
+      .toMatchObject({ status: 'review_required', reasons: expect.arrayContaining(['SOURCE_NOT_ADDED']) });
+    const overlap = { ...compound, additiveSources: direct.additiveSources! };
+    expect(buildAdditiveNameReport(ready, [outer, inside], [overlap, direct, filler]).additives[0]?.concentration)
+      .toMatchObject({ status: 'review_required', reasons: expect.arrayContaining(['COMPOUND_ADDITIVE_EVIDENCE_OVERLAP']) });
+    expect(buildAdditiveNameReport(ready, [outer, inside], [compound, direct, { ...filler, additivesConfirmed: false }]).additives[0]?.concentration)
+      .toMatchObject({ status: 'review_required', reasons: expect.arrayContaining(['ADDITIVE_COVERAGE_INCOMPLETE']) });
+    expect(buildAdditiveNameReport(ready, [outer, inside], [compound, direct]).additives[0]?.concentration)
+      .toMatchObject({ status: 'review_required', reasons: expect.arrayContaining(['ADDITIVE_COVERAGE_INCOMPLETE']) });
+    const partial = { ...inside, lines: [inside.lines[1]!], supplierComposition: {
+      coverage: 'partial' as const, unquantifiedComponents: [{ id: 'unknown', kind: 'ingredient' as const, ingredientId: direct.id }],
+    } };
+    const incomplete = buildAdditiveNameReport(ready, [outer, partial], [compound, direct, filler]);
+    expect(incomplete.declarations).toHaveLength(2);
+    expect(incomplete.additives[0]?.concentration).toMatchObject({
+      status: 'review_required', reasons: expect.arrayContaining(['COMPOUND_ADDITIVES_NOT_PROPAGATED', 'FORMULATION_AMOUNTS_MISSING']),
+    });
   });
   it('never produces PASS or FAIL from the shipped draft data and keeps declarations separate', () => {
     const report = buildAdditiveNameReport(

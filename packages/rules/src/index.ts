@@ -331,6 +331,27 @@ export interface ClaimRuleCatalog {
   readonly reviewNotes: readonly string[];
 }
 
+export interface DailyIntakeReferenceSet {
+  readonly version: string;
+  readonly checkedOn: string;
+  readonly effectiveFrom: string;
+  readonly status: 'draft' | 'reviewed';
+  readonly provision: string;
+  readonly mappingConfidence: MappingConfidence;
+  readonly sourceIds: readonly string[];
+  readonly scopeExclusionSourceIds: readonly string[];
+  readonly calculationNote: string;
+  readonly statements: readonly string[];
+  readonly entries: readonly {
+    readonly nutrientId: string;
+    readonly referenceValue: string;
+    readonly unit: string;
+    readonly inclusion: 'whenIncluded' | 'ifDeclared';
+    readonly reviewStatus: 'draft' | 'reviewed';
+  }[];
+  readonly reviewNotes: readonly string[];
+}
+
 export interface RuleReleaseManifest {
   readonly id: string;
   readonly version: string;
@@ -346,6 +367,7 @@ export interface RuleReleaseManifest {
   readonly additivePermissionCatalog: AdditivePermissionCatalog;
   readonly prescribedNameCandidateCatalog: PrescribedNameCandidateCatalog;
   readonly claimRuleCatalog: ClaimRuleCatalog;
+  readonly dailyIntakeReferenceSet: DailyIntakeReferenceSet;
 }
 
 export interface RuleValidationIssue {
@@ -621,6 +643,99 @@ function validateClaimRuleCatalog(
   }
 }
 
+function validateDailyIntakeReferenceSet(
+  referenceSet: Record<string, unknown>,
+  sourceById: ReadonlyMap<string, Record<string, unknown>>,
+  active: boolean,
+  issues: RuleValidationIssue[],
+): void {
+  const path = 'release.dailyIntakeReferenceSet';
+  for (const key of ['version', 'provision', 'calculationNote']) {
+    addRequiredStringIssue(issues, referenceSet[key], `${path}.${key}`);
+  }
+  addDateIssue(issues, referenceSet.checkedOn, `${path}.checkedOn`);
+  addDateIssue(issues, referenceSet.effectiveFrom, `${path}.effectiveFrom`);
+  if (!['draft', 'reviewed'].includes(String(referenceSet.status))) {
+    issues.push({ path: `${path}.status`, message: 'has an unsupported status' });
+  }
+  if (referenceSet.mappingConfidence !== 'Provision') {
+    issues.push({ path: `${path}.mappingConfidence`, message: 'must be Provision for statutory reference values' });
+  }
+  for (const field of ['sourceIds', 'scopeExclusionSourceIds'] as const) {
+    const ids = referenceSet[field];
+    if (!isUniqueNonEmptyList(ids)) {
+      issues.push({ path: `${path}.${field}`, message: 'must contain unique non-empty source IDs' });
+      continue;
+    }
+    for (const sourceId of ids) {
+      const source = sourceById.get(sourceId);
+      if (source === undefined) {
+        issues.push({ path: `${path}.${field}`, message: `references missing source "${sourceId}"` });
+      } else if (source.verificationStatus !== 'primary-source-verified') {
+        issues.push({ path: `${path}.${field}`, message: `source "${sourceId}" is not primary-source verified` });
+      }
+    }
+  }
+  const statements = referenceSet.statements;
+  if (!Array.isArray(statements) || statements.length !== 2 || !statements.every(isNonEmpty)) {
+    issues.push({ path: `${path}.statements`, message: 'must contain both statutory 8 700 kJ statements' });
+  }
+  const reviewNotes = referenceSet.reviewNotes;
+  if (!Array.isArray(reviewNotes) || reviewNotes.length === 0 || !reviewNotes.every(isNonEmpty)) {
+    issues.push({ path: `${path}.reviewNotes`, message: 'must contain non-empty review notes' });
+  }
+  const entries = referenceSet.entries;
+  if (!Array.isArray(entries) || entries.length !== 8) {
+    issues.push({ path: `${path}.entries`, message: 'must contain the seven required nutrients and conditional dietary fibre' });
+  } else {
+    const ids = new Set<string>();
+    for (const [index, entry] of entries.entries()) {
+      const at = `${path}.entries[${index}]`;
+      if (!isRecord(entry)) {
+        issues.push({ path: at, message: 'must be an object' });
+        continue;
+      }
+      addRequiredStringIssue(issues, entry.nutrientId, `${at}.nutrientId`);
+      if (isNonEmpty(entry.nutrientId)) {
+        if (ids.has(entry.nutrientId)) {
+          issues.push({ path: `${at}.nutrientId`, message: 'must be unique' });
+        }
+        ids.add(entry.nutrientId);
+      }
+      if (typeof entry.referenceValue !== 'string'
+        || !/^(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(entry.referenceValue)
+        || !Number.isFinite(Number(entry.referenceValue))
+        || Number(entry.referenceValue) <= 0) {
+        issues.push({ path: `${at}.referenceValue`, message: 'must be a positive decimal string' });
+      }
+      if (!['kJ', 'g', 'mg'].includes(String(entry.unit))) {
+        issues.push({ path: `${at}.unit`, message: 'has an unsupported unit' });
+      }
+      if (!['whenIncluded', 'ifDeclared'].includes(String(entry.inclusion))) {
+        issues.push({ path: `${at}.inclusion`, message: 'has an unsupported inclusion condition' });
+      }
+      if (!['draft', 'reviewed'].includes(String(entry.reviewStatus))) {
+        issues.push({ path: `${at}.reviewStatus`, message: 'has an unsupported status' });
+      }
+      if (active && entry.reviewStatus !== 'reviewed') {
+        issues.push({ path: `${at}.reviewStatus`, message: 'must be reviewed before release activation' });
+      }
+    }
+    for (const nutrientId of ['energy', 'protein', 'fat', 'saturatedFat', 'carbohydrate', 'sugars', 'sodium', 'dietaryFibre']) {
+      if (!ids.has(nutrientId)) {
+        issues.push({ path: `${path}.entries`, message: `is missing the "${nutrientId}" reference` });
+      }
+    }
+    const fibre = entries.find((entry) => isRecord(entry) && entry.nutrientId === 'dietaryFibre');
+    if (isRecord(fibre) && fibre.inclusion !== 'ifDeclared') {
+      issues.push({ path: `${path}.entries`, message: 'dietary fibre must be conditional on declaration' });
+    }
+  }
+  if (active && referenceSet.status !== 'reviewed') {
+    issues.push({ path: `${path}.status`, message: 'must be reviewed before release activation' });
+  }
+}
+
 export function validateRuleRelease(value: unknown): asserts value is RuleReleaseManifest {
   const issues: RuleValidationIssue[] = [];
   if (!isRecord(value)) {
@@ -657,6 +772,9 @@ export function validateRuleRelease(value: unknown): asserts value is RuleReleas
   }
   if (!isRecord(value.claimRuleCatalog)) {
     issues.push({ path: 'release.claimRuleCatalog', message: 'must be an object' });
+  }
+  if (!isRecord(value.dailyIntakeReferenceSet)) {
+    issues.push({ path: 'release.dailyIntakeReferenceSet', message: 'must be an object' });
   }
 
   if (issues.length > 0) {
@@ -1646,6 +1764,12 @@ export function validateRuleRelease(value: unknown): asserts value is RuleReleas
   }
 
   validateClaimRuleCatalog(value.claimRuleCatalog as Record<string, unknown>, sourceById, value.status === 'active', issues);
+  validateDailyIntakeReferenceSet(
+    value.dailyIntakeReferenceSet as Record<string, unknown>,
+    sourceById,
+    value.status === 'active',
+    issues,
+  );
 
   if (value.status === 'active') {
     if (nameCatalog.status !== 'reviewed') {
